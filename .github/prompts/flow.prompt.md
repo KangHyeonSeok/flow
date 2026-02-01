@@ -230,9 +230,7 @@ Pop-Location
    ./finalize-task.ps1 -Reason "작업 완료"
    ```
 4. **백로그 기반 작업이었다면 중단하지 말고 즉시 다음 백로그를 진행**:
-   - 백로그 기반 여부는 `context-phase.json.backlog.is_backlog === true`로 판단한다.
-   - `pop-backlog.ps1` 실행 시 `backlog.active === true`로 시작되며,
-     `finalize-task.ps1` 실행 시 `backlog.active === false`, `backlog.completed_at`가 기록된다.
+   - context-phase.json 내의 backlog 객체를 확인하라.
    - IDLE 복귀 직후 백로그 큐를 확인하고, 작업이 있으면 바로 이어서 처리한다.
    ```powershell
    ./pop-backlog.ps1
