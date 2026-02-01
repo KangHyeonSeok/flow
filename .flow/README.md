@@ -92,7 +92,7 @@ stateDiagram-v2
 │   ├── approve-plan.ps1      # 플랜 승인 (REVIEWING → READY)
 │   ├── approve-design.ps1    # 설계 문서 승인 (독립 동작)
 │   ├── complete-execution.ps1 # 실행 완료
-│   ├── abort-to-idle.ps1     # 중단/복귀 (→ IDLE)
+│   ├── finalize-task.ps1     # 중단/복귀 (→ IDLE)
 │   ├── validation-runner.ps1 # 검증 실행
 │   ├── get-status.ps1        # 상태 확인
 │   ├── human-input.ps1       # 사용자 입력 처리
@@ -178,7 +178,7 @@ cd .flow/scripts; ./pop-backlog.ps1  # 다음 작업을 implements로 이동
 ### 중단/복귀 (→ IDLE)
 
 ```powershell
-cd .flow/scripts; ./abort-to-idle.ps1 -Reason "사유"
+cd .flow/scripts; ./finalize-task.ps1 -Reason "사유"
 ```
 
 ---
@@ -443,7 +443,7 @@ cd .flow/scripts; ./pop-backlog.ps1
 ### 상태가 BLOCKED에서 멈춤
 
 ```powershell
-cd .flow/scripts; ./abort-to-idle.ps1 -Reason "수동 복구"
+cd .flow/scripts; ./finalize-task.ps1 -Reason "수동 복구"
 ```
 
 ### 상태 파일 손상

@@ -7,15 +7,17 @@ param(
     [string]$Title,
     
     [string]$Description = "",
+    [switch]$Force,
     [switch]$Help
 )
 
 $ErrorActionPreference = 'Stop'
 
 if ($Help) {
-    Write-Output "Usage: ./start-plan.ps1 -Title <title> [-Description <desc>] [-Help]"
+    Write-Output "Usage: ./start-plan.ps1 -Title <title> [-Description <desc>] [-Force] [-Help]"
     Write-Output "  -Title        플랜 제목 (필수)"
     Write-Output "  -Description  플랜 설명"
+    Write-Output "  -Force        기존 컨텍스트 덮어쓰기"
     exit 0
 }
 
@@ -26,20 +28,33 @@ $featureName = ConvertTo-FeatureName -Title $Title
 $date = Get-Date -Format "yyyyMMdd"
 $planId = "$featureName"
 
-# 동일 기능 컨텍스트 존재 여부 확인 (prepare-context에서 생성)
+# 기능 폴더 준비 (prepare-context 로직 통합)
+$featureDir = Get-FeatureDir -FeatureName $featureName
+if (-not (Test-Path $featureDir)) {
+    New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+}
+
+# logs 및 backups 디렉토리 생성
+$logsDir = Join-Path $featureDir "logs"
+$backupsDir = Join-Path $logsDir "backups"
+if (-not (Test-Path $logsDir)) {
+    New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+}
+if (-not (Test-Path $backupsDir)) {
+    New-Item -ItemType Directory -Path $backupsDir -Force | Out-Null
+}
+
+# context-phase.json 초기화 또는 확인
 $contextFile = Get-FeatureContextFile -FeatureName $featureName
-if (-not $contextFile -or -not (Test-Path $contextFile)) {
-    Write-FlowOutput "컨텍스트가 없습니다. 먼저 prepare-context.ps1을 실행하세요." -Level Error
-    Write-FlowOutput "예: cd .flow/scripts; ./prepare-context.ps1 -FeatureName \"$featureName\"" -Level Warning
+if ((Test-Path $contextFile) -and -not $Force) {
+    Write-FlowOutput "기능이 이미 존재합니다: $featureName" -Level Warning
+    Write-FlowOutput "기존 작업을 계속하거나 -Force로 리셋하세요." -Level Warning
     exit 1
 }
 
-# docs/<기능이름> 디렉토리 확인
-$featureDir = Get-FeatureDir -FeatureName $featureName
-if (-not (Test-Path $featureDir)) {
-    Write-FlowOutput "기능 폴더가 없습니다: $featureDir" -Level Error
-    Write-FlowOutput "prepare-context.ps1에서 폴더를 생성해야 합니다." -Level Warning
-    exit 1
+if (-not (Test-Path $contextFile) -or $Force) {
+    $reason = if ($Force) { "Context reset in start-plan" } else { "Context initialized in start-plan" }
+    Set-CurrentPhase -Phase "IDLE" -Reason $reason -FeatureName $featureName
 }
 
 # 플랜 파일 경로 (리뷰 전: need-review-plan.md)

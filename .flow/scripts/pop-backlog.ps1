@@ -106,6 +106,16 @@ if (Test-Path $implementsDir) {
 try {
     Move-Item -Path $featureSourceDir -Destination $implementsDir -Force
     
+    # logs 및 backups 디렉토리 생성 (없을 경우)
+    $logsDir = Join-Path $implementsDir "logs"
+    $backupsDir = Join-Path $logsDir "backups"
+    if (-not (Test-Path $logsDir)) {
+        New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
+    }
+    if (-not (Test-Path $backupsDir)) {
+        New-Item -ItemType Directory -Path $backupsDir -Force | Out-Null
+    }
+    
     # need-review-plan.md → plan.md 이름 변경 (필요시)
     if ($planType -eq "need-review") {
         $srcPlan = Join-Path $implementsDir "need-review-plan.md"
@@ -124,9 +134,17 @@ try {
         "" | Set-Content $queueFile -Encoding UTF8 -NoNewline
     }
     
-    # 기능별 context-phase.json 업데이트
+    # 기능별 context-phase.json 업데이트 (백로그 작업 메타 포함)
     $targetPhase = if ($planType -eq "reviewed") { "EXECUTING" } else { "PLANNING" }
-    Set-CurrentPhase -Phase $targetPhase -Reason "Popped from backlog: $nextFeature" -FeatureName $nextFeature
+    $backlogInfo = @{
+        is_backlog = $true
+        active = $true
+        source = "backlog-queue"
+        started_at = (Get-Date -Format "o")
+        completed_at = $null
+        completed_reason = ""
+    }
+    Set-CurrentPhase -Phase $targetPhase -Reason "Popped from backlog: $nextFeature" -FeatureName $nextFeature -Backlog $backlogInfo
     
     Write-JsonOutput -Status "success" -FeatureName $nextFeature -PlanType $planType -Message "Moved to implements"
     

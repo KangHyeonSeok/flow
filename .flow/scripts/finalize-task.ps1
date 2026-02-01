@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if ($Help) {
-    Write-Output "Usage: ./abort-to-idle.ps1 [-Reason <reason>] [-Help]"
+    Write-Output "Usage: ./finalize-task.ps1 [-Reason <reason>] [-Help]"
     exit 0
 }
 
@@ -29,9 +29,26 @@ if ($phase.phase -eq "IDLE") {
 
 $previousPhase = $phase.phase
 $previousFeature = $phase.feature_name
+$backlogInfo = $null
+if ($phase -and ($phase.PSObject.Properties.Name -contains "backlog") -and $phase.backlog) {
+    if ($phase.backlog.is_backlog -eq $true) {
+        $backlogInfo = @{
+            is_backlog = $true
+            active = $false
+            source = $phase.backlog.source
+            started_at = $phase.backlog.started_at
+            completed_at = (Get-Date -Format "o")
+            completed_reason = $Reason
+        }
+    }
+}
 
 # 상태 전이
-Set-CurrentPhase -Phase "IDLE" -Reason $Reason
+if ($backlogInfo) {
+    Set-CurrentPhase -Phase "IDLE" -Reason $Reason -Backlog $backlogInfo
+} else {
+    Set-CurrentPhase -Phase "IDLE" -Reason $Reason
+}
 
 Write-FlowOutput "작업이 중단되었습니다." -Level Warning
 Write-Output ""

@@ -85,16 +85,45 @@ if ($success) {
     # 성공 시 VALIDATING 상태로 전이 (확장 체크를 위해)
     Set-CurrentPhase -Phase "VALIDATING" -Reason "검증 통과" -FeatureName $phase.feature_name
     Write-FlowOutput "검증 성공!" -Level Success
-    Write-Output ""
-    Write-Output "⚠️  다음 단계: 확장 체크"
-    Write-Output "   AI가 .flow/extensions.json을 확인하고"
-    Write-Output "   활성화된 확장(예: STRUCTURE_REVIEW)을 실행해야 합니다."
-    Write-Output "   사용법: ./run-extension.ps1 -ExtensionId STRUCTURE_REVIEW"
+    
+    # 확장 자동 실행
+    $extensionsPath = Join-Path $projectRoot ".flow/extensions.json"
+    $extensionResults = @()
+    
+    if (Test-Path $extensionsPath) {
+        $extensionsConfig = Get-Content $extensionsPath -Raw | ConvertFrom-Json
+        
+        # VALIDATING 이후 트리거되는 활성 확장 찾기
+        $activeExtensions = @()
+        foreach ($prop in $extensionsConfig.extensions.PSObject.Properties) {
+            $ext = $prop.Value
+            if ($ext.enabled -and $ext.trigger.after -eq "VALIDATING") {
+                $activeExtensions += @{
+                    id = $ext.id
+                    name = $ext.name
+                    priority = $ext.priority
+                }
+            }
+        }
+        
+        # 우선순위 순으로 정렬
+        $activeExtensions = $activeExtensions | Sort-Object -Property priority
+        
+        # 각 확장 실행
+        foreach ($ext in $activeExtensions) {
+            Write-Output ""
+            $extResult = & "$PSScriptRoot/run-extension.ps1" -ExtensionId $ext.id -FeatureName $phase.feature_name
+            if ($extResult) {
+                $extensionResults += $extResult
+            }
+        }
+    }
     
     $result = @{
         success = $true
         output = $output -join "`n"
-        next_action = "check_extensions"
+        extensions_executed = $extensionResults.Count
+        extension_results = $extensionResults
     }
 } else {
     # 실패 시: retry_count 체크

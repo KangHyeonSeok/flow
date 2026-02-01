@@ -26,14 +26,19 @@ $ARGUMENTS
 ### 준비
 
 1. 사용자 요청(`$ARGUMENTS`)을 분석
-2. 요청이 있으면 컨텍스트 준비 및 플랜 시작:
+2. 요청이 있으면 플랜 시작 (컨텍스트는 자동 초기화됨):
    ```powershell
    Push-Location "<워크스페이스 경로>/.flow/scripts"
-   ./prepare-context.ps1 -FeatureName "요청 제목"
    ./start-plan.ps1 -Title "요청 제목"
    Pop-Location
    ```
    > **참고**: `<워크스페이스 경로>`는 현재 열려있는 VS Code 워크스페이스의 루트 경로 (예: `D:\Projects\flow`)
+   > 
+   > `start-plan.ps1`은 내부적으로 다음을 수행:
+   > - 기능 폴더 생성 (`docs/implements/{feature_name}/`)
+   > - `context-phase.json` 초기화
+   > - `logs/` 및 `backups/` 디렉토리 생성
+   > - `need-review-plan.md` 파일 생성
 3. 요청이 없거나 상태 확인이 필요하면:
    ```powershell
    Push-Location "<워크스페이스 경로>/.flow/scripts"
@@ -67,7 +72,7 @@ Pop-Location
 
 #### IDLE 상태
 
-**가능한 행동**: 플랜 생성 시작만 가능
+**가능한 행동**: 플랜 생성 시작 또는 백로그 처리만 가능
 
 1. 요청이 비어있거나 현재 문서를 따르라는 명령이면:
    a. 백로그 큐 확인:
@@ -78,8 +83,15 @@ Pop-Location
       ```powershell
       ./pop-backlog.ps1
       ```
-      - `plan_type`이 "reviewed"면: 플랜 읽고 컨텍스트 수집 후 EXECUTING으로 진행
-      - `plan_type`이 "need-review"면: 플랜 읽고 사용자에게 리뷰 요청 후 PLANNING
+      > **참고**: `pop-backlog.ps1`은 내부적으로 다음을 수행:
+      > - `docs/backlogs/{feature_name}` → `docs/implements/{feature_name}` 이동
+      > - `context-phase.json` 생성/갱신
+      > - `context-phase.json.backlog` 메타 설정 (`is_backlog: true`, `active: true`)
+      > - `plan_type`에 따라 EXECUTING 또는 PLANNING으로 상태 전이
+      >
+      > **상태 전이 후 즉시 다음 단계 진행**:
+      > - "reviewed" → EXECUTING: 플랜 읽고 즉시 구현 시작
+      > - "need-review" → PLANNING: 플랜 작성/검토 시작
    c. 큐가 비어있으면: "무엇을 하시겠습니까?" 질문
 2. 요청이 있으면:
    ```powershell
@@ -98,11 +110,7 @@ Pop-Location
    - 출력 (Outputs)
    - 검증 방법 (Validation)
    - 완료 조건 (Done Criteria)
-3. 플랜 작성 완료 후:
-   ```powershell
-   ./approve-plan.ps1
-   ```
-4. REVIEWING 상태로 전이
+3. 플랜 작성 완료 후 REVIEWING 상태로 전이
 
 ##### 추가 정보가 필요한 경우
 
@@ -151,9 +159,9 @@ Pop-Location
 2. 각 단계 완료 후 보고
 3. 에러 발생 시:
    ```powershell
-   ./abort-to-idle.ps1 -Reason "에러 내용"
+   ./finalize-task.ps1 -Reason "에러 내용"
    ```
-   → BLOCKED 상태로 전이
+   → IDLE 상태로 복귀 (사용자 개입 대기)
 4. 모든 단계 완료 시:
    ```powershell
    ./complete-execution.ps1 -Summary "실행 요약"
@@ -172,7 +180,8 @@ Pop-Location
    ```powershell
    ./validation-runner.ps1 -Command '검증명령'
    ```
-   - **중요**: 검증 명령에서 파일 경로는 **절대 경로**를 사용해야 함 (예: `pwsh -File "D:\Projects\flow\testscript\script.ps1"`)
+   - **중요**: 플랜에 직접 적는 검증 명령에서 파일 경로는 **절대 경로**를 사용해야 함 (예: `pwsh -File "D:\Projects\flow\testscript\script.ps1"`)
+   - `validation-profiles.json`에 정의된 기본 명령은 예외로 상대 경로 사용 가능
    - 스크립트는 **1회만 실행**하고 결과 반환
    - 재시도 횟수는 `docs/implements/{feature_name}/context-phase.json`의 `retry_count`/`max_retries`로 관리
 3. 검증 성공 시:
@@ -181,7 +190,7 @@ Pop-Location
       - 해당 확장의 분석 실행 (예: STRUCTURE_REVIEW)
    b. **확장 결과에 따른 분기**:
       - 제안이 있으면: 사용자에게 보고 후 선택 요청
-      - 제안이 없으면: **사용자 확인 없이 바로 COMPLETED 전이**
+      - 제안이 없으면: **사용자에게 보고하지 말고 바로 finalize-task.ps1을 실행**
    c. COMPLETED 상태로 전이 후 **즉시 result.md 작성**
 4. 검증 실패 시:
    - 5회 미만: RETRYING 전이 → **AI가 오류 분석 및 수정 후 재검증**
@@ -201,7 +210,7 @@ Pop-Location
 
 1. 문제 상황 설명
 2. 선택지 제시:
-   - 중단: `./abort-to-idle.ps1`
+   - 중단: `./finalize-task.ps1`
    - 재시도: 문제 해결 후 다시 시도
 3. 사용자 지시 대기
 
@@ -218,16 +227,19 @@ Pop-Location
 2. 완료된 작업 요약
 3. 상태를 IDLE로 복귀:
    ```powershell
-   ./abort-to-idle.ps1 -Reason "작업 완료"
+   ./finalize-task.ps1 -Reason "작업 완료"
    ```
 4. **백로그 기반 작업이었다면 중단하지 말고 즉시 다음 백로그를 진행**:
+   - 백로그 기반 여부는 `context-phase.json.backlog.is_backlog === true`로 판단한다.
+   - `pop-backlog.ps1` 실행 시 `backlog.active === true`로 시작되며,
+     `finalize-task.ps1` 실행 시 `backlog.active === false`, `backlog.completed_at`가 기록된다.
    - IDLE 복귀 직후 백로그 큐를 확인하고, 작업이 있으면 바로 이어서 처리한다.
    ```powershell
-   ./pop-backlog.ps1 -Preview
    ./pop-backlog.ps1
    ```
-   - `plan_type`이 "reviewed"면: 플랜 읽고 컨텍스트 수집 후 EXECUTING으로 진행
-   - `plan_type`이 "need-review"면: 플랜 읽고 사용자에게 리뷰 요청 후 PLANNING
+   - pop-backlog.ps1이 자동으로 `plan_type`에 따라 상태 전이:
+     - "reviewed": EXECUTING → 즉시 구현 시작
+     - "need-review": PLANNING → 플랜 작성 시작
 
 ---
 
@@ -271,13 +283,12 @@ Push-Location "<워크스페이스 경로>/.flow/scripts"
 | 스크립트 | 용도 |
 |----------|------|
 | `./get-status.ps1` | 상태 확인 |
-| `./prepare-context.ps1 -FeatureName "제목"` | 컨텍스트 준비 (start-plan 전에 필수) |
-| `./start-plan.ps1 -Title "제목"` | 플랜 시작 |
+| `./start-plan.ps1 -Title "제목" [-Force]` | 플랜 시작 (컨텍스트 자동 초기화, -Force로 기존 리셋) |
 | `./approve-plan.ps1` | 플랜 승인 |
 | `./complete-execution.ps1 -Summary "요약"` | 실행 완료 → VALIDATING |
-| `./abort-to-idle.ps1 -Reason "사유"` | 중단/완료 후 IDLE 복귀 |
+| `./finalize-task.ps1 -Reason "사유"` | 중단/완료 후 IDLE 복귀 |
 | `./validation-runner.ps1 -Command "cmd"` | 검증 |
-| `./pop-backlog.ps1 [-Preview]` | 백로그 큐에서 다음 작업 가져오기 |
+| `./pop-backlog.ps1 [-Preview]` | 백로그 큐에서 다음 작업 가져오기 (컨텍스트 자동 초기화) |
 
 ---
 
@@ -340,17 +351,6 @@ VALIDATING 성공 후, COMPLETED 전이 전에 확장 체크:
 ```
 
 **중요**: 제안이 없으면 `human-input.ps1` 호출 없이 바로 COMPLETED로 진행한다.
-
-### 확장 관리
-
-확장 추가/수정/활성화는 `/flowext` 프롬프트 사용:
-
-```
-/flowext add STRUCTURE_REVIEW VALIDATING에서 구조 리뷰 실행
-/flowext enable STRUCTURE_REVIEW
-/flowext disable STRUCTURE_REVIEW
-/flowext list
-```
 
 ### 기본 제공 확장
 

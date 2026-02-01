@@ -190,7 +190,8 @@ function Set-CurrentPhase {
         [string]$FeatureName = $null,
         [bool]$RequiresHuman = $false,
         [Nullable[int]]$RetryCount = $null,
-        [Nullable[int]]$MaxRetries = $null
+        [Nullable[int]]$MaxRetries = $null,
+        [hashtable]$Backlog = $null
     )
     
     $resolvedFeatureName = $FeatureName
@@ -209,6 +210,7 @@ function Set-CurrentPhase {
     }
 
     $phaseFile = Get-CurrentPhaseFile -FeatureName $resolvedFeatureName -EnsureFeatureDir
+    $existingPhase = Get-CurrentPhase -FeatureName $resolvedFeatureName
     
     # Backup previous state
     if (Test-Path $phaseFile) {
@@ -223,6 +225,13 @@ function Set-CurrentPhase {
     $resolvedRetryCount = if ($null -ne $RetryCount) { $RetryCount } else { 0 }
     $resolvedMaxRetries = if ($null -ne $MaxRetries) { $MaxRetries } else { 5 }
 
+    $resolvedBacklog = $null
+    if ($PSBoundParameters.ContainsKey("Backlog")) {
+        $resolvedBacklog = $Backlog
+    } elseif ($existingPhase -and ($existingPhase.PSObject.Properties.Name -contains "backlog")) {
+        $resolvedBacklog = $existingPhase.backlog
+    }
+
     $newPhase = @{
         phase = $Phase
         started_at = (Get-Date -Format "o")
@@ -236,6 +245,10 @@ function Set-CurrentPhase {
         requires_human = $RequiresHuman
         retry_count = $resolvedRetryCount
         max_retries = $resolvedMaxRetries
+    }
+
+    if ($resolvedBacklog) {
+        $newPhase.backlog = $resolvedBacklog
     }
     
     $newPhase | ConvertTo-Json -Depth 10 | Out-File $phaseFile -Encoding UTF8

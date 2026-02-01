@@ -49,6 +49,17 @@ if ($Json) {
     
     $featureName = if ($phase.feature_name) { $phase.feature_name } else { "None" }
     Write-Output "  Feature:        $featureName"
+    $backlogText = "None"
+    if ($phase -and ($phase.PSObject.Properties.Name -contains "backlog") -and $phase.backlog) {
+        $isActive = $false
+        if ($phase.backlog.PSObject.Properties.Name -contains "active") {
+            $isActive = [bool]$phase.backlog.active
+        }
+        $statusLabel = if ($isActive) { "Active" } else { "Completed" }
+        $sourceLabel = if ($phase.backlog.source) { $phase.backlog.source } else { "unknown" }
+        $backlogText = "$statusLabel (source: $sourceLabel)"
+    }
+    Write-Output "  Backlog:       $backlogText"
     Write-Output "  Requires Human: $($phase.requires_human)"
     Write-Output "  Retry Count:    $($phase.retry_count) / $($phase.max_retries)"
     Write-Output ""
@@ -67,7 +78,7 @@ if ($Json) {
         "EXECUTING"  { "Executing... waiting for completion" }
         "VALIDATING" { "Validating..." }
         "RETRYING"   { "Retrying... ($($phase.retry_count)/$($phase.max_retries))" }
-        "BLOCKED"    { "!! Human intervention needed | abort-to-idle.ps1" }
+        "BLOCKED"    { "!! Human intervention needed | finalize-task.ps1" }
         "COMPLETED"  { "Done! Ready for next task" }
         default      { "Unknown state" }
     }
