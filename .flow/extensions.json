@@ -8,7 +8,7 @@
       "id": "STRUCTURE_REVIEW",
       "name": "구조 리뷰",
       "description": "변경된 코드의 구조를 분석하고 리팩토링을 제안합니다.",
-      "enabled": true,
+      "enabled": false,
       "priority": 10,
       
       "trigger": {

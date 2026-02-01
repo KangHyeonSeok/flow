@@ -181,6 +181,17 @@ cd .flow/scripts; ./pop-backlog.ps1  # 다음 작업을 implements로 이동
 cd .flow/scripts; ./finalize-task.ps1 -Reason "사유"
 ```
 
+### 로그 기록 on/off
+
+기본값은 **off** 입니다. 다음 명령으로 전환할 수 있습니다:
+
+```powershell
+cd .flow/scripts; ./set-log.ps1 -On   # 로그 기록 활성화
+cd .flow/scripts; ./set-log.ps1 -Off  # 로그 기록 비활성화
+```
+
+설정 파일: `.flow/settings.json`
+
 ---
 
 ## 검증 프로파일

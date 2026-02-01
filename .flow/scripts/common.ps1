@@ -33,6 +33,51 @@ function Get-ProjectRoot {
     return (Resolve-Path (Join-Path $flowRoot "..")).Path
 }
 
+function Get-FlowSettingsPath {
+    return Join-Path (Get-FlowRoot) "settings.json"
+}
+
+function Get-FlowSettings {
+    $default = [ordered]@{
+        logging = @{ enabled = $false }
+    }
+
+    $settingsPath = Get-FlowSettingsPath
+    if (-not (Test-Path $settingsPath)) {
+        return $default
+    }
+
+    try {
+        $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    } catch {
+        return $default
+    }
+
+    if (-not $settings) {
+        return $default
+    }
+
+    if (-not ($settings.PSObject.Properties.Name -contains "logging")) {
+        $settings | Add-Member -NotePropertyName logging -NotePropertyValue @{ enabled = $false }
+    }
+
+    if ($null -eq $settings.logging.enabled) {
+        $settings.logging.enabled = $false
+    }
+
+    return $settings
+}
+
+function Set-FlowSettings {
+    param(
+        [Parameter(Mandatory)]
+        $Settings
+    )
+
+    $settingsPath = Get-FlowSettingsPath
+    $Settings | ConvertTo-Json -Depth 10 | Out-File $settingsPath -Encoding UTF8
+}
+
 function Get-ContextDir {
     return Join-Path (Get-FlowRoot) "context"
 }
@@ -266,6 +311,11 @@ function Add-DecisionLog {
         [string]$Trigger = "manual",
         [string]$FeatureName
     )
+
+    $settings = Get-FlowSettings
+    if (-not $settings.logging.enabled) {
+        return
+    }
 
     if (-not $FeatureName) {
         $FeatureName = Resolve-ActiveFeatureName -Silent
