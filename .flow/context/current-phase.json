@@ -1,0 +1,14 @@
+{
+  "phase": "IDLE",
+  "started_at": "",
+  "last_decision": {
+    "timestamp": "",
+    "action": "",
+    "reason": ""
+  },
+  "requires_human": false,
+  "pending_questions": [],
+  "retry_count": 0,
+  "feature_name": "",
+  "max_retries": 5
+}
