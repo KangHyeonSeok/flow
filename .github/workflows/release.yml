@@ -29,7 +29,13 @@ jobs:
 
       - name: Create zip archive
         run: |
-          zip -r flow-prompts-${{ steps.version.outputs.version }}.zip .flow/ .github/prompts/
+          mkdir -p temp-release/prompts
+          cp -r .flow temp-release/
+          cp -r .github/prompts/* temp-release/prompts/
+          cd temp-release
+          zip -r ../flow-prompts-${{ steps.version.outputs.version }}.zip .flow/ prompts/
+          cd ..
+          rm -rf temp-release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
