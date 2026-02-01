@@ -26,11 +26,37 @@ $ARGUMENTS
 ### 준비
 
 1. 사용자 요청(`$ARGUMENTS`)을 분석
-2. 요청이 있으면:
+2. 요청이 있으면 컨텍스트 준비:
+   ```powershell
+   Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+   ./prepare-context.ps1 -FeatureName "요청 제목"
+   Pop-Location
+   ```
+   > **참고**: `$env:WORKSPACE_ROOT`는 프로젝트 루트 경로 (예: `D:\Projects\flow`)
+3. 상태 확인 후 상태별 분기로 이동:
+   ```powershell
+   Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+   ./get-status.ps1
+   Pop-Location
+   ```
+
+### 스크립트 실행 규칙
+
+모든 Flow 스크립트는 `.flow/scripts/` 폴더에서 실행해야 한다. 다음 중 하나의 방식을 사용:
+
+**방식 1: Push-Location 사용 (권장)**
 ```powershell
-cd .flow/scripts; ./prepare-context.ps1 -FeatureName "요청 제목
+Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+./script-name.ps1 -Param "value"
+Pop-Location
 ```
-3. 준비가 끝나서 IDLE 상태이다.
+
+**방식 2: 절대 경로 사용**
+```powershell
+& "$env:WORKSPACE_ROOT/.flow/scripts/script-name.ps1" -Param "value"
+```
+
+> ⚠️ `cd .flow/scripts; ./script.ps1` 형태는 이미 해당 폴더에 있을 때 에러가 발생하므로 사용하지 않는다.
 
 ### 상태별 분기
 
@@ -40,30 +66,30 @@ cd .flow/scripts; ./prepare-context.ps1 -FeatureName "요청 제목
 
 **가능한 행동**: 플랜 생성 시작만 가능
 
-1. 요청이 비어있거나 현재 문서를 따르라는 명령이면::
+1. 요청이 비어있거나 현재 문서를 따르라는 명령이면:
    a. 백로그 큐 확인:
       ```powershell
-      cd .flow/scripts; ./pop-backlog.ps1 -Preview
+      ./pop-backlog.ps1 -Preview
       ```
    b. 큐에 작업이 있으면 (질문 없이 바로 진행):
       ```powershell
-      cd .flow/scripts; ./pop-backlog.ps1
+      ./pop-backlog.ps1
       ```
       - `plan_type`이 "reviewed"면: 플랜 읽고 컨텍스트 수집 후 EXECUTING으로 진행
       - `plan_type`이 "need-review"면: 플랜 읽고 사용자에게 리뷰 요청 후 PLANNING
    c. 큐가 비어있으면: "무엇을 하시겠습니까?" 질문
 2. 요청이 있으면:
    ```powershell
-   cd .flow/scripts; ./start-plan.ps1 -Title "요청 제목"
+   ./start-plan.ps1 -Title "요청 제목"
    ```
 3. 플랜 파일 생성 후 PLANNING으로 전이됨
-5. **코드 수정 절대 불가** - 플랜 작성으로만 진행
+4. **코드 수정 절대 불가** - 플랜 작성으로만 진행
 
 #### PLANNING 상태
 
 **가능한 행동**: 플랜 작성만 가능
 
-1. 활성 플랜 파일 읽기: `docs/implements/{feature_name}/plan.md`
+1. 활성 플랜 파일 읽기: `docs/implements/{feature_name}/need-review-plan.md`
 2. 4개 필수 섹션 작성:
    - 입력 (Inputs)
    - 출력 (Outputs)
@@ -71,7 +97,7 @@ cd .flow/scripts; ./prepare-context.ps1 -FeatureName "요청 제목
    - 완료 조건 (Done Criteria)
 3. 플랜 작성 완료 후:
    ```powershell
-   cd .flow/scripts; ./approve-plan.ps1
+   ./approve-plan.ps1
    ```
 4. REVIEWING 상태로 전이
 
@@ -92,13 +118,13 @@ cd .flow/scripts; ./prepare-context.ps1 -FeatureName "요청 제목
 
 ```powershell
 # Yes/No 확인
-cd .flow/scripts; ./human-input.ps1 -Type Confirm -Prompt "이 기능에 로깅을 포함시킬까요?"
+./human-input.ps1 -Type Confirm -Prompt "이 기능에 로깅을 포함시킬까요?"
 
 # 선택지 중 선택
-cd .flow/scripts; ./human-input.ps1 -Type Select -Prompt "어떤 방식으로 구현할까요?" -Options @("방식A: 기존 컴포넌트 수정", "방식B: 새 컴포넌트 생성")
+./human-input.ps1 -Type Select -Prompt "어떤 방식으로 구현할까요?" -Options @("방식A: 기존 컴포넌트 수정", "방식B: 새 컴포넌트 생성")
 
 # 자유 텍스트 입력
-cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 할 사항이 있으면 입력해주세요"
+./human-input.ps1 -Type Text -Prompt "추가로 고려해야 할 사항이 있으면 입력해주세요"
 ```
 
 **응답 활용**: 스크립트는 JSON 형식으로 결과를 반환하며, `response` 필드에 사용자 입력이 포함됨.
@@ -122,18 +148,18 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
 2. 각 단계 완료 후 보고
 3. 에러 발생 시:
    ```powershell
-   cd .flow/scripts; ./abort-to-idle.ps1 -Reason "에러 내용"
+   ./abort-to-idle.ps1 -Reason "에러 내용"
    ```
    → BLOCKED 상태로 전이
 4. 모든 단계 완료 시:
    ```powershell
-   cd .flow/scripts; ./complete-execution.ps1 -Summary "실행 요약"
+   ./complete-execution.ps1 -Summary "실행 요약"
    ```
    → VALIDATING 전이
 
 #### VALIDATING 상태
 
-**가능한 행동**: 검증 실행
+**가능한 행동**: 검증 실행 및 확장 체크
 
 1. 검증 프로파일 참조: `.flow/validation-profiles.json`
    - `nextjs`: npm run build, npm run lint
@@ -141,14 +167,18 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
    - `powershell`: 스크립트 문법 검사
 2. 플랜의 "검증 방법" 섹션 실행:
    ```powershell
-   cd .flow/scripts; ./validation-runner.ps1 -Command "검증명령"
+   ./validation-runner.ps1 -Command "검증명령"
    ```
    - 스크립트는 **1회만 실행**하고 결과 반환
-   - 재시도 횟수는 docs/implements/{feature_name}/context-phase.json 의 `retry_count`/`max_retries`로 관리
+   - 재시도 횟수는 `docs/implements/{feature_name}/context-phase.json`의 `retry_count`/`max_retries`로 관리
 3. 검증 성공 시:
-   - **확장 상태 체크** (아래 "확장 상태 시스템" 참조)
-   - 활성화된 확장이 있으면 해당 확장 실행
-   - 확장 없거나 확장 완료 시 COMPLETED 전이
+   a. **확장 상태 체크** (아래 "확장 상태 시스템" 참조):
+      - `.flow/extensions.json`에서 `enabled: true`이고 `trigger.after === "VALIDATING"`인 확장 찾기
+      - 해당 확장의 분석 실행 (예: STRUCTURE_REVIEW)
+   b. **확장 결과에 따른 분기**:
+      - 제안이 있으면: 사용자에게 보고 후 선택 요청
+      - 제안이 없으면: **사용자 확인 없이 바로 COMPLETED 전이**
+   c. COMPLETED 상태로 전이 후 **즉시 result.md 작성**
 4. 검증 실패 시:
    - 5회 미만: RETRYING 전이 → **AI가 오류 분석 및 수정 후 재검증**
    - 5회 초과: BLOCKED 전이
@@ -175,6 +205,8 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
 
 **가능한 행동**: 완료 보고 및 result.md 작성
 
+> **중요**: VALIDATING에서 검증 성공 + 확장 완료 시 자동으로 이 상태로 전이된다.
+
 1. `docs/implements/{feature_name}/result.md` 파일 생성:
    - 템플릿: `.flow/templates/result-template.md` 참조
    - 필수 섹션: 요약, 변경 사항, 수정된 파일, 테스트 결과
@@ -182,13 +214,13 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
 2. 완료된 작업 요약
 3. 상태를 IDLE로 복귀:
    ```powershell
-   cd .flow/scripts; ./abort-to-idle.ps1 -Reason "작업 완료"
+   ./abort-to-idle.ps1 -Reason "작업 완료"
    ```
 4. **백로그 기반 작업이었다면 중단하지 말고 즉시 다음 백로그를 진행**:
    - IDLE 복귀 직후 백로그 큐를 확인하고, 작업이 있으면 바로 이어서 처리한다.
    ```powershell
-   cd .flow/scripts; ./pop-backlog.ps1 -Preview
-   cd .flow/scripts; ./pop-backlog.ps1
+   ./pop-backlog.ps1 -Preview
+   ./pop-backlog.ps1
    ```
    - `plan_type`이 "reviewed"면: 플랜 읽고 컨텍스트 수집 후 EXECUTING으로 진행
    - `plan_type`이 "need-review"면: 플랜 읽고 사용자에게 리뷰 요청 후 PLANNING
@@ -223,17 +255,23 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
 
 ## 스크립트 경로
 
-모든 스크립트는 `.flow/scripts/` 에 위치:
+모든 스크립트는 `.flow/scripts/` 에 위치. 실행 전 해당 폴더로 이동 필요:
+
+```powershell
+# 스크립트 실행 전 폴더 이동 (세션 시작 시 1회)
+Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+```
 
 | 스크립트 | 용도 |
 |----------|------|
-| `get-status.ps1` | 상태 확인 |
-| `start-plan.ps1 -Title "제목"` | 플랜 시작 |
-| `approve-plan.ps1` | 플랜 승인 |
-| `complete-execution.ps1 -Summary "요약"` | 실행 완료 → VALIDATING |
-| `abort-to-idle.ps1 -Reason "사유"` | 중단 |
-| `validation-runner.ps1 -Command "cmd"` | 검증 |
-| `pop-backlog.ps1 [-Preview]` | 백로그 큐에서 다음 작업 가져오기 |
+| `./get-status.ps1` | 상태 확인 |
+| `./prepare-context.ps1 -FeatureName "제목"` | 컨텍스트 준비 (start-plan 전에 필수) |
+| `./start-plan.ps1 -Title "제목"` | 플랜 시작 |
+| `./approve-plan.ps1` | 플랜 승인 |
+| `./complete-execution.ps1 -Summary "요약"` | 실행 완료 → VALIDATING |
+| `./abort-to-idle.ps1 -Reason "사유"` | 중단/완료 후 IDLE 복귀 |
+| `./validation-runner.ps1 -Command "cmd"` | 검증 |
+| `./pop-backlog.ps1 [-Preview]` | 백로그 큐에서 다음 작업 가져오기 |
 
 ---
 

@@ -60,10 +60,10 @@ if ($Json) {
     Write-Output "==================================="
     
     $nextActions = switch ($phase.phase) {
-        "IDLE"       { "/orch.plan - Start new plan" }
+        "IDLE"       { "/flow.plan - Start new plan" }
         "PLANNING"   { "Writing plan... then move to REVIEWING" }
-        "REVIEWING"  { "/orch.approve - Approve | Request changes" }
-        "READY"      { "/orch.execute - Start execution" }
+        "REVIEWING"  { "/flow.approve - Approve | Request changes" }
+        "READY"      { "/flow.execute - Start execution" }
         "EXECUTING"  { "Executing... waiting for completion" }
         "VALIDATING" { "Validating..." }
         "RETRYING"   { "Retrying... ($($phase.retry_count)/$($phase.max_retries))" }
