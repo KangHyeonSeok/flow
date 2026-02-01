@@ -22,3 +22,47 @@ GitHub Copilot Chat을 사용 중이며, premium request를 효율적으로 사�
 설계 → 설계 리뷰 → 구현 → 검증 → 완료 보고
 
 - 설계 리뷰는 **반드시 사람이 수행**합니다.
+
+## 설치
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/KangHyeonSeok/flow/main/install.ps1 | iex
+```
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KangHyeonSeok/flow/main/install.sh | bash
+```
+
+### 설치 완료 메시지
+
+```
+═══════════════════════════════════════
+  ✅ Flow Prompt v0.1.0 installed
+═══════════════════════════════════════
+```
+
+## 업데이트
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/KangHyeonSeok/flow/main/update.ps1 | iex
+```
+
+### macOS / Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KangHyeonSeok/flow/main/update.sh | bash
+```
+
+### 이미 최신 버전인 경우
+
+```
+═══════════════════════════════════════
+  ✅ Already up to date (v0.1.0)
+═══════════════════════════════════════
+```

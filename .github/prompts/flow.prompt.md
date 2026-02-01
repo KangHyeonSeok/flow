@@ -266,10 +266,13 @@ VALIDATING 성공 후, COMPLETED 전이 전에 확장 체크:
 1. `.flow/extensions.json` 읽기
 2. `enabled: true`인 확장 중 `trigger.after === "VALIDATING"` 찾기
 3. 해당 확장의 `actions` 실행
-4. 사용자에게 결과 보고 및 선택 요청
-5. `transitions`에 따라 다음 상태 결정
+4. **제안이 있으면**: 사용자에게 결과 보고 및 선택 요청
+5. **제안이 없으면**: 사용자 확인 없이 바로 COMPLETED 전이
+6. `transitions`에 따라 다음 상태 결정
 
 ### 확장 실행 예시 (STRUCTURE_REVIEW)
+
+#### 제안이 있는 경우
 
 ```
 📋 확장 실행: STRUCTURE_REVIEW (구조 리뷰)
@@ -285,6 +288,19 @@ VALIDATING 성공 후, COMPLETED 전이 전에 확장 체크:
 - N: 현재 상태로 완료 (→ COMPLETED)
 - Skip: 이 확장 건너뛰기 (→ COMPLETED)
 ```
+
+#### 제안이 없는 경우 (사용자 확인 스킵)
+
+```
+📋 확장 실행: STRUCTURE_REVIEW (구조 리뷰)
+
+변경된 파일을 분석하여 리팩토링 제안을 생성합니다...
+
+✅ 리팩토링 제안 없음 - 구조가 적절합니다.
+→ COMPLETED 상태로 자동 전이
+```
+
+**중요**: 제안이 없으면 `human-input.ps1` 호출 없이 바로 COMPLETED로 진행한다.
 
 ### 확장 관리
 

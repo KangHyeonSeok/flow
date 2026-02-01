@@ -1,0 +1,67 @@
+name: Release Flow Prompts
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read VERSION
+        id: version
+        run: |
+          VERSION=$(cat VERSION | tr -d '\n\r ')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Copy VERSION to .flow
+        run: |
+          cp VERSION .flow/version.txt
+
+      - name: Create zip archive
+        run: |
+          zip -r flow-prompts-${{ steps.version.outputs.version }}.zip .flow/ .github/prompts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Flow Prompts v${{ steps.version.outputs.version }}
+          body: |
+            ## Flow Prompts v${{ steps.version.outputs.version }}
+            
+            ### 설치 방법
+            
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
+            ```
+            
+            **macOS / Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+            ```
+            
+            ### 업데이트 방법
+            
+            **Windows:**
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/main/update.ps1 | iex
+            ```
+            
+            **macOS / Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/update.sh | bash
+            ```
+          files: |
+            flow-prompts-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false

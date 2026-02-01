@@ -1,14 +1,14 @@
 {
-  "phase": "IDLE",
-  "started_at": "",
   "last_decision": {
-    "timestamp": "",
-    "action": "",
-    "reason": ""
+    "action": "phase_transition",
+    "reason": "작업 완료: 구조리뷰_스킵_개선",
+    "timestamp": "2026-02-01T20:13:28.2941279+09:00"
   },
-  "requires_human": false,
-  "pending_questions": [],
-  "retry_count": 0,
+  "max_retries": 5,
   "feature_name": "",
-  "max_retries": 5
+  "phase": "IDLE",
+  "started_at": "2026-02-01T20:13:28.2941159+09:00",
+  "pending_questions": [],
+  "requires_human": false,
+  "retry_count": 0
 }
