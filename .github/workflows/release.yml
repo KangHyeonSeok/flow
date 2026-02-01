@@ -2,26 +2,50 @@ name: Release Flow Prompts
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   release:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Read VERSION
-        id: version
+      - name: Configure git
         run: |
-          VERSION=$(cat VERSION | tr -d '\n\r ')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump VERSION
+        id: bump
+        run: |
+          VERSION=$(tr -d '\n\r ' < VERSION)
+          if ! echo "$VERSION" | grep -E '^([0-9]+)\.([0-9]+)\.([0-9]+)$' > /dev/null; then
+            echo "VERSION is not SemVer: $VERSION"
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "$NEW_VERSION" > VERSION
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $NEW_VERSION"
+
+      - name: Commit and tag version
+        run: |
+          git add VERSION
+          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }} [skip release]"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.version }}"
 
       - name: Copy VERSION to .flow
         run: |
@@ -33,16 +57,17 @@ jobs:
           cp -r .flow temp-release/
           cp -r .github/prompts/* temp-release/prompts/
           cd temp-release
-          zip -r ../flow-prompts-${{ steps.version.outputs.version }}.zip .flow/ prompts/
+          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ prompts/
           cd ..
           rm -rf temp-release
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Flow Prompts v${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: Flow Prompts v${{ steps.bump.outputs.version }}
           body: |
-            ## Flow Prompts v${{ steps.version.outputs.version }}
+            ## Flow Prompts v${{ steps.bump.outputs.version }}
             
             ### 설치 방법
             
@@ -68,6 +93,6 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/update.sh | bash
             ```
           files: |
-            flow-prompts-${{ steps.version.outputs.version }}.zip
+            flow-prompts-${{ steps.bump.outputs.version }}.zip
           draft: false
           prerelease: false

@@ -1,14 +1,14 @@
 {
+  "pending_questions": [],
+  "phase": "IDLE",
+  "requires_human": false,
   "last_decision": {
+    "reason": "작업 완료",
     "action": "phase_transition",
-    "reason": "작업 완료: 설치_프롬프트_경로_수정",
-    "timestamp": "2026-02-01T20:45:41.9612292+09:00"
+    "timestamp": "2026-02-01T20:53:35.5863236+09:00"
   },
+  "started_at": "2026-02-01T20:53:35.5863114+09:00",
   "max_retries": 5,
   "feature_name": "",
-  "phase": "IDLE",
-  "started_at": "2026-02-01T20:45:41.9612199+09:00",
-  "pending_questions": [],
-  "requires_human": false,
   "retry_count": 0
 }
