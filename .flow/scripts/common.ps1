@@ -28,6 +28,11 @@ function Get-FlowRoot {
     return (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
+function Get-ProjectRoot {
+    $flowRoot = Get-FlowRoot
+    return (Resolve-Path (Join-Path $flowRoot "..")).Path
+}
+
 function Get-ContextDir {
     return Join-Path (Get-FlowRoot) "context"
 }

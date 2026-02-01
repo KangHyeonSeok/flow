@@ -35,16 +35,22 @@ $success = $false
 $errorMessage = ""
 $output = ""
 
+# 프로젝트 루트 경로 (common.ps1의 함수 사용)
+$projectRoot = Get-ProjectRoot
+
 Write-FlowOutput "검증 실행 (retry_count: $($phase.retry_count) / max: $($phase.max_retries))" -Level Info
 Write-Output "  명령어: $Command"
+Write-Output "  작업 디렉토리: $projectRoot"
 Write-Output ""
 
 try {
     # LASTEXITCODE 초기화 (이전 명령 영향 제거)
     $global:LASTEXITCODE = 0
     
-    # 명령 실행
+    # 프로젝트 루트에서 명령 실행
+    Push-Location $projectRoot
     $output = Invoke-Expression $Command 2>&1
+    Pop-Location
     $exitCode = $LASTEXITCODE
     
     # null인 경우 0으로 (네이티브 명령이 아닌 경우)

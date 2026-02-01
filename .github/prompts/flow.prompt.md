@@ -26,16 +26,17 @@ $ARGUMENTS
 ### 준비
 
 1. 사용자 요청(`$ARGUMENTS`)을 분석
-2. 요청이 있으면 컨텍스트 준비:
+2. 요청이 있으면 컨텍스트 준비 및 플랜 시작:
    ```powershell
-   Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+   Push-Location "<워크스페이스 경로>/.flow/scripts"
    ./prepare-context.ps1 -FeatureName "요청 제목"
+   ./start-plan.ps1 -Title "요청 제목"
    Pop-Location
    ```
-   > **참고**: `$env:WORKSPACE_ROOT`는 프로젝트 루트 경로 (예: `D:\Projects\flow`)
-3. 상태 확인 후 상태별 분기로 이동:
+   > **참고**: `<워크스페이스 경로>`는 현재 열려있는 VS Code 워크스페이스의 루트 경로 (예: `D:\Projects\flow`)
+3. 요청이 없거나 상태 확인이 필요하면:
    ```powershell
-   Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+   Push-Location "<워크스페이스 경로>/.flow/scripts"
    ./get-status.ps1
    Pop-Location
    ```
@@ -46,17 +47,19 @@ $ARGUMENTS
 
 **방식 1: Push-Location 사용 (권장)**
 ```powershell
-Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+Push-Location "<워크스페이스 경로>/.flow/scripts"
 ./script-name.ps1 -Param "value"
 Pop-Location
 ```
 
 **방식 2: 절대 경로 사용**
 ```powershell
-& "$env:WORKSPACE_ROOT/.flow/scripts/script-name.ps1" -Param "value"
+& "<워크스페이스 경로>/.flow/scripts/script-name.ps1" -Param "value"
 ```
 
-> ⚠️ `cd .flow/scripts; ./script.ps1` 형태는 이미 해당 폴더에 있을 때 에러가 발생하므로 사용하지 않는다.
+> **주의사항**:
+> - `<워크스페이스 경로>`는 현재 VS Code 워크스페이스의 절대 경로로 대체 (예: `D:\Projects\flow`)
+> - `cd .flow/scripts; ./script.ps1` 형태는 이미 해당 폴더에 있을 때 에러가 발생하므로 사용하지 않는다
 
 ### 상태별 분기
 
@@ -167,8 +170,9 @@ Pop-Location
    - `powershell`: 스크립트 문법 검사
 2. 플랜의 "검증 방법" 섹션 실행:
    ```powershell
-   ./validation-runner.ps1 -Command "검증명령"
+   ./validation-runner.ps1 -Command '검증명령'
    ```
+   - **중요**: 검증 명령에서 파일 경로는 **절대 경로**를 사용해야 함 (예: `pwsh -File "D:\Projects\flow\testscript\script.ps1"`)
    - 스크립트는 **1회만 실행**하고 결과 반환
    - 재시도 횟수는 `docs/implements/{feature_name}/context-phase.json`의 `retry_count`/`max_retries`로 관리
 3. 검증 성공 시:
@@ -259,8 +263,10 @@ Pop-Location
 
 ```powershell
 # 스크립트 실행 전 폴더 이동 (세션 시작 시 1회)
-Push-Location "$env:WORKSPACE_ROOT/.flow/scripts"
+Push-Location "<워크스페이스 경로>/.flow/scripts"
 ```
+
+> **참고**: `<워크스페이스 경로>`는 현재 VS Code 워크스페이스의 절대 경로 (예: `D:\Projects\flow`)
 
 | 스크립트 | 용도 |
 |----------|------|
