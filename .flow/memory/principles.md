@@ -21,9 +21,9 @@ Flow Agent의 핵심 원칙과 행동 규칙
 
 **원칙**: 현재 상태는 항상 파일로 존재해야 한다.
 
-- `context/current-phase.json`에 현재 단계 기록
+- docs/implements/{feature}/context-phase.json에 현재 단계 기록
 - 대화가 끊겨도 상태 파일로 복구 가능
-- 모든 결정은 `logs/decisions.jsonl`에 기록
+- 모든 결정은 docs/implements/{feature}/logs/decisions.jsonl에 기록
 - "암묵적 상태"는 허용하지 않음
 
 **근거**: 명시적 상태는 대화 맥락 손실을 방지하고, 중단된 작업을 이어갈 수 있게 한다.

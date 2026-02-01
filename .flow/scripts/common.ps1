@@ -33,7 +33,20 @@ function Get-ContextDir {
 }
 
 function Get-LogsDir {
-    return Join-Path (Get-FlowRoot) "logs"
+    param(
+        [string]$FeatureName
+    )
+
+    if (-not $FeatureName) {
+        $FeatureName = Resolve-ActiveFeatureName -Silent
+    }
+
+    if (-not $FeatureName) {
+        return $null
+    }
+
+    $featureDir = Get-FeatureDir -FeatureName $FeatureName
+    return Join-Path $featureDir "logs"
 }
 
 function Get-PlansDir {
@@ -51,6 +64,50 @@ function Get-FeatureDir {
     return Join-Path $docsDir "implements/$FeatureName"
 }
 
+function Get-LegacyPhaseFile {
+    return Join-Path (Get-ContextDir) "current-phase.json"
+}
+
+function Get-FeatureContextFile {
+    param([string]$FeatureName)
+    if (-not $FeatureName) { return $null }
+    $featureDir = Get-FeatureDir -FeatureName $FeatureName
+    return Join-Path $featureDir "context-phase.json"
+}
+
+function Resolve-ActiveFeatureName {
+    param(
+        [switch]$Silent
+    )
+
+    $preferred = $env:FLOW_FEATURE
+    if ($preferred) {
+        $preferredDir = Get-FeatureDir -FeatureName $preferred
+        if (Test-Path $preferredDir) {
+            return $preferred
+        }
+    }
+
+    $implementsDir = Join-Path (Get-DocsDir) "implements"
+    if (-not (Test-Path $implementsDir)) {
+        return $null
+    }
+
+    $contextFiles = Get-ChildItem -Path $implementsDir -Filter "context-phase.json" -Recurse -File -ErrorAction SilentlyContinue
+    if (-not $contextFiles -or $contextFiles.Count -eq 0) {
+        return $null
+    }
+
+    $selected = $contextFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $featureName = Split-Path $selected.DirectoryName -Leaf
+
+    if ($contextFiles.Count -gt 1 -and -not $Silent) {
+        Write-FlowOutput "Multiple context-phase.json found. Using latest: $featureName" -Level Warning
+    }
+
+    return $featureName
+}
+
 function ConvertTo-FeatureName {
     param([string]$Title)
     # 한글/영문 타이틀을 파일명으로 변환 (snake_case)
@@ -61,18 +118,61 @@ function ConvertTo-FeatureName {
 }
 
 function Get-CurrentPhaseFile {
-    return Join-Path (Get-ContextDir) "current-phase.json"
+    param(
+        [string]$FeatureName,
+        [switch]$EnsureFeatureDir
+    )
+
+    if (-not $FeatureName) {
+        $FeatureName = Resolve-ActiveFeatureName -Silent
+    }
+
+    if (-not $FeatureName) {
+        return $null
+    }
+
+    $featureDir = Get-FeatureDir -FeatureName $FeatureName
+    if ($EnsureFeatureDir -and -not (Test-Path $featureDir)) {
+        New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+    }
+
+    return Join-Path $featureDir "context-phase.json"
 }
 
 function Get-DecisionLogFile {
-    return Join-Path (Get-LogsDir) "decisions.jsonl"
+    param(
+        [string]$FeatureName
+    )
+
+    $logsDir = Get-LogsDir -FeatureName $FeatureName
+    if (-not $logsDir) {
+        return $null
+    }
+
+    return Join-Path $logsDir "decisions.jsonl"
 }
 
 function Get-CurrentPhase {
-    $phaseFile = Get-CurrentPhaseFile
-    if (Test-Path $phaseFile) {
+    param(
+        [string]$FeatureName
+    )
+
+    $phaseFile = Get-CurrentPhaseFile -FeatureName $FeatureName
+    if ($phaseFile -and (Test-Path $phaseFile)) {
         return Get-Content $phaseFile -Raw -Encoding UTF8 | ConvertFrom-Json
     }
+
+    $legacyFile = Get-LegacyPhaseFile
+    if (Test-Path $legacyFile) {
+        $legacyPhase = Get-Content $legacyFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($legacyPhase -and $legacyPhase.feature_name) {
+            $migratedFile = Get-CurrentPhaseFile -FeatureName $legacyPhase.feature_name -EnsureFeatureDir
+            $legacyPhase | ConvertTo-Json -Depth 10 | Out-File $migratedFile -Encoding UTF8
+            Write-FlowOutput "Legacy phase migrated to feature context: $($legacyPhase.feature_name)" -Level Warning
+            return $legacyPhase
+        }
+    }
+
     return $null
 }
 
@@ -88,16 +188,26 @@ function Set-CurrentPhase {
         [Nullable[int]]$MaxRetries = $null
     )
     
-    $phaseFile = Get-CurrentPhaseFile
-    $contextDir = Get-ContextDir
-    
-    if (-not (Test-Path $contextDir)) {
-        New-Item -ItemType Directory -Path $contextDir -Force | Out-Null
+    $resolvedFeatureName = $FeatureName
+    if (-not $resolvedFeatureName) {
+        $existingPhase = Get-CurrentPhase
+        if ($existingPhase -and $existingPhase.feature_name) {
+            $resolvedFeatureName = $existingPhase.feature_name
+        } else {
+            $resolvedFeatureName = Resolve-ActiveFeatureName -Silent
+        }
     }
+
+    if (-not $resolvedFeatureName) {
+        Write-FlowOutput "Feature name is required to set phase." -Level Error
+        throw "Missing feature name"
+    }
+
+    $phaseFile = Get-CurrentPhaseFile -FeatureName $resolvedFeatureName -EnsureFeatureDir
     
     # Backup previous state
     if (Test-Path $phaseFile) {
-        $backupDir = Join-Path (Get-LogsDir) "backups"
+        $backupDir = Join-Path (Get-LogsDir -FeatureName $resolvedFeatureName) "backups"
         if (-not (Test-Path $backupDir)) {
             New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
         }
@@ -111,7 +221,7 @@ function Set-CurrentPhase {
     $newPhase = @{
         phase = $Phase
         started_at = (Get-Date -Format "o")
-        feature_name = $FeatureName
+        feature_name = $resolvedFeatureName
         pending_questions = @()
         last_decision = @{
             action = "phase_transition"
@@ -125,7 +235,7 @@ function Set-CurrentPhase {
     
     $newPhase | ConvertTo-Json -Depth 10 | Out-File $phaseFile -Encoding UTF8
     
-    Add-DecisionLog -PhaseFrom "" -PhaseTo $Phase -Reason $Reason
+    Add-DecisionLog -PhaseFrom "" -PhaseTo $Phase -Reason $Reason -FeatureName $resolvedFeatureName
     
     return $newPhase
 }
@@ -135,12 +245,21 @@ function Add-DecisionLog {
         [string]$PhaseFrom,
         [string]$PhaseTo,
         [string]$Reason,
-        [string]$Trigger = "manual"
+        [string]$Trigger = "manual",
+        [string]$FeatureName
     )
-    
-    $logFile = Get-DecisionLogFile
-    $logsDir = Get-LogsDir
-    
+
+    if (-not $FeatureName) {
+        $FeatureName = Resolve-ActiveFeatureName -Silent
+    }
+
+    $logFile = Get-DecisionLogFile -FeatureName $FeatureName
+    $logsDir = Get-LogsDir -FeatureName $FeatureName
+
+    if (-not $logFile -or -not $logsDir) {
+        return
+    }
+
     if (-not (Test-Path $logsDir)) {
         New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
     }
@@ -151,6 +270,7 @@ function Add-DecisionLog {
         phase_to = $PhaseTo
         reason = $Reason
         trigger = $Trigger
+        feature_name = $FeatureName
     }
     
     # UTF-8 without BOM으로 저장 (한글 인코딩 문제 해결)
@@ -187,7 +307,7 @@ function Add-RetryCount {
     if ($null -eq $phase) { return $null }
     
     $phase.retry_count++
-    $phaseFile = Get-CurrentPhaseFile
+    $phaseFile = Get-CurrentPhaseFile -FeatureName $phase.feature_name
     $phase | ConvertTo-Json -Depth 10 | Out-File $phaseFile -Encoding UTF8
     
     return $phase.retry_count
@@ -226,23 +346,19 @@ function Write-FlowOutput {
 }
 
 function Test-FlowInitialized {
-    $phaseFile = Get-CurrentPhaseFile
-    return Test-Path $phaseFile
+    $flowRoot = Get-FlowRoot
+    return Test-Path $flowRoot
 }
 
 function Initialize-Flow {
-    $contextDir = Get-ContextDir
-    $logsDir = Get-LogsDir
     $plansDir = Get-PlansDir
     $docsDir = Get-DocsDir
-    
-    @($contextDir, $logsDir, $plansDir, $docsDir) | ForEach-Object {
+
+    @($plansDir, $docsDir) | ForEach-Object {
         if (-not (Test-Path $_)) {
             New-Item -ItemType Directory -Path $_ -Force | Out-Null
         }
     }
-    
-    Set-CurrentPhase -Phase "IDLE" -Reason "System initialized"
-    
-    Write-FlowOutput "Flow initialized" -Level Success
+
+    Write-FlowOutput "Flow initialized (no global context)" -Level Success
 }

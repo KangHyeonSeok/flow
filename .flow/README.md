@@ -84,11 +84,6 @@ stateDiagram-v2
 ├── README.md                 # 이 문서
 ├── extensions.json           # 확장 상태 정의
 ├── validation-profiles.json  # 검증 프로파일 정의
-├── context/
-│   └── current-phase.json    # 현재 상태 (단일 진실 소스)
-├── logs/
-│   ├── decisions.jsonl       # 결정 로그
-│   └── backups/              # 상태 백업
 ├── memory/
 │   └── principles.md         # Flow 핵심 원칙
 ├── scripts/
@@ -108,6 +103,14 @@ stateDiagram-v2
     ├── design-template.md    # 설계 문서 템플릿
     ├── result-template.md    # 결과 템플릿
     └── extension-template.md # 확장 상태 템플릿
+
+docs/
+└── implements/
+  └── <feature>/
+    ├── context-phase.json # 기능별 상태 파일
+    └── logs/
+      ├── decisions.jsonl # 결정 로그
+      └── backups/        # 상태 백업
 ```
 
 ---
@@ -412,7 +415,7 @@ cd .flow/scripts; ./pop-backlog.ps1
 
 1. `flow.prompt.md`에 상태 정의 및 행동 규칙 추가
 2. 필요시 `scripts/` 폴더에 전이 스크립트 추가
-3. `current-phase.json`의 `phase` 필드에 새 상태 값 허용
+3. docs/implements/{feature}/context-phase.json 의 `phase` 필드에 새 상태 값 허용
 
 ### 새 검증 프로파일 추가
 
@@ -445,10 +448,10 @@ cd .flow/scripts; ./abort-to-idle.ps1 -Reason "수동 복구"
 
 ### 상태 파일 손상
 
-`logs/backups/`에서 최신 백업 복원:
+기능별 `logs/backups/`에서 최신 백업 복원:
 
 ```powershell
-Copy-Item ".flow/logs/backups/phase-YYYYMMDD-HHMMSS.json" ".flow/context/current-phase.json"
+Copy-Item "docs/implements/<feature>/logs/backups/phase-YYYYMMDD-HHMMSS.json" "docs/implements/<feature>/context-phase.json"
 ```
 
 ### PowerShell 인코딩 문제

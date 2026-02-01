@@ -16,21 +16,29 @@ if ($Help) {
 
 . "$PSScriptRoot/common.ps1"
 
-if (-not (Test-FlowInitialized)) {
-    if ($Json) {
-        @{ initialized = $false; error = "Not initialized" } | ConvertTo-Json
-    } else {
-        Write-FlowOutput "Flow not initialized." -Level Warning
-        Write-Output "Run: . ./common.ps1; Initialize-Flow"
-    }
-    exit 1
-}
-
 $phase = Get-CurrentPhase
 
 if ($Json) {
+    if ($null -eq $phase) {
+        @{ initialized = $true; active = $false; message = "No active context" } | ConvertTo-Json
+        exit 0
+    }
+
     $phase | ConvertTo-Json -Depth 10
 } else {
+    if ($null -eq $phase) {
+        Write-Output ""
+        Write-Output "==================================="
+        Write-Output "  FLOW STATUS"
+        Write-Output "==================================="
+        Write-Output ""
+        Write-Output "  No active context-phase.json found."
+        Write-Output "  Start a plan or set FLOW_FEATURE to select a feature."
+        Write-Output ""
+        Write-Output "==================================="
+        exit 0
+    }
+
     Write-Output ""
     Write-Output "==================================="
     Write-Output "  FLOW STATUS"

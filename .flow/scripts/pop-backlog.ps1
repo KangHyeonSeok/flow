@@ -124,23 +124,9 @@ try {
         "" | Set-Content $queueFile -Encoding UTF8 -NoNewline
     }
     
-    # current-phase.json 업데이트
-    $phase = Get-CurrentPhase
-    if ($phase) {
-        $phase.feature_name = $nextFeature
-        if ($planType -eq "reviewed") {
-            $phase.phase = "EXECUTING"
-        } else {
-            $phase.phase = "PLANNING"
-        }
-        $phase.started_at = (Get-Date).ToString("o")
-        $phase.last_decision = @{
-            timestamp = (Get-Date).ToString("o")
-            action = "backlog_pop"
-            reason = "Popped from backlog queue: $nextFeature ($planType)"
-        }
-        Set-CurrentPhase -Phase $phase.phase -Reason "Popped from backlog: $nextFeature"
-    }
+    # 기능별 context-phase.json 업데이트
+    $targetPhase = if ($planType -eq "reviewed") { "EXECUTING" } else { "PLANNING" }
+    Set-CurrentPhase -Phase $targetPhase -Reason "Popped from backlog: $nextFeature" -FeatureName $nextFeature
     
     Write-JsonOutput -Status "success" -FeatureName $nextFeature -PlanType $planType -Message "Moved to implements"
     

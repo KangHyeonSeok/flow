@@ -21,28 +21,25 @@ if ($Help) {
 
 . "$PSScriptRoot/common.ps1"
 
-# 현재 상태 확인
-$phase = Get-CurrentPhase
-if ($null -eq $phase) {
-    Write-FlowOutput "초기화가 필요합니다. Initialize-Flow 실행" -Level Error
-    exit 1
-}
-
-if ($phase.phase -ne "IDLE") {
-    Write-FlowOutput "현재 상태($($phase.phase))에서는 플랜을 시작할 수 없습니다." -Level Error
-    Write-FlowOutput "IDLE 상태에서만 가능합니다. abort-to-idle.ps1으로 중단하세요." -Level Warning
-    exit 1
-}
-
 # Plan ID 생성 (기능 이름 기반)
 $featureName = ConvertTo-FeatureName -Title $Title
 $date = Get-Date -Format "yyyyMMdd"
 $planId = "$featureName"
 
-# docs/<기능이름> 디렉토리 생성
+# 동일 기능 컨텍스트 존재 여부 확인 (prepare-context에서 생성)
+$contextFile = Get-FeatureContextFile -FeatureName $featureName
+if (-not $contextFile -or -not (Test-Path $contextFile)) {
+    Write-FlowOutput "컨텍스트가 없습니다. 먼저 prepare-context.ps1을 실행하세요." -Level Error
+    Write-FlowOutput "예: cd .flow/scripts; ./prepare-context.ps1 -FeatureName \"$featureName\"" -Level Warning
+    exit 1
+}
+
+# docs/<기능이름> 디렉토리 확인
 $featureDir = Get-FeatureDir -FeatureName $featureName
 if (-not (Test-Path $featureDir)) {
-    New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+    Write-FlowOutput "기능 폴더가 없습니다: $featureDir" -Level Error
+    Write-FlowOutput "prepare-context.ps1에서 폴더를 생성해야 합니다." -Level Warning
+    exit 1
 }
 
 # 플랜 파일 경로 (리뷰 전: need-review-plan.md)

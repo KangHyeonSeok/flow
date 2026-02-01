@@ -23,29 +23,16 @@ $ARGUMENTS
 
 ## 실행 흐름
 
-### Step 1: 상태 파일 읽기 (필수 - 생략 불가)
+### 준비
 
+1. 사용자 요청(`$ARGUMENTS`)을 분석
+2. 요청이 있으면:
+```powershell
+cd .flow/scripts; ./prepare-context.ps1 -FeatureName "요청 제목
 ```
-반드시 첫 번째로 실행:
-read_file(".flow/context/current-phase.json")
-```
+3. 준비가 끝나서 IDLE 상태이다.
 
-이 파일을 읽기 전에는 **어떤 판단도 하지 않는다**.
-
----
-
-### Step 2: 상태 확인 및 보고
-
-상태 파일을 읽은 후, 다음 형식으로 보고:
-
-```
-  FLOW STATUS
-  {phase} : {feature_name ?? "없음"}
-```
-
----
-
-### Step 3: 상태별 분기
+### 상태별 분기
 
 현재 상태에 따라 **정해진 행동만** 수행한다.
 
@@ -53,8 +40,7 @@ read_file(".flow/context/current-phase.json")
 
 **가능한 행동**: 플랜 생성 시작만 가능
 
-1. 사용자 요청(`$ARGUMENTS`)을 분석
-2. 요청이 비어있거나 현재 문서를 따르라는 명령이면::
+1. 요청이 비어있거나 현재 문서를 따르라는 명령이면::
    a. 백로그 큐 확인:
       ```powershell
       cd .flow/scripts; ./pop-backlog.ps1 -Preview
@@ -66,11 +52,11 @@ read_file(".flow/context/current-phase.json")
       - `plan_type`이 "reviewed"면: 플랜 읽고 컨텍스트 수집 후 EXECUTING으로 진행
       - `plan_type`이 "need-review"면: 플랜 읽고 사용자에게 리뷰 요청 후 PLANNING
    c. 큐가 비어있으면: "무엇을 하시겠습니까?" 질문
-3. 요청이 있으면:
+2. 요청이 있으면:
    ```powershell
    cd .flow/scripts; ./start-plan.ps1 -Title "요청 제목"
    ```
-4. 플랜 파일 생성 후 PLANNING으로 전이됨
+3. 플랜 파일 생성 후 PLANNING으로 전이됨
 5. **코드 수정 절대 불가** - 플랜 작성으로만 진행
 
 #### PLANNING 상태
@@ -124,10 +110,9 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
 1. 플랜 내용을 사용자에게 보여주기
 2. **반드시 PowerShell 스크립트로 입력 받기**: `./approve-plan.ps1` 실행
 3. 스크립트 응답 즉시 확인:
-   - Y: EXECUTING 전이 → **즉시 실행 시작** (플랜대로 구현)
+   - Y: context-phase.json을 EXECUTING 갱신 → **즉시 실행 시작** (플랜대로 구현)
    - N: "수정할 내용을 알려주세요" → PLANNING 복귀
 4. **응답 받은 즉시 다음 단계 진행** - 대기하지 않음
-5. 승인 후 실행 시작 메시지 출력: "플랜 대로 구현을 시작합니다..."
 
 #### EXECUTING 상태
 
@@ -159,7 +144,7 @@ cd .flow/scripts; ./human-input.ps1 -Type Text -Prompt "추가로 고려해야 �
    cd .flow/scripts; ./validation-runner.ps1 -Command "검증명령"
    ```
    - 스크립트는 **1회만 실행**하고 결과 반환
-   - 재시도 횟수는 `current-phase.json`의 `retry_count`/`max_retries`로 관리
+   - 재시도 횟수는 docs/implements/{feature_name}/context-phase.json 의 `retry_count`/`max_retries`로 관리
 3. 검증 성공 시:
    - **확장 상태 체크** (아래 "확장 상태 시스템" 참조)
    - 활성화된 확장이 있으면 해당 확장 실행
