@@ -121,8 +121,10 @@ fi
 
 # .github/prompts 폴더 복사 (있으면)
 if [ -d "$TEMP_DIR/prompts" ]; then
-    mkdir -p ".github/prompts"
-    cp -r "$TEMP_DIR/prompts/"* ".github/prompts/"
+    if find "$TEMP_DIR/prompts" -mindepth 1 -maxdepth 1 -print -quit | read -r; then
+        mkdir -p ".github/prompts"
+        cp -r "$TEMP_DIR/prompts/." ".github/prompts/"
+    fi
 fi
 
 success "설치 완료"
