@@ -55,9 +55,10 @@ jobs:
         run: |
           mkdir -p temp-release/prompts
           cp -r .flow temp-release/
+          cp -r .claude temp-release/
           cp -r .github/prompts/* temp-release/prompts/
           cd temp-release
-          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ prompts/
+          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ .claude/ prompts/
           cd ..
           rm -rf temp-release
 
