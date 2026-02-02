@@ -52,16 +52,8 @@ if (Test-Path $needReviewPlanPath) {
     $planPath = $needReviewPlanPath
     $isNeedReview = $true
 } elseif (-not (Test-Path $planPath)) {
-    # 기존 경로 호환성 체크 (docs/<기능이름>/plan.md)
-    $legacyDir = Join-Path (Get-DocsDir) $featureName
-    $legacyPath = Join-Path $legacyDir "plan.md"
-    if (Test-Path $legacyPath) {
-        $planPath = $legacyPath
-        $featureDir = $legacyDir
-    } else {
-        Write-FlowOutput "플랜 파일을 찾을 수 없습니다: $planPath" -Level Error
-        exit 1
-    }
+    Write-FlowOutput "플랜 파일을 찾을 수 없습니다: $planPath" -Level Error
+    exit 1
 }
 
 $planContent = Get-Content $planPath -Raw
@@ -139,6 +131,19 @@ $confirm
 
 # need-review-plan.md → plan.md로 이름 변경 (승인 완료)
 if ($isNeedReview) {
+    $expectedFeatureDir = Get-FeatureDir -FeatureName $featureName
+    if (-not (Test-Path $expectedFeatureDir)) {
+        Write-FlowOutput "기능 디렉토리를 찾을 수 없습니다: $expectedFeatureDir" -Level Error
+        exit 1
+    }
+
+    $resolvedExpectedDir = (Resolve-Path $expectedFeatureDir).Path
+    $resolvedPlanDir = (Resolve-Path (Split-Path $planPath -Parent)).Path
+    if ($resolvedPlanDir -ne $resolvedExpectedDir) {
+        Write-FlowOutput "플랜 경로가 올바르지 않습니다. 예상: $resolvedExpectedDir, 실제: $resolvedPlanDir" -Level Error
+        exit 1
+    }
+
     $approvedPlanPath = Join-Path $featureDir "plan.md"
     Rename-Item -Path $planPath -NewName "plan.md" -Force
     Write-FlowOutput "플랜 파일 승인됨: need-review-plan.md → plan.md" -Level Info

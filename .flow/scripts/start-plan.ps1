@@ -34,8 +34,8 @@ if (-not (Test-Path $featureDir)) {
     New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
 }
 
-# logs 및 backups 디렉토리 생성
-$logsDir = Join-Path $featureDir "logs"
+# logs 및 backups 디렉토리 생성 (meta 경로 사용)
+$logsDir = Get-LogsDir -FeatureName $featureName
 $backupsDir = Join-Path $logsDir "backups"
 if (-not (Test-Path $logsDir)) {
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
