@@ -121,10 +121,11 @@ try {
     }
 
     # .github/prompts 폴더 복사 (있으면)
-    $extractedPrompts = Join-Path $tempDir ".github" "prompts"
+    $extractedPrompts = Join-Path $tempDir "prompts"
     if (Test-Path $extractedPrompts) {
-        $targetPrompts = Join-Path (Get-Location) ".github" "prompts"
-        New-Item -ItemType Directory -Path (Split-Path $targetPrompts) -Force | Out-Null
+        $githubDir = Join-Path (Get-Location) ".github"
+        $targetPrompts = Join-Path $githubDir "prompts"
+        New-Item -ItemType Directory -Path $githubDir -Force | Out-Null
         Copy-Item -Path $extractedPrompts -Destination $targetPrompts -Recurse -Force
     }
     
