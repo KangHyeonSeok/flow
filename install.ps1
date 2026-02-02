@@ -106,8 +106,8 @@ try {
     if (Test-Path $extractedPrompts) {
         $githubDir = Join-Path (Get-Location) ".github"
         $targetPrompts = Join-Path $githubDir "prompts"
-        New-Item -ItemType Directory -Path $githubDir -Force | Out-Null
-        Copy-Item -Path $extractedPrompts -Destination $targetPrompts -Recurse -Force
+        New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
+        Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
     }
     
     Write-Success "설치 완료"
