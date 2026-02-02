@@ -114,6 +114,11 @@ else
     exit 1
 fi
 
+# .claude 폴더 복사 (있으면)
+if [ -d "$TEMP_DIR/.claude" ]; then
+    cp -r "$TEMP_DIR/.claude" ".claude"
+fi
+
 # .github/prompts 폴더 복사 (있으면)
 if [ -d "$TEMP_DIR/prompts" ]; then
     mkdir -p ".github"
