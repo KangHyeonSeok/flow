@@ -82,6 +82,17 @@ function Get-ContextDir {
     return Join-Path (Get-FlowRoot) "context"
 }
 
+function Get-MetaDir {
+    param([string]$FeatureName)
+    if (-not $FeatureName) { return $null }
+    $docsDir = Get-DocsDir
+    $metaDir = Join-Path $docsDir "meta/$FeatureName"
+    if (-not (Test-Path $metaDir)) {
+        New-Item -ItemType Directory -Path $metaDir -Force | Out-Null
+    }
+    return $metaDir
+}
+
 function Get-LogsDir {
     param(
         [string]$FeatureName
@@ -95,8 +106,8 @@ function Get-LogsDir {
         return $null
     }
 
-    $featureDir = Get-FeatureDir -FeatureName $FeatureName
-    return Join-Path $featureDir "logs"
+    $metaDir = Get-MetaDir -FeatureName $FeatureName
+    return Join-Path $metaDir "logs"
 }
 
 function Get-PlansDir {
@@ -105,7 +116,16 @@ function Get-PlansDir {
 
 function Get-DocsDir {
     $root = Get-FlowRoot
-    return (Resolve-Path (Join-Path $root "../docs")).Path
+    $docsFlow = Join-Path $root "../docs/flow"
+    if (-not (Test-Path $docsFlow)) {
+        New-Item -ItemType Directory -Path $docsFlow -Force | Out-Null
+    }
+    return (Resolve-Path $docsFlow).Path
+}
+
+function Get-BacklogsDir {
+    $docsDir = Get-DocsDir
+    return Join-Path $docsDir "backlogs"
 }
 
 function Get-FeatureDir {
@@ -121,8 +141,8 @@ function Get-LegacyPhaseFile {
 function Get-FeatureContextFile {
     param([string]$FeatureName)
     if (-not $FeatureName) { return $null }
-    $featureDir = Get-FeatureDir -FeatureName $FeatureName
-    return Join-Path $featureDir "context-phase.json"
+    $metaDir = Get-MetaDir -FeatureName $FeatureName
+    return Join-Path $metaDir "context-phase.json"
 }
 
 function Resolve-ActiveFeatureName {
@@ -138,12 +158,12 @@ function Resolve-ActiveFeatureName {
         }
     }
 
-    $implementsDir = Join-Path (Get-DocsDir) "implements"
-    if (-not (Test-Path $implementsDir)) {
+    $metaDir = Join-Path (Get-DocsDir) "meta"
+    if (-not (Test-Path $metaDir)) {
         return $null
     }
 
-    $contextFiles = Get-ChildItem -Path $implementsDir -Filter "context-phase.json" -Recurse -File -ErrorAction SilentlyContinue
+    $contextFiles = Get-ChildItem -Path $metaDir -Filter "context-phase.json" -Recurse -File -ErrorAction SilentlyContinue
     if (-not $contextFiles -or $contextFiles.Count -eq 0) {
         return $null
     }
@@ -181,12 +201,15 @@ function Get-CurrentPhaseFile {
         return $null
     }
 
-    $featureDir = Get-FeatureDir -FeatureName $FeatureName
-    if ($EnsureFeatureDir -and -not (Test-Path $featureDir)) {
-        New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+    $metaDir = Get-MetaDir -FeatureName $FeatureName
+    if ($EnsureFeatureDir) {
+        $featureDir = Get-FeatureDir -FeatureName $FeatureName
+        if (-not (Test-Path $featureDir)) {
+            New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+        }
     }
 
-    return Join-Path $featureDir "context-phase.json"
+    return Join-Path $metaDir "context-phase.json"
 }
 
 function Get-DecisionLogFile {

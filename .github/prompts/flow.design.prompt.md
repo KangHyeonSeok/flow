@@ -15,7 +15,7 @@ agent: agent
 ### 1. CONTEXT_GATHERING
 
 * **행동**: 프로젝트 구조 및 기존 공통 패턴을 탐색한다.
-* **참조**: `.github/copilot-instructions.md`, `docs/` 내 가이드라인.
+* **참조**: `REAMDME.md`, 관련 있는 소스코드 등.
 * **제한**: 코드 수정 금지. 오직 읽기 권한만 사용.
 
 ### 2. DESIGNING

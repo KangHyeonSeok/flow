@@ -85,11 +85,11 @@ if [ -z "$DOWNLOAD_URL" ]; then
     exit 1
 fi
 
-# 기존 .flow 백업
-BACKUP_DIR=".flow.bak"
-rm -rf "$BACKUP_DIR"
-mv "$FLOW_DIR" "$BACKUP_DIR"
-success "백업 완료: .flow.bak"
+# 기존 .flow 제거 (백업 없이)
+if [ -d "$FLOW_DIR" ]; then
+    step "기존 .flow 제거 중..."
+    rm -rf "$FLOW_DIR"
+fi
 
 # zip 다운로드
 TEMP_ZIP=$(mktemp /tmp/flow-prompts-XXXXXX.zip)
@@ -114,8 +114,6 @@ if command -v unzip &> /dev/null; then
     unzip -q "$TEMP_ZIP" -d "$TEMP_DIR"
 else
     warn "unzip이 필요합니다."
-    mv "$BACKUP_DIR" "$FLOW_DIR"
-    echo "  백업에서 복원됨"
     exit 1
 fi
 
@@ -123,8 +121,6 @@ if [ -d "$TEMP_DIR/.flow" ]; then
     cp -r "$TEMP_DIR/.flow" "$FLOW_DIR"
 else
     warn ".flow 폴더를 찾을 수 없습니다."
-    mv "$BACKUP_DIR" "$FLOW_DIR"
-    echo "  백업에서 복원됨"
     exit 1
 fi
 
@@ -138,8 +134,21 @@ if [ -d "$TEMP_DIR/prompts" ]; then
     if find "$TEMP_DIR/prompts" -mindepth 1 -maxdepth 1 -print -quit | read -r; then
         mkdir -p ".github/prompts"
         cp -r "$TEMP_DIR/prompts/." ".github/prompts/"
+        
+        # .claude/commands 폴더에도 복사
+        mkdir -p ".claude/commands"
+        cp -r "$TEMP_DIR/prompts/." ".claude/commands/"
     fi
 fi
+
+# 필수 디렉토리 사전 생성
+mkdir -p ".github/prompts"
+mkdir -p ".claude/commands"
+mkdir -p "docs"
+mkdir -p "docs/flow"
+mkdir -p "docs/flow/backlogs"
+mkdir -p "docs/flow/implements"
+mkdir -p "docs/flow/meta"
 
 success "업데이트 완료"
 

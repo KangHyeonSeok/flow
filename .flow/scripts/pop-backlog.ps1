@@ -22,10 +22,7 @@ if ($Help) {
 
 . "$PSScriptRoot/common.ps1"
 
-function Get-BacklogsDir {
-    $docsDir = Get-DocsDir
-    return Join-Path $docsDir "backlogs"
-}
+# Get-BacklogsDir is now defined in common.ps1
 
 function Get-QueueFile {
     return Join-Path (Get-BacklogsDir) "queue"
@@ -130,8 +127,14 @@ try {
     if ($remainingQueue -and $remainingQueue.Count -gt 0) {
         $remainingQueue | Set-Content $queueFile -Encoding UTF8
     } else {
-        # 빈 파일로 만들기
-        "" | Set-Content $queueFile -Encoding UTF8 -NoNewline
+        # queue가 비면 queue 파일과 queue-rationale.md 삭제
+        if (Test-Path $queueFile) {
+            Remove-Item -Path $queueFile -Force
+        }
+        $rationaleFile = Join-Path (Get-BacklogsDir) "queue-rationale.md"
+        if (Test-Path $rationaleFile) {
+            Remove-Item -Path $rationaleFile -Force
+        }
     }
     
     # 기능별 context-phase.json 업데이트 (백로그 작업 메타 포함)

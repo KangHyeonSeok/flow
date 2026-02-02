@@ -59,7 +59,7 @@ Write-Output ""
 switch ($ExtensionId) {
     "STRUCTURE_REVIEW" {
         # 변경된 파일 목록 가져오기
-        $featurePath = Join-Path $projectRoot "docs/implements/$FeatureName"
+        $featurePath = Get-FeatureDir -FeatureName $FeatureName
         $planPath = Join-Path $featurePath "plan.md"
         
         if (-not (Test-Path $planPath)) {

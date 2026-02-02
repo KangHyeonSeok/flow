@@ -51,17 +51,12 @@ try {
     exit 1
 }
 
-# 2. 기존 .flow 백업
+# 2. 기존 .flow 제거 (백업 없이)
 $flowDir = Join-Path (Get-Location) ".flow"
-$backupDir = Join-Path (Get-Location) ".flow.bak"
 
 if (Test-Path $flowDir) {
-    Write-Step "기존 .flow 백업 중..."
-    if (Test-Path $backupDir) {
-        Remove-Item -Path $backupDir -Recurse -Force
-    }
-    Move-Item -Path $flowDir -Destination $backupDir -Force
-    Write-Success "백업 완료: .flow.bak"
+    Write-Step "기존 .flow 제거 중..."
+    Remove-Item -Path $flowDir -Recurse -Force
 }
 
 # 3. zip 다운로드
@@ -72,11 +67,6 @@ try {
     Write-Success "다운로드 완료"
 } catch {
     Write-Warning "다운로드 실패: $_"
-    # 백업 복원
-    if (Test-Path $backupDir) {
-        Move-Item -Path $backupDir -Destination $flowDir -Force
-        Write-Host "  백업에서 복원됨" -ForegroundColor Gray
-    }
     exit 1
 }
 
@@ -108,16 +98,33 @@ try {
         $targetPrompts = Join-Path $githubDir "prompts"
         New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
         Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
+        
+        # .claude/commands 폴더에도 복사
+        $claudeCommandsDir = Join-Path (Get-Location) ".claude/commands"
+        New-Item -ItemType Directory -Path $claudeCommandsDir -Force | Out-Null
+        Copy-Item -Path "$extractedPrompts\*" -Destination $claudeCommandsDir -Recurse -Force
+    }
+    
+    # 5. 필수 디렉토리 사전 생성
+    $requiredDirs = @(
+        ".github/prompts",
+        ".claude/commands",
+        "docs",
+        "docs/flow",
+        "docs/flow/backlogs",
+        "docs/flow/implements",
+        "docs/flow/meta"
+    )
+    foreach ($dir in $requiredDirs) {
+        $fullPath = Join-Path (Get-Location) $dir
+        if (-not (Test-Path $fullPath)) {
+            New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
+        }
     }
     
     Write-Success "설치 완료"
 } catch {
     Write-Warning "압축 해제 실패: $_"
-    # 백업 복원
-    if (Test-Path $backupDir) {
-        Move-Item -Path $backupDir -Destination $flowDir -Force
-        Write-Host "  백업에서 복원됨" -ForegroundColor Gray
-    }
     exit 1
 } finally {
     # 임시 파일 정리

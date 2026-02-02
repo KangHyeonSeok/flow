@@ -20,7 +20,7 @@ if ($Help) {
 # 프로젝트 루트 찾기
 $flowRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $projectRoot = (Resolve-Path (Join-Path $flowRoot "..")).Path
-$designsDir = Join-Path $projectRoot "docs/implements/designs"
+$designsDir = Join-Path $projectRoot "docs/flow/implements/designs"
 
 function Write-FlowOutput {
     param(

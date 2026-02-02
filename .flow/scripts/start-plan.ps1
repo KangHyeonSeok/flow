@@ -111,7 +111,7 @@ Set-CurrentPhase -Phase "PLANNING" -Reason "새 플랜 시작: $Title" -FeatureN
 Write-FlowOutput "플랜 생성됨: $planId" -Level Success
 Write-Output ""
 Write-Output "  파일: $planPath"
-Write-Output "  위치: docs/implements/$featureName/"
+Write-Output "  위치: docs/flow/implements/$featureName/"
 Write-Output ""
 Write-Output "  다음 단계:"
 Write-Output "    1. 플랜 파일을 열어 4개 섹션 작성"
