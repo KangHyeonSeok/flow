@@ -112,13 +112,21 @@ try {
     } else {
         throw ".flow 폴더를 찾을 수 없습니다."
     }
-    
+
+    # .claude 폴더 복사 (있으면)
+    $extractedClaude = Join-Path $tempDir ".claude"
+    $claudeDir = Join-Path (Get-Location) ".claude"
+    if (Test-Path $extractedClaude) {
+        Copy-Item -Path $extractedClaude -Destination $claudeDir -Recurse -Force
+    }
+
     # .github/prompts 폴더 복사 (있으면)
-    $extractedPrompts = Join-Path $tempDir ".github" "prompts"
+    $extractedPrompts = Join-Path $tempDir "prompts"
     if (Test-Path $extractedPrompts) {
-        $targetPrompts = Join-Path (Get-Location) ".github" "prompts"
-        New-Item -ItemType Directory -Path (Split-Path $targetPrompts) -Force | Out-Null
-        Copy-Item -Path $extractedPrompts -Destination $targetPrompts -Recurse -Force
+        $githubDir = Join-Path (Get-Location) ".github"
+        $targetPrompts = Join-Path $githubDir "prompts"
+        New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
+        Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
     }
     
     Write-Success "업데이트 완료"
