@@ -1,7 +1,7 @@
 # 작업 결과: [FEATURE_NAME]
 
 **완료일**: [DATE]  
-**Plan**: `docs/implements/[FEATURE_NAME]/plan.md`
+**Plan**: `docs/flow/implements/[FEATURE_NAME]/plan.md`
 
 ---
 

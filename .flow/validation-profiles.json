@@ -21,7 +21,7 @@
   "markdown": {
     "description": "Markdown 파일 존재 확인",
     "commands": [
-      "Test-Path docs/implements/*/plan.md"
+      "Test-Path docs/flow/implements/*/plan.md"
     ]
   }
 }

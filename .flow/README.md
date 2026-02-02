@@ -104,7 +104,7 @@ stateDiagram-v2
     ├── result-template.md    # 결과 템플릿
     └── extension-template.md # 확장 상태 템플릿
 
-docs/
+docs/flow/
 └── implements/
   └── <feature>/
     ├── context-phase.json # 기능별 상태 파일

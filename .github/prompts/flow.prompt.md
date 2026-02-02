@@ -36,7 +36,7 @@
 
 ### 2. PLANNING & REVIEWING
 
-* `docs/implements/{feature_name}/need-review-plan.md` 작성 (입력, 출력, 검증, 완료 조건 포함).
+* `docs/flow/implements/{feature_name}/need-review-plan.md` 작성 (입력, 출력, 검증, 완료 조건 포함).
 * 정보 부족 시 `./human-input.ps1` 사용.
 * 작성 완료 후 `./approve-plan.ps1` 실행. 승인(Y) 즉시 `EXECUTING`으로 전환하여 구현 시작.
 
