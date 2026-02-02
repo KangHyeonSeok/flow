@@ -20,7 +20,7 @@ agent: agent
 
 ### 2. DESIGNING
 
-* **행동**: `docs/implements/designs/{feature_name}.md` 생성.
+* **행동**: `docs/flow/implements/designs/{feature_name}.md` 생성.
 * **필수 포함**:
 * 시스템 아키텍처 및 데이터 흐름
 * **인터페이스 명세** (제공/의존하는 기능 명시)
@@ -35,7 +35,7 @@ agent: agent
 
 ### 4. BACKLOG_GENERATION
 
-* **행동**: 설계를 독립적 구현 단위로 쪼개어 `docs/backlogs/{task_name}/plan.md` 생성.
+* **행동**: 설계를 독립적 구현 단위로 쪼개어 `docs/flow/backlogs/{task_name}/plan.md` 생성.
 * **Task Plan 필수 항목**:
 * `Input/Output` 및 `Interface` (연결성 보장)
 * `Done Criteria` (완료 조건) 및 `Validation` (검증 방법)
@@ -44,7 +44,7 @@ agent: agent
 
 ### 5. QUEUE_OPTIMIZATION
 
-* **행동**: 의존성 그래프를 분석하여 `docs/backlogs/queue` 파일을 생성/업데이트한다.
+* **행동**: 의존성 그래프를 분석하여 `docs/flow/backlogs/queue` 파일을 생성/업데이트한다.
 * **정렬 기준**:
 1. **의존성**: 타 기능의 기반이 되는 모듈 우선.
 2. **리스크**: 불확실성이 큰 핵심 로직 우선.
