@@ -103,8 +103,8 @@ if (Test-Path $implementsDir) {
 try {
     Move-Item -Path $featureSourceDir -Destination $implementsDir -Force
     
-    # logs 및 backups 디렉토리 생성 (없을 경우)
-    $logsDir = Join-Path $implementsDir "logs"
+    # logs 및 backups 디렉토리 생성 (meta 경로 사용)
+    $logsDir = Get-LogsDir -FeatureName $nextFeature
     $backupsDir = Join-Path $logsDir "backups"
     if (-not (Test-Path $logsDir)) {
         New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
