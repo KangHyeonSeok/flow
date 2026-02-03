@@ -12,6 +12,12 @@
       "npx tsc --noEmit"
     ]
   },
+  "dotnet": {
+    "description": "C# .NET 빌드",
+    "commands": [
+      "dotnet build"
+    ]
+  },
   "powershell": {
     "description": "PowerShell 스크립트 문법 검사",
     "commands": [

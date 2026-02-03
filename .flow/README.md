@@ -202,6 +202,7 @@ cd .flow/scripts; ./set-log.ps1 -Off  # 로그 기록 비활성화
 |----------|--------|------|
 | `nextjs` | npm run build, npm run lint | Next.js 프로젝트 |
 | `typescript` | npx tsc --noEmit | TypeScript 타입 체크 |
+| `dotnet` | dotnet build | C# .NET 빌드 |
 | `powershell` | 스크립트 문법 검사 | PowerShell 스크립트 |
 | `markdown` | 파일 존재 확인 | Markdown 문서 |
 
