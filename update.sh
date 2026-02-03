@@ -139,7 +139,14 @@ if [ -d "$TEMP_DIR/prompts" ]; then
         mkdir -p ".claude/commands"
         while IFS= read -r -d '' prompt_file; do
             rel_path="${prompt_file#$TEMP_DIR/prompts/}"
-            target_rel="${rel_path/.prompt/}"
+            rel_dir=$(dirname "$rel_path")
+            rel_base=$(basename "$rel_path")
+            target_base="${rel_base//.prompt/}"
+            if [ "$rel_dir" = "." ]; then
+                target_rel="$target_base"
+            else
+                target_rel="$rel_dir/$target_base"
+            fi
             target_path=".claude/commands/$target_rel"
             mkdir -p "$(dirname "$target_path")"
             cp "$prompt_file" "$target_path"

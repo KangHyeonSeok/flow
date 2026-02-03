@@ -127,8 +127,10 @@ try {
         # .claude/commands 폴더에도 복사 (prompt 제거)
         $claudeCommandsDir = Join-Path (Get-Location) ".claude/commands"
         New-Item -ItemType Directory -Path $claudeCommandsDir -Force | Out-Null
+        $basePromptPath = (Resolve-Path -LiteralPath $extractedPrompts).Path
         Get-ChildItem -Path $extractedPrompts -File -Recurse | ForEach-Object {
-            $relativePath = $_.FullName.Substring($extractedPrompts.Length).TrimStart('\', '/')
+            $filePath = (Resolve-Path -LiteralPath $_.FullName).Path
+            $relativePath = $filePath.Substring($basePromptPath.Length).TrimStart('\', '/')
             $targetRelative = $relativePath -replace '\.prompt', ''
             $targetPath = Join-Path $claudeCommandsDir $targetRelative
             $targetDir = Split-Path -Path $targetPath -Parent
