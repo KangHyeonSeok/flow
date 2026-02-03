@@ -1,2 +1,4 @@
 /.flow/logs
 /docs
+/tools/embed/bin
+/tools/embed/obj
