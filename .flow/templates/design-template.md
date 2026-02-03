@@ -2,7 +2,7 @@
 
 **Design ID**: `[DESIGN_ID]`  
 **Created**: [DATE]  
-**Status**: Draft → Reviewing → Approved
+**Status**: Draft
 
 ---
 
