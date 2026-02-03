@@ -18,7 +18,8 @@ public class ModelManager
     {
         var files = new Dictionary<string, string>
         {
-            ["model.onnx"] = $"{BaseUrl}/onnx/model_int8.onnx?download=true",
+            ["model.onnx"] = $"{BaseUrl}/onnx/model.onnx?download=true",
+            ["model.onnx_data"] = $"{BaseUrl}/onnx/model.onnx_data?download=true",
             ["tokenizer.json"] = $"{BaseUrl}/tokenizer.json?download=true",
             ["tokenizer_config.json"] = $"{BaseUrl}/tokenizer_config.json?download=true",
             ["config.json"] = $"{BaseUrl}/config.json?download=true"
@@ -51,7 +52,8 @@ public class ModelManager
         // 기본 크기 검증
         var minSizes = new Dictionary<string, long>
         {
-            ["model.onnx"] = 500_000_000,  // 최소 500MB
+            ["model.onnx"] = 100_000,       // 외부 데이터 사용 (소형 메타)
+            ["model.onnx_data"] = 500_000_000, // 최소 500MB
             ["tokenizer.json"] = 1_000_000, // 최소 1MB
             ["tokenizer_config.json"] = 100,
             ["config.json"] = 100

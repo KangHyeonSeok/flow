@@ -1,4 +1,4 @@
-using Microsoft.ML.Tokenizers;
+using Tokenizers.DotNet;
 
 namespace EmbedCLI.Services;
 
@@ -7,7 +7,7 @@ namespace EmbedCLI.Services;
 /// </summary>
 public class TokenizerService
 {
-    private readonly Tokenizer _tokenizer;
+    private readonly Tokenizers.DotNet.Tokenizer _tokenizer;
     private const int MaxLength = 512;
 
     public TokenizerService(string tokenizerPath)
@@ -17,9 +17,8 @@ public class TokenizerService
             throw new FileNotFoundException($"Tokenizer not found: {tokenizerPath}");
         }
 
-        // tokenizer.json 로드
-        using var stream = File.OpenRead(tokenizerPath);
-        _tokenizer = Tokenizer.CreateLlama(stream);
+        // tokenizer.json 로드 (HuggingFace Tokenizers)
+        _tokenizer = new Tokenizers.DotNet.Tokenizer(tokenizerPath);
     }
 
     public TokenizerOutput Tokenize(string text)
@@ -30,12 +29,14 @@ public class TokenizerService
         }
 
         // 기본 인코딩
-        var encoding = _tokenizer.EncodeToIds(text);
-        
-        // BOS/EOS 토큰 추가 (XLM-Roberta: <s> = 0, </s> = 2)
-        var inputIds = new List<int> { 0 };  // BOS
-        inputIds.AddRange(encoding.Take(MaxLength - 2));
-        inputIds.Add(2);  // EOS
+        var encoding = _tokenizer.Encode(text);
+        var inputIds = encoding.Select(id => (int)id).ToList();
+
+        // 길이 제한
+        if (inputIds.Count > MaxLength)
+        {
+            inputIds = inputIds.Take(MaxLength).ToList();
+        }
 
         // AttentionMask (모두 1)
         var attentionMask = Enumerable.Repeat(1, inputIds.Count).ToArray();

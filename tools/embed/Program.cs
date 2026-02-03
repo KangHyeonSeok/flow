@@ -9,6 +9,7 @@ class Program
     static async Task<int> Main(string[] args)
     {
         var rootCommand = new RootCommand("Embedding CLI for Flow RAG system");
+        rootCommand.Name = "flow";
         
         // test-download 명령어 (모델 다운로드 테스트)
         var testDownloadCommand = new Command("test-download", "Test model download functionality");
@@ -209,16 +210,6 @@ class Program
         }, benchmarkIterationsOption);
         rootCommand.AddCommand(benchmarkCommand);
         
-        // embed 명령어 (텍스트 임베딩)
-        var embedCommand = new Command("embed", "Generate embedding for text");
-        var embedTextArgument = new Argument<string>("text", "Text to embed");
-        embedCommand.AddArgument(embedTextArgument);
-        embedCommand.SetHandler(async (string text) =>
-        {
-            Environment.ExitCode = await HandleEmbedAsync(text);
-        }, embedTextArgument);
-        rootCommand.AddCommand(embedCommand);
-
         // embed-file 명령어 (파일 임베딩)
         var embedFileCommand = new Command("embed-file", "Generate embedding from file");
         var fileArgument = new Argument<string>("file", "Path to text file");
@@ -247,7 +238,28 @@ class Program
         });
         rootCommand.AddCommand(cacheClearCommand);
         
-        return await rootCommand.InvokeAsync(args);
+        // 루트 명령어: 기본 임베딩 처리 (embed 명령어와 호환)
+        var rootTextArgument = new Argument<string?>("text", () => null, "Text to embed");
+        rootCommand.AddArgument(rootTextArgument);
+        rootCommand.SetHandler(async (string? text) =>
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                Console.Error.WriteLine("ERROR: Text is required.");
+                Environment.ExitCode = 2;
+                return;
+            }
+
+            Environment.ExitCode = await HandleEmbedAsync(text);
+        }, rootTextArgument);
+
+        var processedArgs = args;
+        if (processedArgs.Length > 0 && string.Equals(processedArgs[0], "embed", StringComparison.OrdinalIgnoreCase))
+        {
+            processedArgs = processedArgs.Skip(1).ToArray();
+        }
+
+        return await rootCommand.InvokeAsync(processedArgs);
     }
 
     static async Task<int> HandleEmbedAsync(string text)
