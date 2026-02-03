@@ -135,9 +135,22 @@ if [ -d "$TEMP_DIR/prompts" ]; then
         mkdir -p ".github/prompts"
         cp -r "$TEMP_DIR/prompts/." ".github/prompts/"
         
-        # .claude/commands 폴더에도 복사
+        # .claude/commands 폴더에도 복사 (prompt 제거)
         mkdir -p ".claude/commands"
-        cp -r "$TEMP_DIR/prompts/." ".claude/commands/"
+        while IFS= read -r -d '' prompt_file; do
+            rel_path="${prompt_file#$TEMP_DIR/prompts/}"
+            rel_dir=$(dirname "$rel_path")
+            rel_base=$(basename "$rel_path")
+            target_base="${rel_base//.prompt/}"
+            if [ "$rel_dir" = "." ]; then
+                target_rel="$target_base"
+            else
+                target_rel="$rel_dir/$target_base"
+            fi
+            target_path=".claude/commands/$target_rel"
+            mkdir -p "$(dirname "$target_path")"
+            cp "$prompt_file" "$target_path"
+        done < <(find "$TEMP_DIR/prompts" -type f -print0)
     fi
 fi
 

@@ -124,10 +124,21 @@ try {
         New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
         Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
         
-        # .claude/commands 폴더에도 복사
+        # .claude/commands 폴더에도 복사 (prompt 제거)
         $claudeCommandsDir = Join-Path (Get-Location) ".claude/commands"
         New-Item -ItemType Directory -Path $claudeCommandsDir -Force | Out-Null
-        Copy-Item -Path "$extractedPrompts\*" -Destination $claudeCommandsDir -Recurse -Force
+        $basePromptPath = (Resolve-Path -LiteralPath $extractedPrompts).Path
+        Get-ChildItem -Path $extractedPrompts -File -Recurse | ForEach-Object {
+            $filePath = (Resolve-Path -LiteralPath $_.FullName).Path
+            $relativePath = $filePath.Substring($basePromptPath.Length).TrimStart('\', '/')
+            $targetRelative = $relativePath -replace '\.prompt', ''
+            $targetPath = Join-Path $claudeCommandsDir $targetRelative
+            $targetDir = Split-Path -Path $targetPath -Parent
+            if (-not (Test-Path $targetDir)) {
+                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+            }
+            Copy-Item -Path $_.FullName -Destination $targetPath -Force
+        }
     }
     
     # 필수 디렉토리 사전 생성
