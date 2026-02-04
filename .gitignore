@@ -5,3 +5,4 @@
 .flow/rag/bin/embed.pdb
 .flow/rag/bin/DirectML.pdb
 .flow/rag/bin/DirectML.Debug.pdb
+.flow/rag/db/local.db
