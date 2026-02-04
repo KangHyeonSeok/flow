@@ -40,6 +40,15 @@ agent: agent
 * `Done Criteria` (완료 조건) 및 `Validation` (검증 방법)
 * `Tags` (Canonical Tags - 아래 규칙 준수)
 
+### Canonical Tags 규칙
+
+모든 설계 문서와 백로그 plan에는 **Tags** 필드가 필수이며, 다음 규칙을 따른다:
+
+* **형식**: 영어 소문자만 사용, 공백은 언더바(`_`)로 대체 (예: `neural_network`)
+* **제약**: 태그당 최대 2단어, 반드시 단수형 사용
+* **개수**: 핵심 키워드 위주로 3~5개 추출
+* **예시**: `["vector_search", "sqlite", "embedding", "hybrid_search"]`
+
 ### 5. QUEUE_OPTIMIZATION
 
 * **행동**: 의존성 그래프를 분석하여 `docs/flow/backlogs/queue` 파일을 생성/업데이트한다.
