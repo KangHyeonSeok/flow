@@ -2,3 +2,6 @@
 /docs
 /tools/embed/bin
 /tools/embed/obj
+.flow/rag/bin/embed.pdb
+.flow/rag/bin/DirectML.pdb
+.flow/rag/bin/DirectML.Debug.pdb

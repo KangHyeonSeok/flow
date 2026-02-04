@@ -50,6 +50,14 @@ $results = @()
 
 foreach ($rid in $RuntimeIdentifiers) {
     Write-Host "Building for $rid..." -ForegroundColor Yellow
+
+    $outputRoot = Join-Path $scriptRoot ".flow/rag/bin"
+    $outputDir = if ($RuntimeIdentifiers.Count -gt 1) {
+        Join-Path $outputRoot $rid
+    } else {
+        $outputRoot
+    }
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
     
     $publishArgs = @(
         "publish"
@@ -58,6 +66,7 @@ foreach ($rid in $RuntimeIdentifiers) {
         "-r", $rid
         "--self-contained"
         "-p:PublishAot=true"
+        "-o", $outputDir
     )
     
     # Debug 모드가 아닐 때만 strip 적용
@@ -83,7 +92,6 @@ foreach ($rid in $RuntimeIdentifiers) {
         
         # 출력 파일 경로 확인
         $outputFile = if ($rid -eq "win-x64") { "embed.exe" } else { "embed" }
-        $outputDir = Join-Path $scriptRoot "tools/embed/bin/$Configuration/net8.0-windows/$rid/publish"
         $outputPath = Join-Path $outputDir $outputFile
         
         if (Test-Path $outputPath) {

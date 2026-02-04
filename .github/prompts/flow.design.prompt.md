@@ -38,6 +38,7 @@ agent: agent
 * **Task Plan 필수 항목**:
 * `Input/Output` 및 `Interface` (연결성 보장)
 * `Done Criteria` (완료 조건) 및 `Validation` (검증 방법)
+* `Tags` (Canonical Tags - 아래 규칙 준수)
 
 ### 5. QUEUE_OPTIMIZATION
 
