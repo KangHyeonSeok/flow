@@ -51,88 +51,25 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-# PowerShell은 기본적으로 `-`만 파라미터 프리픽스로 인식하므로
-# `--add`, `--query` 같은 인자를 포함해 모든 형태를 수동 파싱
-$Add = $null
-$Query = $null
-$Tags = $null
-$Metadata = "{}"
-$TopK = 5
-$DbPath = $null
-$Init = $false
-$ShowHelp = $false
-
-function Get-NextArgValue {
-    param(
-        [string[]]$Args,
-        [int]$Index
-    )
-    if ($Index + 1 -ge $Args.Count) {
-        Write-Host "옵션 값이 필요합니다: $($Args[$Index])" -ForegroundColor Yellow
-        $script:ShowHelp = $true
-        return $null
-    }
-    return $Args[$Index + 1]
+# 인자 파서 로드
+$argParser = Join-Path $PSScriptRoot "db.args.ps1"
+if (-not (Test-Path $argParser)) {
+    Write-Error "db.args.ps1을 찾을 수 없습니다: $argParser"
+    exit 1
 }
+. $argParser
 
-$parsedArgs = if ($RawArgs) { $RawArgs } elseif ($MyInvocation.UnboundArguments) { $MyInvocation.UnboundArguments } else { @() }
+$parsed = Parse-DbArgs -Args $args -InvocationLine $MyInvocation.Line -ScriptPath $PSCommandPath
 
-if ($parsedArgs) {
-    for ($i = 0; $i -lt $parsedArgs.Count; $i++) {
-        $arg = $parsedArgs[$i]
-        if ($arg -match '^-{1,2}.+') {
-            $key = ($arg -replace '^-{1,2}', '').ToLowerInvariant()
-            switch ($key) {
-                'add' {
-                    $Add = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'query' {
-                    $Query = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'tags' {
-                    $Tags = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'metadata' {
-                    $Metadata = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'topk' {
-                    $TopK = [int](Get-NextArgValue -Args $parsedArgs -Index $i)
-                    $i++
-                }
-                'db' { 
-                    $DbPath = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'dbpath' {
-                    $DbPath = Get-NextArgValue -Args $parsedArgs -Index $i
-                    $i++
-                }
-                'init' { $Init = $true }
-                'help' { $ShowHelp = $true }
-                'h' { $ShowHelp = $true }
-                default {
-                    Write-Host "알 수 없는 옵션: $arg" -ForegroundColor Yellow
-                    $ShowHelp = $true
-                }
-            }
-        }
-        else {
-            if (-not $Add -and -not $Query -and -not $Init) {
-                $Add = $arg
-            }
-            elseif ($Add) {
-                $Add = ($Add + " " + $arg).Trim()
-            }
-            elseif ($Query) {
-                $Query = ($Query + " " + $arg).Trim()
-            }
-        }
-    }
-}
+$Add = $parsed.Add
+$Query = $parsed.Query
+$Tags = $parsed.Tags
+$Metadata = $parsed.Metadata
+$TopK = $parsed.TopK
+$DbPath = $parsed.DbPath
+$Init = $parsed.Init
+$ShowHelp = $parsed.ShowHelp
+$HasArgs = $parsed.HasArgs
 
 # RAG 모듈 로드
 $ragScript = Join-Path $PSScriptRoot "..\rag\scripts\rag.ps1"
@@ -143,7 +80,7 @@ if (-not (Test-Path $ragScript)) {
 . $ragScript
 
 # 도움말 표시
-if ($ShowHelp -or (((-not $parsedArgs) -or $parsedArgs.Count -eq 0) -and -not $Init)) {
+if ($ShowHelp -or (-not $HasArgs -and -not $Init)) {
     Write-Host @"
 
 Flow RAG Database CLI

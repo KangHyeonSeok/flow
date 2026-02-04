@@ -183,6 +183,20 @@ try {
             New-Item -ItemType Directory -Path $fullPath -Force | Out-Null
         }
     }
+
+    # RAG DB가 없으면 초기화
+    $ragDbPath = Join-Path $flowDir "rag\db\local.db"
+    $dbScript = Join-Path $flowDir "scripts\db.ps1"
+    if (-not (Test-Path $ragDbPath) -and (Test-Path $dbScript)) {
+        Write-Step "RAG 데이터베이스 초기화 중..."
+        try {
+            & $dbScript --init | Out-Null
+            Write-Success "RAG 데이터베이스 초기화 완료"
+        }
+        catch {
+            Write-Warning "RAG 데이터베이스 초기화 실패: $_"
+        }
+    }
     
     Write-Success "업데이트 완료"
 } catch {
