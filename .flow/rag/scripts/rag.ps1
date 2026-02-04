@@ -20,11 +20,11 @@ function Get-EmbedExePath {
     
     # .flow/rag/bin/embed.exe 우선 확인, 그 외 기존 경로 확인
     $possiblePaths = @(
-        (Join-Path $PSScriptRoot "../../.flow/rag/bin/embed.exe"),
-        (Join-Path $PSScriptRoot "../../.flow/rag/bin/win-x64/embed.exe"),
-        (Join-Path $PSScriptRoot "../../.flow/tools/embed/embed.exe"),
-        (Join-Path $PSScriptRoot "../embed/bin/Release/net8.0-windows/embed.exe"),
-        (Join-Path $PSScriptRoot "../../tools/embed/bin/Release/net8.0-windows/embed.exe")
+        (Join-Path $PSScriptRoot "..\bin\embed.exe"),
+        (Join-Path $PSScriptRoot "..\bin\win-x64\embed.exe"),
+        (Join-Path $PSScriptRoot "..\..\..\tools\embed\embed.exe"),
+        (Join-Path $PSScriptRoot "..\..\..\tools\embed\bin\Release\net8.0-windows\embed.exe"),
+        (Join-Path $PSScriptRoot "..\..\..\tools\embed\bin\Debug\net8.0-windows\embed.exe")
     )
     
     foreach ($path in $possiblePaths) {
@@ -33,6 +33,12 @@ function Get-EmbedExePath {
             $script:EmbedExe = $resolved.Path
             return $script:EmbedExe
         }
+    }
+
+    $fromPath = Get-Command embed.exe -ErrorAction SilentlyContinue
+    if ($fromPath) {
+        $script:EmbedExe = $fromPath.Path
+        return $script:EmbedExe
     }
     
     throw @"

@@ -40,47 +40,88 @@ sqlite-vec 기반 벡터 저장 및 하이브리드 검색을 위한 CLI 인터�
 ./.flow/scripts/db.ps1 --init
 #>
 
-[CmdletBinding()]
-param(
-    [Parameter(Position = 0)]
-    [string]$Add,
-
-    [Parameter()]
-    [string]$Query,
-
-    [Parameter()]
-    [string]$Tags,
-
-    [Parameter()]
-    [string]$Metadata = "{}",
-
-    [Parameter()]
-    [int]$TopK = 5,
-
-    [Parameter()]
-    [string]$DbPath,
-
-    [Parameter()]
-    [switch]$Init,
-
-    [Parameter()]
-    [Alias("h")]
-    [switch]$ShowHelp
-)
-
 $ErrorActionPreference = 'Stop'
 
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 # PowerShell은 기본적으로 `-`만 파라미터 프리픽스로 인식하므로
-# `--add`, `--query` 같은 인자를 허용하기 위해 재호출 처리
-if ($args -and ($args | Where-Object { $_ -like '--*' })) {
-    $converted = foreach ($arg in $args) {
-        if ($arg -like '--*') { '-' + $arg.Substring(2) } else { $arg }
+# `--add`, `--query` 같은 인자를 포함해 모든 형태를 수동 파싱
+$Add = $null
+$Query = $null
+$Tags = $null
+$Metadata = "{}"
+$TopK = 5
+$DbPath = $null
+$Init = $false
+$ShowHelp = $false
+
+function Get-NextArgValue {
+    param(
+        [string[]]$Args,
+        [int]$Index
+    )
+    if ($Index + 1 -ge $Args.Count) {
+        throw "옵션 값이 필요합니다: $($Args[$Index])"
     }
-    & $PSCommandPath @converted
-    exit $LASTEXITCODE
+    return $Args[$Index + 1]
+}
+
+if ($args) {
+    for ($i = 0; $i -lt $args.Count; $i++) {
+        $arg = $args[$i]
+        if ($arg -match '^-{1,2}.+') {
+            $key = ($arg -replace '^-{1,2}', '').ToLowerInvariant()
+            switch ($key) {
+                'add' {
+                    $Add = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'query' {
+                    $Query = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'tags' {
+                    $Tags = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'metadata' {
+                    $Metadata = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'topk' {
+                    $TopK = [int](Get-NextArgValue -Args $args -Index $i)
+                    $i++
+                }
+                'db' { 
+                    $DbPath = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'dbpath' {
+                    $DbPath = Get-NextArgValue -Args $args -Index $i
+                    $i++
+                }
+                'init' { $Init = $true }
+                'help' { $ShowHelp = $true }
+                'h' { $ShowHelp = $true }
+                default {
+                    Write-Host "알 수 없는 옵션: $arg" -ForegroundColor Yellow
+                    $ShowHelp = $true
+                }
+            }
+        }
+        else {
+            if (-not $Add -and -not $Query -and -not $Init) {
+                $Add = $arg
+            }
+            elseif ($Add) {
+                $Add = ($Add + " " + $arg).Trim()
+            }
+            elseif ($Query) {
+                $Query = ($Query + " " + $arg).Trim()
+            }
+        }
+    }
 }
 
 # RAG 모듈 로드
@@ -92,7 +133,7 @@ if (-not (Test-Path $ragScript)) {
 . $ragScript
 
 # 도움말 표시
-if ($ShowHelp -or ($PSBoundParameters.Count -eq 0 -and -not $Init)) {
+if ($ShowHelp -or (((-not $args) -or $args.Count -eq 0) -and -not $Init)) {
     Write-Host @"
 
 Flow RAG Database CLI
@@ -145,7 +186,7 @@ if (-not [string]::IsNullOrEmpty($Add)) {
     try {
         $tagArray = @()
         if (-not [string]::IsNullOrEmpty($Tags)) {
-            $tagArray = $Tags -split ',' | ForEach-Object { $_.Trim() }
+            $tagArray = $Tags -split '[,\s]+' | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }
         }
 
         Add-DocumentToRAG -Content $Add -DbPath $DbPath -Tags $tagArray -Metadata $Metadata
@@ -162,7 +203,7 @@ if (-not [string]::IsNullOrEmpty($Query)) {
     try {
         $tagArray = @()
         if (-not [string]::IsNullOrEmpty($Tags)) {
-            $tagArray = $Tags -split ',' | ForEach-Object { $_.Trim() }
+            $tagArray = $Tags -split '[,\s]+' | Where-Object { $_ -and $_.Trim() } | ForEach-Object { $_.Trim() }
         }
 
         $results = Search-SimilarDocuments -Query $Query -TopK $TopK -DbPath $DbPath -Tags $tagArray
