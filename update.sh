@@ -85,7 +85,16 @@ if [ -z "$DOWNLOAD_URL" ]; then
     exit 1
 fi
 
-# 기존 .flow 제거 (백업 없이)
+# 기존 .flow 제거 전 db 백업
+DB_BACKUP_DIR=""
+if [ -d "$FLOW_DIR/rag/db" ]; then
+    DB_BACKUP_DIR=$(mktemp -d /tmp/flow-db-backup-XXXXXX)
+    step "RAG 데이터베이스 백업 중..."
+    cp -r "$FLOW_DIR/rag/db" "$DB_BACKUP_DIR/"
+    success "데이터베이스 백업 완료: $DB_BACKUP_DIR"
+fi
+
+# 기존 .flow 제거
 if [ -d "$FLOW_DIR" ]; then
     step "기존 .flow 제거 중..."
     rm -rf "$FLOW_DIR"
@@ -122,6 +131,15 @@ if [ -d "$TEMP_DIR/.flow" ]; then
 else
     warn ".flow 폴더를 찾을 수 없습니다."
     exit 1
+fi
+
+# RAG 데이터베이스 복구
+if [ -n "$DB_BACKUP_DIR" ] && [ -d "$DB_BACKUP_DIR/db" ]; then
+    step "RAG 데이터베이스 복구 중..."
+    mkdir -p "$FLOW_DIR/rag"
+    cp -r "$DB_BACKUP_DIR/db" "$FLOW_DIR/rag/"
+    success "데이터베이스 복구 완료"
+    rm -rf "$DB_BACKUP_DIR"
 fi
 
 # .claude 폴더 복사 (있으면)

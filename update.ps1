@@ -81,7 +81,18 @@ if (-not $zipAsset) {
 
 $downloadUrl = $zipAsset.browser_download_url
 
-# 기존 .flow 제거 (백업 없이)
+# 기존 .flow 제거 전 db 백업
+$dbBackupDir = $null
+$ragDbPath = Join-Path $flowDir "rag\db"
+if (Test-Path $ragDbPath) {
+    $dbBackupDir = Join-Path ([System.IO.Path]::GetTempPath()) "flow-db-backup-$([Guid]::NewGuid().ToString('N'))"
+    Write-Step "RAG 데이터베이스 백업 중..."
+    New-Item -ItemType Directory -Path $dbBackupDir -Force | Out-Null
+    Copy-Item -Path $ragDbPath -Destination $dbBackupDir -Recurse -Force
+    Write-Success "데이터베이스 백업 완료: $dbBackupDir"
+}
+
+# 기존 .flow 제거
 if (Test-Path $flowDir) {
     Write-Step "기존 .flow 제거 중..."
     Remove-Item -Path $flowDir -Recurse -Force
@@ -107,6 +118,21 @@ try {
         Copy-Item -Path $extractedFlow -Destination $flowDir -Recurse -Force
     } else {
         throw ".flow 폴더를 찾을 수 없습니다."
+    }
+
+    # RAG 데이터베이스 복구
+    if ($null -ne $dbBackupDir) {
+        $backupDbPath = Join-Path $dbBackupDir "db"
+        if (Test-Path $backupDbPath) {
+            Write-Step "RAG 데이터베이스 복구 중..."
+            $ragDir = Join-Path $flowDir "rag"
+            if (-not (Test-Path $ragDir)) {
+                New-Item -ItemType Directory -Path $ragDir -Force | Out-Null
+            }
+            Copy-Item -Path $backupDbPath -Destination $ragDir -Recurse -Force
+            Write-Success "데이터베이스 복구 완료"
+            Remove-Item -Path $dbBackupDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     # .claude 폴더 복사 (있으면)
