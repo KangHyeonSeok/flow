@@ -40,6 +40,12 @@ sqlite-vec 기반 벡터 저장 및 하이브리드 검색을 위한 CLI 인터�
 ./.flow/scripts/db.ps1 --init
 #>
 
+[CmdletBinding()]
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RawArgs
+)
+
 $ErrorActionPreference = 'Stop'
 
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -62,43 +68,47 @@ function Get-NextArgValue {
         [int]$Index
     )
     if ($Index + 1 -ge $Args.Count) {
-        throw "옵션 값이 필요합니다: $($Args[$Index])"
+        Write-Host "옵션 값이 필요합니다: $($Args[$Index])" -ForegroundColor Yellow
+        $script:ShowHelp = $true
+        return $null
     }
     return $Args[$Index + 1]
 }
 
-if ($args) {
-    for ($i = 0; $i -lt $args.Count; $i++) {
-        $arg = $args[$i]
+$parsedArgs = if ($RawArgs) { $RawArgs } elseif ($MyInvocation.UnboundArguments) { $MyInvocation.UnboundArguments } else { @() }
+
+if ($parsedArgs) {
+    for ($i = 0; $i -lt $parsedArgs.Count; $i++) {
+        $arg = $parsedArgs[$i]
         if ($arg -match '^-{1,2}.+') {
             $key = ($arg -replace '^-{1,2}', '').ToLowerInvariant()
             switch ($key) {
                 'add' {
-                    $Add = Get-NextArgValue -Args $args -Index $i
+                    $Add = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'query' {
-                    $Query = Get-NextArgValue -Args $args -Index $i
+                    $Query = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'tags' {
-                    $Tags = Get-NextArgValue -Args $args -Index $i
+                    $Tags = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'metadata' {
-                    $Metadata = Get-NextArgValue -Args $args -Index $i
+                    $Metadata = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'topk' {
-                    $TopK = [int](Get-NextArgValue -Args $args -Index $i)
+                    $TopK = [int](Get-NextArgValue -Args $parsedArgs -Index $i)
                     $i++
                 }
                 'db' { 
-                    $DbPath = Get-NextArgValue -Args $args -Index $i
+                    $DbPath = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'dbpath' {
-                    $DbPath = Get-NextArgValue -Args $args -Index $i
+                    $DbPath = Get-NextArgValue -Args $parsedArgs -Index $i
                     $i++
                 }
                 'init' { $Init = $true }
@@ -133,7 +143,7 @@ if (-not (Test-Path $ragScript)) {
 . $ragScript
 
 # 도움말 표시
-if ($ShowHelp -or (((-not $args) -or $args.Count -eq 0) -and -not $Init)) {
+if ($ShowHelp -or (((-not $parsedArgs) -or $parsedArgs.Count -eq 0) -and -not $Init)) {
     Write-Host @"
 
 Flow RAG Database CLI
