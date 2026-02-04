@@ -26,12 +26,11 @@ agent: agent
 * **인터페이스 명세** (제공/의존하는 기능 명시)
 * 예외 처리 및 보안 고려사항
 
-
-
 ### 3. REVIEW_LOOP
 
 * **행동**: 설계 완료 후 `./approve-design.ps1`을 실행하여 사용자 승인을 받는다.
-* **규칙**: 승인(`Status: Approved`) 없이 다음 단계(Task Extraction) 진입 절대 금지.
+* **규칙**: 승인(`Status: Approved`) 없이 다음 단계(BACKLOG_GENERATION) 진입 절대 금지.
+* **전이**: 승인(`Status: Approved`) 일 경우, AI는 즉시 BACKLOG_GENERATION을 수행한다.
 
 ### 4. BACKLOG_GENERATION
 
@@ -39,8 +38,6 @@ agent: agent
 * **Task Plan 필수 항목**:
 * `Input/Output` 및 `Interface` (연결성 보장)
 * `Done Criteria` (완료 조건) 및 `Validation` (검증 방법)
-
-
 
 ### 5. QUEUE_OPTIMIZATION
 
@@ -59,3 +56,4 @@ agent: agent
 1. **No Implementation**: 단 한 줄의 기능 코드도 수정하지 않는다.
 2. **Strict Gatekeeping**: 사용자 승인 스크립트 실행 없이 백로그로 넘어가지 않는다.
 3. **Interface First**: 모든 백로그는 상호 간의 인터페이스(연결점)가 명시되어야 한다.
+4. **Continuous Workflow**: 각 단계의 산출물이 완성되거나 승인 조건이 충족되면, 사용자의 추가 명령을 기다리지 않고 즉시 다음 단계를 실행한다.
