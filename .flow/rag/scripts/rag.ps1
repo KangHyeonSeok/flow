@@ -131,11 +131,11 @@ function Get-DefaultDbPath {
     기본 DB 경로를 반환합니다.
     #>
     
-    $dbDir = Join-Path $env:LOCALAPPDATA "flow-embed"
+    $dbDir = Join-Path $PSScriptRoot "..\db"
     if (-not (Test-Path $dbDir)) {
         New-Item -ItemType Directory -Path $dbDir -Force | Out-Null
     }
-    return Join-Path $dbDir "flow.db"
+    return Join-Path $dbDir "local.db"
 }
 
 function Initialize-RAGDatabase {
@@ -144,7 +144,7 @@ function Initialize-RAGDatabase {
     RAG용 sqlite-vec 데이터베이스를 초기화합니다.
     
     .PARAMETER DbPath
-    데이터베이스 파일 경로 (기본값: $env:LOCALAPPDATA/flow-embed/flow.db)
+    데이터베이스 파일 경로 (기본값: .flow/rag/db/local.db)
     
     .PARAMETER SkipVec
     sqlite-vec 확장 로드를 건너뜁니다. (벡터 검색 비활성화)
