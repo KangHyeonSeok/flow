@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 # embed.exe 경로 확인
 $script:EmbedExe = $null
+$script:SqliteExe = $null
 
 function Get-EmbedExePath {
     if ($null -ne $script:EmbedExe) {
@@ -149,6 +150,43 @@ function Get-DefaultDbPath {
     return Join-Path $dbDir "local.db"
 }
 
+function Get-Sqlite3ExePath {
+    if ($null -ne $script:SqliteExe) {
+        return $script:SqliteExe
+    }
+
+    if ($env:FLOW_SQLITE3_PATH -and (Test-Path $env:FLOW_SQLITE3_PATH)) {
+        $script:SqliteExe = $env:FLOW_SQLITE3_PATH
+        return $script:SqliteExe
+    }
+
+    $pkgRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+    if (Test-Path $pkgRoot) {
+        $sqlitePkgs = Get-ChildItem -Path $pkgRoot -Directory -Filter "SQLite.SQLite_*" -ErrorAction SilentlyContinue
+        foreach ($pkg in $sqlitePkgs) {
+            $exe = Get-ChildItem -Path $pkg.FullName -Filter "sqlite3.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($exe) {
+                $script:SqliteExe = $exe.FullName
+                return $script:SqliteExe
+            }
+        }
+    }
+
+    $wingetLink = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\sqlite3.exe"
+    if (Test-Path $wingetLink) {
+        $script:SqliteExe = $wingetLink
+        return $script:SqliteExe
+    }
+
+    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+    if ($sqlite) {
+        $script:SqliteExe = $sqlite.Source
+        return $script:SqliteExe
+    }
+
+    return $null
+}
+
 function Initialize-RAGDatabase {
     <#
     .SYNOPSIS
@@ -178,9 +216,9 @@ function Initialize-RAGDatabase {
         $DbPath = Get-DefaultDbPath
     }
     
-    # sqlite3 설치 확인
-    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
-    if (-not $sqlite) {
+        # sqlite3 설치 확인
+        $sqliteExe = Get-Sqlite3ExePath
+        if (-not $sqliteExe) {
         throw @"
 sqlite3가 설치되어 있지 않습니다.
 설치 방법:
@@ -218,7 +256,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vec_documents USING vec0(
 "@
         
         try {
-            $schemaWithVec | sqlite3 $DbPath 2>&1
+            $schemaWithVec | & $sqliteExe $DbPath 2>&1
             if ($LASTEXITCODE -eq 0) {
                 $vecLoaded = $true
             }
@@ -244,7 +282,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at);
 "@
         
-        $schemaBasic | sqlite3 $DbPath
+        $schemaBasic | & $sqliteExe $DbPath
         Write-Host "⚠️ RAG database initialized (without sqlite-vec): $DbPath" -ForegroundColor Yellow
         Write-Host "   sqlite-vec 확장이 없어 벡터 검색이 PowerShell에서 수행됩니다." -ForegroundColor Yellow
         return
@@ -313,6 +351,10 @@ function Add-DocumentToRAG {
         
         # sqlite-vec 사용 여부 확인
         $vecPath = Get-SqliteVecPath
+        $sqliteExe = Get-Sqlite3ExePath
+        if (-not $sqliteExe) {
+            throw "sqlite3가 설치되어 있지 않습니다. winget install SQLite.SQLite로 설치하세요."
+        }
         
         if ($vecPath) {
             # sqlite-vec 활성화된 경우: documents와 vec_documents에 각각 삽입
@@ -335,7 +377,7 @@ INSERT INTO vec_documents (rowid, embedding)
 VALUES (last_insert_rowid(), '$vectorJson');
 "@
             
-            $sql | sqlite3 $DbPath
+            $sql | & $sqliteExe $DbPath
         }
         else {
             # sqlite-vec 없이: embedding을 BLOB으로 저장
@@ -357,7 +399,7 @@ INSERT INTO documents (content, canonical_tags, embedding, metadata)
 VALUES ('$escapedContent', '$escapedTags', readfile('$($tempFile.Replace('\', '/'))'), '$escapedMetadata');
 "@
                 
-                $sql | sqlite3 $DbPath
+                $sql | & $sqliteExe $DbPath
             }
             finally {
                 Remove-Item $tempFile -ErrorAction SilentlyContinue
@@ -452,7 +494,12 @@ ORDER BY tag_score DESC, distance ASC
 LIMIT $TopK;
 "@
         
-        $jsonOutput = $sql | sqlite3 $DbPath 2>&1
+        $sqliteExe = Get-Sqlite3ExePath
+        if (-not $sqliteExe) {
+            throw "sqlite3가 설치되어 있지 않습니다. winget install SQLite.SQLite로 설치하세요."
+        }
+
+        $jsonOutput = $sql | & $sqliteExe $DbPath 2>&1
         
         if ($LASTEXITCODE -eq 0 -and $jsonOutput) {
             try {
@@ -467,7 +514,7 @@ LIMIT $TopK;
     
     # sqlite-vec 없이: PowerShell에서 유사도 계산
     $sql = "SELECT id, content, canonical_tags, metadata FROM documents;"
-    $rows = $sql | sqlite3 -separator '|' $DbPath
+    $rows = $sql | & $sqliteExe -separator '|' $DbPath
     
     $results = @()
     
