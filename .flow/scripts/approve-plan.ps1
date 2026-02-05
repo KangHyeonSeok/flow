@@ -61,9 +61,10 @@ $planContent = Get-Content $planPath -Raw
 # 필수 섹션 체크
 $requiredSections = @(
     "## 1. 입력",
-    "## 2. 출력", 
-    "## 3. 검증",
-    "## 4. 완료 조건"
+    "## 2. 실행 단계", 
+    "## 3. 출력",
+    "## 4. 검증 방법",
+    "## 5. 완료 조건"
 )
 
 $missingSections = @()
