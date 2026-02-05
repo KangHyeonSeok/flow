@@ -22,6 +22,7 @@ agent: agent
 
 * **행동**: `docs/flow/implements/designs/{feature_name}.md` 생성.
 * **필수 포함**:
+* State는 반드시 작성 해야 함
 * 시스템 아키텍처 및 데이터 흐름
 * **인터페이스 명세** (제공/의존하는 기능 명시)
 * 예외 처리 및 보안 고려사항
