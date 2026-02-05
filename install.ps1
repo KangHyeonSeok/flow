@@ -25,11 +25,25 @@ function Write-Warning {
     Write-Host "  ⚠️ $Message" -ForegroundColor Yellow
 }
 
+function Resolve-Sqlite3Path {
+    $wingetLink = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\sqlite3.exe"
+    if (Test-Path $wingetLink) {
+        return $wingetLink
+    }
+
+    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+    if ($sqlite) {
+        return $sqlite.Source
+    }
+
+    return $null
+}
+
 function Test-SqliteExtensionLoad {
     param([string]$VecPath)
 
-    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
-    if (-not $sqlite) {
+    $sqlitePath = Resolve-Sqlite3Path
+    if (-not $sqlitePath) {
         return $false
     }
 
@@ -38,7 +52,7 @@ function Test-SqliteExtensionLoad {
     }
 
     $vecPathSql = $VecPath.Replace('\\', '/')
-    ".load $vecPathSql" | sqlite3 ":memory:" 2>&1 | Out-Null
+    & $sqlitePath "-cmd" ".load $vecPathSql" ":memory:" 2>&1 | Out-Null
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -68,6 +82,8 @@ function Ensure-SqliteExtensionSupport {
         Write-Warning "sqlite3 설치 실패: $_"
         return $false
     }
+
+    Start-Sleep -Seconds 1
 
     if (Test-SqliteExtensionLoad -VecPath $VecPath) {
         Write-Success "sqlite3 확장 로딩 확인 완료"
