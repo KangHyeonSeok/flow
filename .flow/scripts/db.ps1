@@ -42,6 +42,15 @@ sqlite-vec 기반 벡터 저장 및 하이브리드 검색을 위한 CLI 인터�
 
 [CmdletBinding()]
 param(
+    [string]$Add,
+    [string]$Query,
+    [string]$Tags,
+    [string]$Metadata = "{}",
+    [int]$TopK = 5,
+    [string]$DbPath,
+    [switch]$Init,
+    [Alias('h')]
+    [switch]$Help,
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$RawArgs
 )
@@ -59,7 +68,23 @@ if (-not (Test-Path $argParser)) {
 }
 . $argParser
 
-$parsed = Parse-DbArgs -Args $args -InvocationLine $MyInvocation.Line -ScriptPath $PSCommandPath
+$boundKeys = @($PSBoundParameters.Keys | Where-Object { $_ -ne 'RawArgs' })
+if ($boundKeys.Count -gt 0) {
+    $parsed = [pscustomobject]@{
+        Add = $Add
+        Query = $Query
+        Tags = $Tags
+        Metadata = $Metadata
+        TopK = $TopK
+        DbPath = $DbPath
+        Init = [bool]$Init
+        ShowHelp = [bool]$Help
+        HasArgs = $true
+    }
+}
+else {
+    $parsed = Parse-DbArgs -Args $RawArgs -InvocationLine $MyInvocation.Line -ScriptPath $PSCommandPath
+}
 
 $Add = $parsed.Add
 $Query = $parsed.Query
@@ -87,25 +112,25 @@ Flow RAG Database CLI
 =====================
 
 사용법:
-    ./.flow/scripts/db.ps1 --add "<텍스트>" [--tags "tag1,tag2"] [--metadata "<json>"]
-    ./.flow/scripts/db.ps1 --query "<질문>" [--topk N] [--tags "tag1,tag2"]
-    ./.flow/scripts/db.ps1 --init [--db "<경로>"]
+    ./.flow/scripts/db.ps1 -add "<텍스트>" [-tags "tag1,tag2"] [-metadata "<json>"]
+    ./.flow/scripts/db.ps1 -query "<질문>" [-topk N] [-tags "tag1,tag2"]
+    ./.flow/scripts/db.ps1 -init [-db "<경로>"]
 
 옵션:
-  --add, -add       추가할 텍스트
-  --query, -query   검색할 질문
-  --tags, -tags     태그 목록 (쉼표 구분)
-  --metadata        메타데이터 JSON
-  --topk, -topk     검색 결과 수 (기본값: 5)
-  --db, -db         데이터베이스 경로
-  --init, -init     데이터베이스 초기화
-  --help, -h        도움말 표시
+    -add              추가할 텍스트
+    -query            검색할 질문
+    -tags             태그 목록 (쉼표 구분)
+    -metadata         메타데이터 JSON
+    -topk             검색 결과 수 (기본값: 5)
+    -db               데이터베이스 경로
+    -init             데이터베이스 초기화
+    -help, -h         도움말 표시
 
 예시:
-    ./.flow/scripts/db.ps1 --add "오늘 날씨는 맑습니다."
-    ./.flow/scripts/db.ps1 --add "AI 기술" --tags "artificial_intelligence,deep_learning"
-    ./.flow/scripts/db.ps1 --query "날씨 어때?" --topk 3
-    ./.flow/scripts/db.ps1 --init
+    ./.flow/scripts/db.ps1 -add "오늘 날씨는 맑습니다."
+    ./.flow/scripts/db.ps1 -add "AI 기술" -tags "artificial_intelligence,deep_learning"
+    ./.flow/scripts/db.ps1 -query "날씨 어때?" -topk 3
+    ./.flow/scripts/db.ps1 -init
 
 "@
     exit 0
