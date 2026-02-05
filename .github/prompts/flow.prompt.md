@@ -37,7 +37,7 @@
 ### 2. PLANNING & REVIEWING
 
 * 사용자의 입력에서 태그를 구한다. 태그는 영어 소문자, 단수(예: `document` (O), `documents` (X)), canonical word, 최대 두 단어를 _ 로 연결(예:api_design), 핵심 키워드 위주로 3~5개 추출
-* `./.flow/scripts/db.ps1 --query "{요청사항 한줄 요약}" --tags "{앞에서 추출한 태그들}" (예:--query "기계학습" --tags "deep_learning" --topk 5)
+* `./.flow/scripts/db.ps1 -query "{요청사항 한줄 요약}" -tags "{앞에서 추출한 태그들}" (예:-query "기계학습" -tags "deep_learning" -topk 5)
 * `docs/flow/implements/{feature_name}/need-review-plan.md` 작성 (입력, 출력, 검증, 완료 조건 포함).
 * 정보 부족 시 `./human-input.ps1` 사용.
 * 작성 완료 후 `./approve-plan.ps1` 실행. 승인(Y) 즉시 `EXECUTING`으로 전환하여 구현 시작.
