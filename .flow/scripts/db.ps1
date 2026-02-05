@@ -96,6 +96,12 @@ $Init = $parsed.Init
 $ShowHelp = $parsed.ShowHelp
 $HasArgs = $parsed.HasArgs
 
+$doubleDashArgs = @($RawArgs | Where-Object { $_ -and $_ -match '^--' })
+if ($doubleDashArgs.Count -gt 0) {
+    Write-Warning "PowerShell에서는 '--' 옵션이 파싱되지 않습니다. '-query'처럼 단일 '-' 옵션을 사용하세요."
+    $ShowHelp = $true
+}
+
 # RAG 모듈 로드
 $ragScript = Join-Path $PSScriptRoot "..\rag\scripts\rag.ps1"
 if (-not (Test-Path $ragScript)) {
@@ -115,6 +121,10 @@ Flow RAG Database CLI
     ./.flow/scripts/db.ps1 -add "<텍스트>" [-tags "tag1,tag2"] [-metadata "<json>"]
     ./.flow/scripts/db.ps1 -query "<질문>" [-topk N] [-tags "tag1,tag2"]
     ./.flow/scripts/db.ps1 -init [-db "<경로>"]
+
+주의:
+    PowerShell에서는 --query 같은 이중 대시 옵션이 동작하지 않습니다.
+    -query, -add, -tags 처럼 단일 대시 옵션을 사용하세요.
 
 옵션:
     -add              추가할 텍스트
