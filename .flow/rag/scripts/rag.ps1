@@ -121,13 +121,18 @@ function Get-SqliteVecPath {
     sqlite-vec 확장 DLL 경로를 반환합니다.
     #>
     
+    $localPath = Join-Path $PSScriptRoot "..\bin\vec0.dll"
+    if (Test-Path $localPath) {
+        return $localPath
+    }
+
     $extensionDir = Join-Path $env:LOCALAPPDATA "flow-embed" "extensions"
     $vecPath = Join-Path $extensionDir "vec0.dll"
-    
+
     if (Test-Path $vecPath) {
         return $vecPath
     }
-    
+
     return $null
 }
 

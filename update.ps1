@@ -25,6 +25,59 @@ function Write-Warning {
     Write-Host "  ⚠️ $Message" -ForegroundColor Yellow
 }
 
+function Test-SqliteExtensionLoad {
+    param([string]$VecPath)
+
+    $sqlite = Get-Command sqlite3 -ErrorAction SilentlyContinue
+    if (-not $sqlite) {
+        return $false
+    }
+
+    if (-not (Test-Path $VecPath)) {
+        return $false
+    }
+
+    $vecPathSql = $VecPath.Replace('\\', '/')
+    ".load $vecPathSql" | sqlite3 ":memory:" 2>&1 | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Ensure-SqliteExtensionSupport {
+    param([string]$VecPath)
+
+    if (Test-SqliteExtensionLoad -VecPath $VecPath) {
+        return $true
+    }
+
+    if (-not $IsWindows) {
+        Write-Warning "sqlite 확장 로딩을 지원하는 sqlite3가 필요합니다."
+        return $false
+    }
+
+    $winget = Get-Command winget -ErrorAction SilentlyContinue
+    if (-not $winget) {
+        Write-Warning "winget을 찾을 수 없어 sqlite3를 설치할 수 없습니다."
+        return $false
+    }
+
+    Write-Step "sqlite3(확장 로딩 지원) 설치 중..."
+    try {
+        winget install SQLite.SQLite -e --accept-package-agreements --accept-source-agreements | Out-Null
+    }
+    catch {
+        Write-Warning "sqlite3 설치 실패: $_"
+        return $false
+    }
+
+    if (Test-SqliteExtensionLoad -VecPath $VecPath) {
+        Write-Success "sqlite3 확장 로딩 확인 완료"
+        return $true
+    }
+
+    Write-Warning "sqlite3 확장 로딩을 확인하지 못했습니다."
+    return $false
+}
+
 Write-Host ""
 Write-Host "═══════════════════════════════════════" -ForegroundColor Blue
 Write-Host "  Flow Prompt 업데이트 확인" -ForegroundColor Blue
@@ -184,13 +237,17 @@ try {
         }
     }
 
+    # sqlite-vec 확장 로딩 확인 (필요 시 sqlite3 설치)
+    $vecPath = Join-Path $flowDir "rag\bin\vec0.dll"
+    Ensure-SqliteExtensionSupport -VecPath $vecPath | Out-Null
+
     # RAG DB가 없으면 초기화
     $ragDbPath = Join-Path $flowDir "rag\db\local.db"
     $dbScript = Join-Path $flowDir "scripts\db.ps1"
     if (-not (Test-Path $ragDbPath) -and (Test-Path $dbScript)) {
         Write-Step "RAG 데이터베이스 초기화 중..."
         try {
-            & $dbScript --init | Out-Null
+            & $dbScript -init | Out-Null
             Write-Success "RAG 데이터베이스 초기화 완료"
         }
         catch {
