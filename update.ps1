@@ -26,6 +26,21 @@ function Write-Warning {
 }
 
 function Resolve-Sqlite3Path {
+    if ($env:FLOW_SQLITE3_PATH -and (Test-Path $env:FLOW_SQLITE3_PATH)) {
+        return $env:FLOW_SQLITE3_PATH
+    }
+
+    $pkgRoot = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"
+    if (Test-Path $pkgRoot) {
+        $sqlitePkgs = Get-ChildItem -Path $pkgRoot -Directory -Filter "SQLite.SQLite_*" -ErrorAction SilentlyContinue
+        foreach ($pkg in $sqlitePkgs) {
+            $exe = Get-ChildItem -Path $pkg.FullName -Filter "sqlite3.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($exe) {
+                return $exe.FullName
+            }
+        }
+    }
+
     $wingetLink = Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\sqlite3.exe"
     if (Test-Path $wingetLink) {
         return $wingetLink
@@ -52,8 +67,14 @@ function Test-SqliteExtensionLoad {
     }
 
     $vecPathSql = $VecPath.Replace('\\', '/')
-    & $sqlitePath "-cmd" ".load $vecPathSql" ":memory:" 2>&1 | Out-Null
-    return ($LASTEXITCODE -eq 0)
+    $output = ".load $vecPathSql" | & $sqlitePath ":memory:" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    if ($output -match "Error:") {
+        return $false
+    }
+    return $true
 }
 
 function Ensure-SqliteExtensionSupport {
