@@ -17,8 +17,8 @@ public class CacheService
     public CacheService(string? cacheDir = null)
     {
         cacheDir ??= Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "flow-embed",
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".flow",
             "cache"
         );
         Directory.CreateDirectory(cacheDir);

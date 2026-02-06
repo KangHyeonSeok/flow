@@ -10,7 +10,12 @@ public class ModelManager
 
     public ModelManager(string? cacheDir = null)
     {
-        _cacheDir = cacheDir ?? Path.Combine(AppContext.BaseDirectory, "models", "Xenova_bge-m3");
+        _cacheDir = cacheDir ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".flow",
+            "models",
+            "Xenova_bge-m3"
+        );
         Directory.CreateDirectory(_cacheDir);
     }
 
