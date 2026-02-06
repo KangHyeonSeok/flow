@@ -21,7 +21,7 @@ Flow는 AI 에이전트(Copilot)가 체계적으로 개발 작업을 수행하�
 VS Code에서 Copilot Chat에 다음과 같이 입력:
 
 ```
-/flow 버튼 색상을 파란색으로 변경해줘
+@flow 버튼 색상을 파란색으로 변경해줘
 ```
 
 또는 `flow.prompt.md`를 첨부하고 요청을 입력합니다.
@@ -84,8 +84,14 @@ stateDiagram-v2
 ├── README.md                 # 이 문서
 ├── extensions.json           # 확장 상태 정의
 ├── validation-profiles.json  # 검증 프로파일 정의
+├── version.txt               # Flow 버전 (현재: 0.1.0)
+├── settings.json             # 설정 파일
 ├── memory/
 │   └── principles.md         # Flow 핵심 원칙
+├── rag/                      # RAG (Retrieval-Augmented Generation) 시스템
+│   ├── bin/                  # 임베딩 실행 파일 (embed.exe 등)
+│   └── scripts/
+│       └── rag.ps1           # RAG 통합 스크립트
 ├── scripts/
 │   ├── common.ps1            # 공통 함수
 │   ├── start-plan.ps1        # 플랜 시작 (IDLE → PLANNING)
@@ -97,12 +103,25 @@ stateDiagram-v2
 │   ├── get-status.ps1        # 상태 확인
 │   ├── human-input.ps1       # 사용자 입력 처리
 │   ├── pop-backlog.ps1       # 백로그에서 다음 작업 가져오기
-│   └── ensure-pwsh7.ps1      # PowerShell 7 설치 안내
+│   ├── ensure-pwsh7.ps1      # PowerShell 7 설치 안내
+│   ├── set-log.ps1           # 로그 기록 on/off
+│   ├── db.ps1                # RAG 데이터베이스 CLI
+│   ├── db.args.ps1           # db.ps1 인자 파서
+│   ├── run-extension.ps1     # 확장 실행 스크립트
+│   └── remote-update.ps1     # 원격 업데이트 스크립트
 └── templates/
     ├── plan-template.md      # 플랜 템플릿
     ├── design-template.md    # 설계 문서 템플릿
     ├── result-template.md    # 결과 템플릿
     └── extension-template.md # 확장 상태 템플릿
+
+tools/
+└── embed/                    # C# 기반 임베딩 CLI 소스코드
+    ├── Program.cs
+    ├── embed.csproj
+    ├── Services/             # 임베딩 서비스
+    ├── Models/               # 데이터 모델
+    └── Utils/                # 유틸리티
 
 docs/flow/
 └── implements/
@@ -192,6 +211,133 @@ cd .flow/scripts; ./set-log.ps1 -Off  # 로그 기록 비활성화
 
 설정 파일: `.flow/settings.json`
 
+### RAG 데이터베이스 사용
+
+Flow는 벡터 기반 RAG 시스템을 지원합니다. sqlite-vec와 로컬 임베딩을 사용하여 컨텍스트를 저장하고 검색할 수 있습니다.
+
+```powershell
+# 데이터베이스 초기화
+cd .flow/scripts; ./db.ps1 -Init
+
+# 텍스트 추가
+cd .flow/scripts; ./db.ps1 -Add "오늘 날씨는 맑습니다."
+cd .flow/scripts; ./db.ps1 -Add "AI 기술 문서" -Tags "artificial_intelligence,machine_learning"
+
+# 검색
+cd .flow/scripts; ./db.ps1 -Query "날씨 어때?" -TopK 3
+```
+
+**참고**: RAG 기능을 사용하려면 `embed.exe`가 `.flow/rag/bin/` 디렉토리에 있어야 합니다. Flow 업데이트 시 자동으로 포함됩니다.
+
+### 확장 실행
+
+확장을 수동으로 실행할 수 있습니다:
+
+```powershell
+cd .flow/scripts; ./run-extension.ps1 -ExtensionId STRUCTURE_REVIEW
+cd .flow/scripts; ./run-extension.ps1 -ExtensionId STRUCTURE_REVIEW -FeatureName "기능이름"
+```
+
+### 원격 업데이트
+
+프로젝트를 최신 버전으로 업데이트:
+
+```powershell
+cd .flow/scripts; ./remote-update.ps1
+```
+
+또는 프로젝트 루트에서:
+
+```powershell
+irm https://raw.githubusercontent.com/KangHyeonSeok/flow/main/update.ps1 | iex
+```
+
+---
+
+## RAG (Retrieval-Augmented Generation) 시스템
+
+Flow는 로컬 임베딩과 벡터 검색을 지원하는 RAG 시스템을 내장하고 있습니다.
+
+### 주요 구성 요소
+
+| 구성 요소 | 설명 | 위치 |
+|----------|------|------|
+| **embed.exe** | C# 기반 임베딩 생성 CLI | `.flow/rag/bin/embed.exe` |
+| **rag.ps1** | PowerShell 통합 스크립트 | `.flow/rag/scripts/rag.ps1` |
+| **db.ps1** | RAG 데이터베이스 CLI | `.flow/scripts/db.ps1` |
+| **sqlite-vec** | 벡터 검색용 SQLite 확장 | `.flow/rag/bin/vec0.dll` |
+
+### 임베딩 CLI (embed.exe)
+
+로컬에서 실행되는 ONNX Runtime 기반 임베딩 생성 도구입니다.
+
+**주요 기능:**
+- 로컬 실행 (외부 API 불필요)
+- DirectML 가속 지원 (GPU)
+- HuggingFace 모델 자동 다운로드
+- 캐싱 지원으로 빠른 재실행
+
+**사용 예시:**
+```powershell
+# 모델 다운로드 테스트
+./.flow/rag/bin/embed.exe test-download
+
+# 토크나이저 테스트
+./.flow/rag/bin/embed.exe test-tokenizer "Hello World"
+
+# 임베딩 생성
+./.flow/rag/bin/embed.exe embed "텍스트를 임베딩합니다"
+
+# 파일에서 임베딩 생성
+./.flow/rag/bin/embed.exe embed-file input.txt output.json
+```
+
+### RAG 데이터베이스
+
+sqlite-vec를 사용한 벡터 저장 및 하이브리드 검색:
+
+```powershell
+# 초기화
+./.flow/scripts/db.ps1 -Init
+
+# 데이터 추가
+./.flow/scripts/db.ps1 -Add "Flow는 AI 개발 워크플로우입니다." -Tags "flow,ai"
+
+# 검색
+./.flow/scripts/db.ps1 -Query "워크플로우가 뭐야?" -TopK 3
+
+# 메타데이터와 함께 추가
+./.flow/scripts/db.ps1 -Add "중요한 정보" -Metadata '{"source":"docs","priority":"high"}'
+```
+
+### 소스 코드
+
+임베딩 CLI 소스코드는 `tools/embed/` 디렉토리에 있습니다:
+
+```
+tools/embed/
+├── Program.cs              # 메인 진입점
+├── embed.csproj            # 프로젝트 파일
+├── Services/
+│   ├── InferenceService.cs    # ONNX 추론
+│   ├── TokenizerService.cs    # 토크나이저
+│   ├── ModelManager.cs        # 모델 다운로드
+│   ├── CacheService.cs        # 캐싱
+│   └── PostProcessingService.cs  # 후처리
+├── Models/
+│   └── EmbeddingResult.cs  # 결과 모델
+└── Utils/
+    └── ConsoleLogger.cs    # 로거
+```
+
+**빌드 방법:**
+```powershell
+cd tools/embed
+dotnet publish -c Release -r win-x64 --self-contained
+```
+
+빌드된 바이너리는 `bin/Release/net8.0-windows/win-x64/publish/`에 생성됩니다.
+
 ---
 
 ## 검증 프로파일
@@ -255,7 +401,7 @@ Flow는 확장 상태를 통해 추가 검증/리뷰 단계를 동적으로 추�
 
 | 확장 ID | 설명 | 기본 상태 |
 |---------|------|----------|
-| `STRUCTURE_REVIEW` | 구조/리팩토링 리뷰 | ✅ 활성화 |
+| `STRUCTURE_REVIEW` | 구조/리팩토링 리뷰 | ❌ 비활성화 |
 | `DESIGN_REVIEW` | 설계/아키텍처 리뷰 | ❌ 비활성화 |
 | `TEST_SUGGESTION` | 테스트 케이스 제안 | ❌ 비활성화 |
 | `SECURITY_REVIEW` | 보안 취약점 검토 | ❌ 비활성화 |
@@ -272,18 +418,18 @@ EXECUTING → VALIDATING → [확장 상태들] → COMPLETED
 
 ### 새 확장 추가 방법
 
-`/flow.ext` 명령어를 사용하거나 `extensions.json` 파일을 직접 수정:
+`@flow.ext` 명령어를 사용하거나 `extensions.json` 파일을 직접 수정:
 
 ```bash
 # 확장 추가
-/flow.ext add MY_REVIEW VALIDATING에서 커스텀 리뷰 실행
+@flow.ext add MY_REVIEW VALIDATING에서 커스텀 리뷰 실행
 
 # 확장 활성화/비활성화
-/flow.ext enable MY_REVIEW
-/flow.ext disable MY_REVIEW
+@flow.ext enable MY_REVIEW
+@flow.ext disable MY_REVIEW
 
 # 확장 목록 조회
-/flow.ext list
+@flow.ext list
 ```
 
 또는 `extensions.json` 직접 수정:
