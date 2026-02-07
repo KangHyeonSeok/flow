@@ -9,3 +9,4 @@
 .flow/bin/flow.pdb
 /tools/flow-cli/bin
 /tools/flow-cli/obj
+/testscript

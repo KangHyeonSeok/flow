@@ -5,7 +5,8 @@ public static class ConsoleHelper
     public static string Confirm(string prompt, int? timeoutSeconds = null, string? defaultValue = null)
     {
         Console.Error.Write($"{prompt} (y/n)");
-        if (defaultValue != null) Console.Error.Write($" [{defaultValue}]");
+        defaultValue ??= "y";
+        Console.Error.Write($" [{defaultValue}]");
         Console.Error.Write(": ");
         Console.Error.Flush();
 

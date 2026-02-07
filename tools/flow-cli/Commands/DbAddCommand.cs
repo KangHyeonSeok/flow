@@ -11,8 +11,8 @@ public partial class FlowApp
         [Option("content", Description = "Document content")] string content = "",
         [Option("tags", Description = "Canonical tags (comma-separated)")] string tags = "",
         [Option("commit-id", Description = "Git commit hash")] string commitId = "",
-        [Option("plan", Description = "Path to plan.md")] string? planPath = null,
-        [Option("result", Description = "Path to result.md")] string? resultPath = null,
+        [Option("plan", Description = "Path to plan.md (default: current feature plan)")] string? planPath = null,
+        [Option("result", Description = "Path to result.md (default: current feature result)")] string? resultPath = null,
         [Option("pretty", Description = "Pretty print JSON output")] bool pretty = false)
     {
         try
@@ -22,25 +22,27 @@ public partial class FlowApp
 
             var (featureName, context) = StateService.GetCurrentState();
 
-            // Resolve plan text from file path
+            // Resolve plan text from file path (default to current feature plan)
             var planText = "";
-            if (planPath != null)
-            {
-                var resolved = Path.IsPathRooted(planPath)
+            var resolvedPlanPath = string.IsNullOrWhiteSpace(planPath)
+                ? (string.IsNullOrEmpty(featureName) ? null : PathResolver.GetPlanPath(featureName))
+                : (Path.IsPathRooted(planPath)
                     ? planPath
-                    : Path.Combine(PathResolver.ProjectRoot, planPath);
-                if (File.Exists(resolved)) planText = File.ReadAllText(resolved);
-            }
+                    : Path.Combine(PathResolver.ProjectRoot, planPath));
 
-            // Resolve result text from file path
+            if (!string.IsNullOrEmpty(resolvedPlanPath) && File.Exists(resolvedPlanPath))
+                planText = File.ReadAllText(resolvedPlanPath);
+
+            // Resolve result text from file path (default to current feature result)
             var resultText = "";
-            if (resultPath != null)
-            {
-                var resolved = Path.IsPathRooted(resultPath)
+            var resolvedResultPath = string.IsNullOrWhiteSpace(resultPath)
+                ? (string.IsNullOrEmpty(featureName) ? null : PathResolver.GetResultPath(featureName))
+                : (Path.IsPathRooted(resultPath)
                     ? resultPath
-                    : Path.Combine(PathResolver.ProjectRoot, resultPath);
-                if (File.Exists(resolved)) resultText = File.ReadAllText(resolved);
-            }
+                    : Path.Combine(PathResolver.ProjectRoot, resultPath));
+
+            if (!string.IsNullOrEmpty(resolvedResultPath) && File.Exists(resolvedResultPath))
+                resultText = File.ReadAllText(resolvedResultPath);
 
             var record = new TaskRecord
             {
