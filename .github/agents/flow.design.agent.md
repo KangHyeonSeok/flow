@@ -73,8 +73,9 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 
 ### 4. REVIEW_LOOP
 
-* **행동**: 설계 완료 후 `code docs/flow/implements/designs/{feature_name}.md` 와 `flow human-input`을 실행하여 사용자 승인을 받는다.
-* **명령**: `flow human-input --type confirm --prompt "설계 승인하시겠습니까?" --timeout 600 --default "y" --pretty`
+* 1) 설계 완료 후 `code docs/flow/implements/designs/{feature_name}.md`로 설계문서를 연다.
+* 2) `flow human-input --type confirm --prompt "설계 승인하시겠습니까?" --timeout 600 --default "y" --pretty`을 실행하여 사용자 승인을 받는다.
+
 * **규칙**: 승인 없이 다음 단계(BACKLOG_GENERATION) 진입 절대 금지.
 * **반복**: 요구사항이 있다면 설계에 반영 후 다시 `flow human-input`으로 승인 요청.
 * **전이**: 승인 시, AI는 즉시 BACKLOG_GENERATION을 수행한다.
