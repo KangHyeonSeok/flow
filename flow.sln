@@ -6,6 +6,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{07C2787E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "embed", "tools\embed\embed.csproj", "{8424977C-81FD-F072-726A-307B2DF65103}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "flow-cli", "tools\flow-cli\flow-cli.csproj", "{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -16,12 +18,17 @@ Global
 		{8424977C-81FD-F072-726A-307B2DF65103}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8424977C-81FD-F072-726A-307B2DF65103}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8424977C-81FD-F072-726A-307B2DF65103}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8424977C-81FD-F072-726A-307B2DF65103} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{B8F5E3A1-9D2C-4F6B-A7E8-1C3D5F8A2B4E} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {FB296C30-59F6-4D1C-839A-FC45229D1F91}

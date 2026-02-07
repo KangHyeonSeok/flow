@@ -6,3 +6,6 @@
 .flow/rag/bin/DirectML.pdb
 .flow/rag/bin/DirectML.Debug.pdb
 .flow/rag/db/local.db
+.flow/bin/flow.pdb
+/tools/flow-cli/bin
+/tools/flow-cli/obj
