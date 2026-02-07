@@ -101,39 +101,28 @@ else
     exit 1
 fi
 
-# .claude 폴더 복사 (있으면)
-if [ -d "$TEMP_DIR/.claude" ]; then
-    cp -r "$TEMP_DIR/.claude" ".claude"
-fi
-
 # .github/prompts 폴더 복사 (있으면)
 if [ -d "$TEMP_DIR/prompts" ]; then
     if find "$TEMP_DIR/prompts" -mindepth 1 -maxdepth 1 -print -quit | read -r; then
         mkdir -p ".github/prompts"
         cp -r "$TEMP_DIR/prompts/." ".github/prompts/"
-        
-        # .claude/commands 폴더에도 복사 (prompt 제거)
-        mkdir -p ".claude/commands"
-        while IFS= read -r -d '' prompt_file; do
-            rel_path="${prompt_file#$TEMP_DIR/prompts/}"
-            rel_dir=$(dirname "$rel_path")
-            rel_base=$(basename "$rel_path")
-            target_base="${rel_base//.prompt/}"
-            if [ "$rel_dir" = "." ]; then
-                target_rel="$target_base"
-            else
-                target_rel="$rel_dir/$target_base"
-            fi
-            target_path=".claude/commands/$target_rel"
-            mkdir -p "$(dirname "$target_path")"
-            cp "$prompt_file" "$target_path"
-        done < <(find "$TEMP_DIR/prompts" -type f -print0)
     fi
+fi
+
+# .github/agents 폴더 복사 (있으면)
+if [ -d "$TEMP_DIR/.github/agents" ]; then
+    mkdir -p ".github/agents"
+    cp -r "$TEMP_DIR/.github/agents/." ".github/agents/"
+fi
+
+# flow.ps1 복사 (있으면)
+if [ -f "$TEMP_DIR/flow.ps1" ]; then
+    cp "$TEMP_DIR/flow.ps1" "./flow.ps1"
 fi
 
 # 필수 디렉토리 사전 생성
 mkdir -p ".github/prompts"
-mkdir -p ".claude/commands"
+mkdir -p ".github/agents"
 mkdir -p "docs"
 mkdir -p "docs/flow"
 mkdir -p "docs/flow/backlogs"

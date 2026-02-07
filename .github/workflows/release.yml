@@ -53,20 +53,15 @@ jobs:
 
       - name: Create zip archive
         run: |
-          mkdir -p temp-release/prompts
+          mkdir -p temp-release/.github
           cp -r .flow temp-release/
-          # .claude 폴더 복사하되 commands 폴더는 제외
-          if [ -d .claude ]; then
-            mkdir -p temp-release/.claude
-            for item in .claude/*; do
-              if [ "$(basename "$item")" != "commands" ]; then
-                cp -r "$item" temp-release/.claude/
-              fi
-            done
+          find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
+          if [ -d .github/agents ]; then
+            cp -r .github/agents temp-release/.github/
           fi
-          cp -r .github/prompts/* temp-release/prompts/
+          cp flow.ps1 temp-release/
           cd temp-release
-          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ .claude/ prompts/
+          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ .github/ flow.ps1
           cd ..
           rm -rf temp-release
 

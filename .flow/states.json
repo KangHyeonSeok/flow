@@ -3,38 +3,38 @@
     "IDLE": {
       "description": "대기 상태. 새 작업 시작 가능",
       "transitions": ["EXECUTING"],
-      "allowed_commands": ["pop-backlog", "state", "db-query", "db-add", "human-input", "config"],
-      "agent_instruction": "pop-backlog --preview로 큐를 확인하라. 작업이 있으면 pop-backlog로 시작하고, 큐가 비어있으면 설계 에이전트에게 핸드오프하라."
+      "allowed_commands": ["to-executing", "state", "db-query", "db-add", "human-input", "config"],
+      "agent_instruction": "to-executing --preview로 큐를 확인하라. 작업이 있으면 to-executing으로 시작하고, 큐가 비어있으면 설계 에이전트에게 핸드오프하라."
     },
     "EXECUTING": {
       "description": "구현 진행 중",
       "transitions": ["VALIDATING", "BLOCKED"],
-      "allowed_commands": ["state", "complete", "db-query"],
-      "agent_instruction": "plan.md의 실행 단계를 순차적으로 수행하라. 완료되면 complete --summary로 검증 단계로 전이하라. 해결 불가능한 문제가 발생하면 BLOCKED로 전이하라."
+      "allowed_commands": ["state", "to-validating", "to-blocked", "db-query"],
+      "agent_instruction": "plan.md의 실행 단계를 순차적으로 수행하라. 완료되면 to-validating --summary로 검증 단계로 전환하라. 해결 불가능한 문제가 발생하면 to-blocked --reason으로 전환하라."
     },
     "VALIDATING": {
       "description": "검증 실행 중",
       "transitions": ["COMPLETED", "RETRYING", "BLOCKED"],
-      "allowed_commands": ["state", "db-query", "finalize"],
-      "agent_instruction": "plan.md의 검증 방법과 완료 조건을 실행하라. 빌드/테스트/린트를 수행하라. 모든 검증을 통과하면 COMPLETED로, 실패하면 RETRYING으로 전이하라."
+      "allowed_commands": ["state", "to-completed", "to-retrying", "to-blocked", "db-query"],
+      "agent_instruction": "plan.md의 검증 방법과 완료 조건을 실행하라. 빌드/테스트/린트를 수행하라. 모든 검증을 통과하면 to-completed --validation으로, 실패하면 to-retrying --error로 전환하라."
     },
     "RETRYING": {
       "description": "재시도 중 (최대 5회)",
       "transitions": ["VALIDATING", "BLOCKED"],
-      "allowed_commands": ["state", "complete", "db-query"],
-      "agent_instruction": "retry_count를 확인하라(5회 초과 시 BLOCKED). 에러 로그를 분석하고 db-query로 유사 해결책을 검색하라. 수정 후 complete로 재검증하라."
+      "allowed_commands": ["state", "to-validating", "to-blocked", "db-query"],
+      "agent_instruction": "retry_count를 확인하라(5회 초과 시 to-blocked 호출). 에러 로그를 분석하고 db-query로 유사 해결책을 검색하라. 수정 후 to-validating --summary로 재검증하라."
     },
     "COMPLETED": {
       "description": "작업 완료, 정리 대기",
       "transitions": ["IDLE"],
-      "allowed_commands": ["state", "finalize", "db-add"],
-      "agent_instruction": "result.md를 작성하라. db-add로 작업 기록을 저장하라(content, tags, plan, result). finalize --reason으로 IDLE로 복귀하라."
+      "allowed_commands": ["state", "to-idle", "db-add"],
+      "agent_instruction": "result.md를 작성하라. db-add로 작업 기록을 저장하라(content, tags, plan, result). to-idle --reason으로 IDLE로 복귀하라."
     },
     "BLOCKED": {
       "description": "차단됨, 사람 개입 필요",
       "transitions": ["IDLE"],
-      "allowed_commands": ["state", "finalize", "human-input"],
-      "agent_instruction": "result.md에 시도한 내용과 실패 원인을 기록하라. finalize --reason으로 IDLE로 복귀하라."
+      "allowed_commands": ["state", "to-idle", "human-input", "db-add"],
+      "agent_instruction": "result.md에 시도한 내용과 실패 원인을 기록하라. db-add로 실패 사례를 저장하라. to-idle --reason으로 IDLE로 복귀하라."
     }
   }
 }

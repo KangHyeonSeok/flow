@@ -225,13 +225,6 @@ try {
         }
     }
 
-    # .claude 폴더 복사 (있으면)
-    $extractedClaude = Join-Path $tempDir ".claude"
-    $claudeDir = Join-Path (Get-Location) ".claude"
-    if (Test-Path $extractedClaude) {
-        Copy-Item -Path $extractedClaude -Destination $claudeDir -Recurse -Force
-    }
-
     # .github/prompts 폴더 복사 (있으면)
     $extractedPrompts = Join-Path $tempDir "prompts"
     if (Test-Path $extractedPrompts) {
@@ -240,27 +233,23 @@ try {
         New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
         Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
         
-        # .claude/commands 폴더에도 복사 (prompt 제거)
-        $claudeCommandsDir = Join-Path (Get-Location) ".claude/commands"
-        New-Item -ItemType Directory -Path $claudeCommandsDir -Force | Out-Null
-        $basePromptPath = (Resolve-Path -LiteralPath $extractedPrompts).Path
-        Get-ChildItem -Path $extractedPrompts -File -Recurse | ForEach-Object {
-            $filePath = (Resolve-Path -LiteralPath $_.FullName).Path
-            $relativePath = $filePath.Substring($basePromptPath.Length).TrimStart('\', '/')
-            $targetRelative = $relativePath -replace '\.prompt', ''
-            $targetPath = Join-Path $claudeCommandsDir $targetRelative
-            $targetDir = Split-Path -Path $targetPath -Parent
-            if (-not (Test-Path $targetDir)) {
-                New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-            }
-            Copy-Item -Path $_.FullName -Destination $targetPath -Force
-        }
+    }
+    
+    # .github/agents 폴더 복사 (있으면)
+    if (Test-Path $tempDir/.github/agents) {
+        New-Item -ItemType Directory -Path .github/agents -Force | Out-Null
+        Copy-Item -Path $tempDir/.github/agents/* -Destination .github/agents -Recurse -Force
+    }
+
+    # flow.ps1 복사 (있으면)
+    if (Test-Path $tempDir/flow.ps1) {
+        Copy-Item -Path $tempDir/flow.ps1 -Destination ./flow.ps1 -Force
     }
     
     # 필수 디렉토리 사전 생성
     $requiredDirs = @(
         ".github/prompts",
-        ".claude/commands",
+        ".github/agents",
         "docs",
         "docs/flow",
         "docs/flow/backlogs",
