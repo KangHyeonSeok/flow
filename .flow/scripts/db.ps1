@@ -13,7 +13,7 @@ sqlite-vec 기반 벡터 저장 및 하이브리드 검색을 위한 CLI 인터�
 검색할 텍스트 (--query "질문")
 
 .PARAMETER Tags
-태그 목록 (쉼표 구분, --tags "tag1,tag2")
+태그 목록 (쉼표 구분 문자열 또는 배열, -tags "tag1,tag2" 또는 -tags tag1,tag2)
 
 .PARAMETER Metadata
 메타데이터 JSON (--metadata '{"key":"value"}')
@@ -44,7 +44,8 @@ sqlite-vec 기반 벡터 저장 및 하이브리드 검색을 위한 CLI 인터�
 param(
     [string]$Add,
     [string]$Query,
-    [string]$Tags,
+    [Parameter()]
+    [object]$Tags,  # string 또는 string[] 모두 받을 수 있도록 object로 변경
     [string]$Metadata = "{}",
     [int]$TopK = 5,
     [string]$DbPath,
@@ -70,10 +71,19 @@ if (-not (Test-Path $argParser)) {
 
 $boundKeys = @($PSBoundParameters.Keys | Where-Object { $_ -ne 'RawArgs' })
 if ($boundKeys.Count -gt 0) {
+    # Tags를 string으로 정규화 (배열이면 쉼표로 조인)
+    $normalizedTags = if ($Tags -is [array]) {
+        $Tags -join ','
+    } elseif ($Tags) {
+        [string]$Tags
+    } else {
+        ""
+    }
+    
     $parsed = [pscustomobject]@{
         Add = $Add
         Query = $Query
-        Tags = $Tags
+        Tags = $normalizedTags
         Metadata = $Metadata
         TopK = $TopK
         DbPath = $DbPath
@@ -129,9 +139,10 @@ Flow RAG Database CLI
 옵션:
     -add              추가할 텍스트
     -query            검색할 질문
-    -tags             태그 목록 (쉼표 구분)
+    -tags             태그 목록 (쉼표 구분 문자열 또는 배열)
+                      예: -tags "tag1,tag2" 또는 -tags tag1,tag2
     -metadata         메타데이터 JSON
-    -topk             검색 결과 수 (기본값: 5)
+    -topk             검색 결과 수 (기본값: 5, 숫자만 입력)
     -db               데이터베이스 경로
     -init             데이터베이스 초기화
     -help, -h         도움말 표시
@@ -139,8 +150,18 @@ Flow RAG Database CLI
 예시:
     ./.flow/scripts/db.ps1 -add "오늘 날씨는 맑습니다."
     ./.flow/scripts/db.ps1 -add "AI 기술" -tags "artificial_intelligence,deep_learning"
+    ./.flow/scripts/db.ps1 -add "AI 기술" -tags artificial_intelligence,deep_learning
     ./.flow/scripts/db.ps1 -query "날씨 어때?" -topk 3
+    ./.flow/scripts/db.ps1 -query "텍스트 아트" -tags "text_art,powershell" -topk 5
     ./.flow/scripts/db.ps1 -init
+
+일반적인 오류:
+    ❌ -tags "tag1","tag2","tag3"     (따옴표로 구분된 개별 문자열)
+    ✅ -tags "tag1,tag2,tag3"         (쉼표로 구분된 하나의 문자열)
+    ✅ -tags tag1,tag2,tag3           (인용부호 없는 배열)
+    
+    ❌ -topk "5"                      (문자열)
+    ✅ -topk 5                        (숫자)
 
 "@
     exit 0
