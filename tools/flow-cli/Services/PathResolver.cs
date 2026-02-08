@@ -15,7 +15,7 @@ public class PathResolver
     public string CurrentStatePath { get; }
     public string SettingsPath { get; }
     public string StatesPath { get; }
-    public string RagDbPath { get; }
+    public virtual string RagDbPath { get; }
     public string EmbedExePath { get; }
 
     public PathResolver()
@@ -24,6 +24,24 @@ public class PathResolver
             ?? throw new InvalidOperationException(
                 ".flow directory not found. Are you in a Flow project?");
 
+        FlowRoot = Path.Combine(ProjectRoot, ".flow");
+        DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
+        BacklogsDir = Path.Combine(DocsDir, "backlogs");
+        ImplementsDir = Path.Combine(DocsDir, "implements");
+        MetaDir = Path.Combine(DocsDir, "meta");
+        CurrentStatePath = Path.Combine(MetaDir, "current_state.json");
+        SettingsPath = Path.Combine(FlowRoot, "settings.json");
+        StatesPath = Path.Combine(FlowRoot, "states.json");
+        RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
+        EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
+    }
+
+    /// <summary>
+    /// Protected constructor for testing. Accepts a project root path directly.
+    /// </summary>
+    protected PathResolver(string projectRoot)
+    {
+        ProjectRoot = projectRoot;
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
         BacklogsDir = Path.Combine(DocsDir, "backlogs");
