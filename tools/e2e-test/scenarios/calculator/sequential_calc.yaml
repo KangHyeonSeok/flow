@@ -1,0 +1,36 @@
+meta:
+  app: flutter-calculator
+  platform: flutter
+  resolution: 1080x1920
+  timeout: 60
+  description: "5 × 4 - 2 = 18 연속 계산 테스트"
+
+steps:
+  - type: click
+    target: "btn_5"
+
+  - type: click
+    target: "btn_mul"
+
+  - type: click
+    target: "btn_4"
+
+  - type: click
+    target: "btn_minus"
+
+  - type: click
+    target: "btn_2"
+
+  - type: click
+    target: "btn_eq"
+
+  - type: wait
+    ms: 500
+
+  - type: screenshot
+    target: "result"
+
+assert:
+  - type: screenshot
+    name: "result"
+    description: "디스플레이에 18이 표시되어야 한다"

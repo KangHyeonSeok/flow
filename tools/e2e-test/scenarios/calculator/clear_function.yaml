@@ -1,0 +1,40 @@
+meta:
+  app: flutter-calculator
+  platform: flutter
+  resolution: 1080x1920
+  timeout: 60
+  description: "클리어 기능 테스트 (999 → C → 0)"
+
+steps:
+  - type: click
+    target: "btn_9"
+
+  - type: click
+    target: "btn_9"
+
+  - type: click
+    target: "btn_9"
+
+  - type: wait
+    ms: 200
+
+  - type: screenshot
+    target: "before_clear"
+
+  - type: click
+    target: "btn_clear"
+
+  - type: wait
+    ms: 200
+
+  - type: screenshot
+    target: "after_clear"
+
+assert:
+  - type: screenshot
+    name: "before_clear"
+    description: "999가 디스플레이에 표시되어야 한다"
+
+  - type: screenshot
+    name: "after_clear"
+    description: "0이 디스플레이에 표시되어야 한다"

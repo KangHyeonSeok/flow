@@ -122,15 +122,27 @@ class GeminiValidator:
         self.model_name = model_name or self.DEFAULT_MODEL
         self.confidence_threshold = confidence_threshold
         self._last_request_time = 0.0
-        self._model = None
+        self._client = None
 
-    def _get_model(self):
-        """Lazy-initialize the Gemini model."""
-        if self._model is None:
-            import google.generativeai as genai
-            genai.configure(api_key=self.api_key)
-            self._model = genai.GenerativeModel(self.model_name)
-        return self._model
+    def _get_client(self):
+        """Lazy-initialize the Gemini GenAI client."""
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(api_key=self.api_key)
+        return self._client
+
+    @staticmethod
+    def _get_image_mime_type(image) -> str:
+        """Infer MIME type from a PIL image object."""
+        format_name = (getattr(image, "format", "") or "").lower()
+        if format_name in ("jpeg", "jpg"):
+            return "image/jpeg"
+        if format_name == "png":
+            return "image/png"
+        if format_name == "webp":
+            return "image/webp"
+        return "image/png"
 
     def validate_screenshot(
         self,
@@ -178,11 +190,23 @@ class GeminiValidator:
             prompt = template.format(expected=expected)
 
             # Call Gemini API
-            model = self._get_model()
-            response = model.generate_content([prompt, image])
+            from google.genai import types
+
+            client = self._get_client()
+            response = client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    types.Part.from_text(text=prompt),
+                    types.Part.from_bytes(
+                        data=image_bytes,
+                        mime_type=self._get_image_mime_type(image),
+                    ),
+                ],
+            )
 
             # Parse response
-            result = self._parse_response(response.text)
+            response_text = response.text if hasattr(response, "text") else str(response)
+            result = self._parse_response(response_text)
 
             # Check confidence threshold
             warning = None
