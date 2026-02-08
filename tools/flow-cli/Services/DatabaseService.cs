@@ -14,6 +14,8 @@ public class DatabaseService : IDisposable
     private int? _embeddingDimension;
     private bool _vectorIndexChecked;
     private SqliteConnection? _connection;
+    private readonly SemaphoreSlim _indexQueue = new(1, 1);
+    private Task? _indexWorker;
 
     /// <summary>Default embedding dimension (BGE-M3 model = 1024).</summary>
     public const int DefaultEmbeddingDimension = 1024;
@@ -177,68 +179,82 @@ public class DatabaseService : IDisposable
 
     /// <summary>
     /// Indexes all unindexed documents into vec_documents.
-    /// Skips silently if vector tables don't exist (sqlite-vec not loaded).
-    /// Sets _vectorIndexChecked flag to avoid repeated attempts.
+    /// Runs in background and queues sequentially when called multiple times.
     /// </summary>
-    public async Task EnsureVectorIndexAsync()
+    public Task EnsureVectorIndexAsync()
     {
-        if (_vectorIndexChecked) return;
-        _vectorIndexChecked = true;
-
         var conn = GetConnection();
+        if (!VectorTablesExist(conn)) return Task.CompletedTask;
 
-        // Check if vector tables exist (sqlite-vec might not be loaded)
-        if (!VectorTablesExist(conn)) return;
+        // queue a single background worker; it will process until caught up
+        return _indexWorker ??= Task.Run(ProcessIndexQueueAsync);
+    }
 
-        // Find unindexed documents
-        var unindexedDocs = new List<(int id, string content)>();
-        using (var cmd = conn.CreateCommand())
+    private async Task ProcessIndexQueueAsync()
+    {
+        await _indexQueue.WaitAsync().ConfigureAwait(false);
+        try
         {
-            cmd.CommandText = """
-                SELECT d.id, d.content
-                FROM documents d
-                LEFT JOIN vector_index_meta vim ON d.id = vim.document_id
-                WHERE vim.document_id IS NULL
-                """;
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-                unindexedDocs.Add((reader.GetInt32(0), reader.GetString(1)));
-        }
+            var conn = GetConnection();
+            if (!VectorTablesExist(conn)) return;
 
-        if (unindexedDocs.Count == 0) return;
-
-        Console.WriteLine($"Indexing {unindexedDocs.Count} documents...");
-        int indexed = 0;
-
-        foreach (var (id, content) in unindexedDocs)
-        {
-            var embedding = await GetEmbeddingAsync(content).ConfigureAwait(false);
-            if (embedding == null)
+            while (true)
             {
-                Console.Error.WriteLine($"Warning: Failed to generate embedding for document {id}");
-                continue;
+                var unindexedDocs = new List<(int id, string content)>();
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = """
+                        SELECT d.id, d.content
+                        FROM documents d
+                        LEFT JOIN vector_index_meta vim ON d.id = vim.document_id
+                        WHERE vim.document_id IS NULL
+                        """;
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                        unindexedDocs.Add((reader.GetInt32(0), reader.GetString(1)));
+                }
+
+                if (unindexedDocs.Count == 0) break;
+
+                Console.WriteLine($"Indexing {unindexedDocs.Count} documents...");
+                int indexed = 0;
+
+                foreach (var (id, content) in unindexedDocs)
+                {
+                    var embedding = await GetEmbeddingAsync(content).ConfigureAwait(false);
+                    if (embedding == null)
+                    {
+                        Console.Error.WriteLine($"Warning: Failed to generate embedding for document {id}");
+                        continue;
+                    }
+
+                    using var insertCmd = conn.CreateCommand();
+                    insertCmd.CommandText = "INSERT INTO vec_documents(rowid, embedding) VALUES (@rowid, @embedding)";
+                    insertCmd.Parameters.AddWithValue("@rowid", id);
+                    insertCmd.Parameters.AddWithValue("@embedding", SerializeVector(embedding));
+                    insertCmd.ExecuteNonQuery();
+
+                    using var metaCmd = conn.CreateCommand();
+                    metaCmd.CommandText = """
+                        INSERT INTO vector_index_meta(document_id, indexed_at, embedding_version)
+                        VALUES (@docId, datetime('now'), 'v1')
+                        """;
+                    metaCmd.Parameters.AddWithValue("@docId", id);
+                    metaCmd.ExecuteNonQuery();
+
+                    indexed++;
+                    if (indexed % 10 == 0)
+                        Console.WriteLine($"  Indexed {indexed}/{unindexedDocs.Count} documents...");
+                }
+
+                Console.WriteLine($"Indexed {indexed}/{unindexedDocs.Count} documents.");
             }
-
-            using var insertCmd = conn.CreateCommand();
-            insertCmd.CommandText = "INSERT INTO vec_documents(rowid, embedding) VALUES (@rowid, @embedding)";
-            insertCmd.Parameters.AddWithValue("@rowid", id);
-            insertCmd.Parameters.AddWithValue("@embedding", SerializeVector(embedding));
-            insertCmd.ExecuteNonQuery();
-
-            using var metaCmd = conn.CreateCommand();
-            metaCmd.CommandText = """
-                INSERT INTO vector_index_meta(document_id, indexed_at, embedding_version)
-                VALUES (@docId, datetime('now'), 'v1')
-                """;
-            metaCmd.Parameters.AddWithValue("@docId", id);
-            metaCmd.ExecuteNonQuery();
-
-            indexed++;
-            if (indexed % 10 == 0)
-                Console.WriteLine($"  Indexed {indexed}/{unindexedDocs.Count} documents...");
         }
-
-        Console.WriteLine($"Indexed {indexed}/{unindexedDocs.Count} documents.");
+        finally
+        {
+            _indexWorker = null;
+            _indexQueue.Release();
+        }
     }
 
     /// <summary>Checks if vec_documents and vector_index_meta tables exist.</summary>
@@ -286,7 +302,9 @@ public class DatabaseService : IDisposable
         cmd.Parameters.AddWithValue("@state", record.StateAtCreation);
         cmd.Parameters.AddWithValue("@metadata", record.Metadata);
 
-        return Convert.ToInt32(cmd.ExecuteScalar());
+        var id = Convert.ToInt32(cmd.ExecuteScalar());
+        _ = EnsureVectorIndexAsync(); // fire-and-forget background indexing
+        return id;
     }
 
     /// <summary>Search documents by text content and/or tags with hybrid scoring.</summary>
