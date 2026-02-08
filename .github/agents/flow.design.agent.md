@@ -110,7 +110,7 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 
 ### 7. QUEUE_OPTIMIZATION
 
-* **확인**: queue에 미해결 기능이 있다면 미해결 기능들을 삭제하고 새 기능들을 추가 할 것인지 병합할것인지 물어본다.
+* **확인**: `docs/flow/backlogs/queue` 파일을 읽어보고 기존 작업이 있다면 미해결 기능들을 삭제하고 새 기능들을 추가 할 것인지 기존 작업을 남겨 두고 아래에 붙일 것인지 물어본다. 없거나 비었다면 사용자에게 물어보지 않는다.
 * **행동**: 의존성 그래프를 분석하여 `docs/flow/backlogs/queue` 파일을 생성/업데이트한다. queue파일은 {task_name}을 나열한 파일이다.
 * **정렬 기준**:
   1. **의존성**: 타 기능의 기반이 되는 모듈 우선.
