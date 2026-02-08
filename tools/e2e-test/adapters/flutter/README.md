@@ -26,30 +26,24 @@ Flutter 앱에 **HTTP 서버**와 **UDP 비콘**을 내장하여, 외부 테스�
 
 ### 1. 의존성 추가
 
-`pubspec.yaml`에 다음 패키지를 추가합니다:
+`pubspec.yaml`에 패키지를 추가합니다:
 
 ```yaml
 dependencies:
   flutter:
     sdk: flutter
-  shelf: ^1.4.2
+  flow_e2e_flutter:
+    git:
+      url: https://github.com/KangHyeonSeok/flow
+      path: tools/e2e-test/adapters/flutter
 ```
 
 ### 2. E2E 코드 통합
 
-프로젝트에 `lib/e2e/` 디렉토리를 만들고 다음 파일을 추가합니다:
-
-| 파일 | 역할 |
-|------|------|
-| `e2e_beacon.dart` | UDP 브로드캐스트 (포트 51320) |
-| `e2e_server.dart` | HTTP 서버 (포트 51321) |
-| `scenario_executor.dart` | 시나리오 스텝 실행 엔진 |
-| `e2e_wrapper.dart` | RepaintBoundary 래퍼 + 서비스 시작 |
-
 `main.dart`에 조건부 컴파일을 적용합니다:
 
 ```dart
-import 'e2e/e2e_wrapper.dart';
+import 'package:flow_e2e_flutter/flow_e2e_flutter.dart';
 
 const kE2ETests = bool.fromEnvironment('E2E_TESTS');
 
@@ -59,7 +53,11 @@ void main() {
   Widget app = const MyApp();
 
   if (kE2ETests) {
-    app = E2EWrapper(child: app);
+    app = E2EWrapper(
+      child: app,
+      appName: 'my-flutter-app',
+      version: '1.0.0',
+    );
   }
 
   runApp(app);

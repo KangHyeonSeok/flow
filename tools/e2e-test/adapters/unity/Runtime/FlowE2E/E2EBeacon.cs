@@ -4,9 +4,8 @@
 // 1초 간격으로 로컬 네트워크에 JSON 메시지를 브로드캐스트합니다.
 //
 // 사용법:
-//   1. 이 파일을 Assets/Scripts/E2E/ 폴더에 복사
-//   2. E2EServer와 같은 GameObject에 E2EBeacon 컴포넌트 추가
-//   3. Scripting Define Symbols에 E2E_TESTS 추가
+//   1. E2EServer와 같은 GameObject에 E2EBeacon 컴포넌트 추가
+//   2. Scripting Define Symbols에 E2E_TESTS 추가
 //
 // 브로드캐스트 메시지:
 //   {
@@ -120,7 +119,7 @@ namespace FlowE2E
             }
             catch (SocketException ex)
             {
-                // Network temporarily unavailable — skip this cycle
+                // Network temporarily unavailable -- skip this cycle
                 if (debugLog)
                     Debug.LogWarning($"[E2EBeacon] Broadcast failed: {ex.Message}");
             }

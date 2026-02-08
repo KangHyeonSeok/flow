@@ -7,10 +7,10 @@ import 'package:flutter/rendering.dart';
 /// Executes E2E test scenario steps against the live Flutter Widget tree.
 ///
 /// Supports step types:
-/// - `click` — Find widget by ValueKey and invoke onPressed/onTap
-/// - `wait` — Delay for specified milliseconds
-/// - `screenshot` — Capture current screen as PNG (base64)
-/// - `input` — Set text on an InputField
+/// - `click` -- Find widget by ValueKey and invoke onPressed/onTap
+/// - `wait` -- Delay for specified milliseconds
+/// - `screenshot` -- Capture current screen as PNG (base64)
+/// - `input` -- Set text on an InputField
 class ScenarioExecutor {
   /// Key of the RepaintBoundary wrapping the app for screenshots.
   final GlobalKey screenshotKey;
@@ -54,7 +54,7 @@ class ScenarioExecutor {
         final step = steps[i];
         _addLog(
           'info',
-          'Step $_currentStep/$_totalSteps: ${step['type']} → ${step['target'] ?? ''}',
+          'Step $_currentStep/$_totalSteps: ${step['type']} -- ${step['target'] ?? ''}',
         );
 
         await executeStep(step);
@@ -92,16 +92,13 @@ class ScenarioExecutor {
     final target = step['target'] as String? ?? '';
     if (target.isEmpty) throw Exception('Click step requires target');
 
-    // Find the Element with matching ValueKey
     final element = _findElementByValueKey(target);
     if (element == null) {
       throw Exception('Widget not found: $target');
     }
 
-    // Find a tappable ancestor (Button, GestureDetector, InkWell, etc.)
     bool tapped = false;
 
-    // Walk the element tree looking for something tappable
     void visitor(Element el) {
       if (tapped) return;
 
@@ -110,7 +107,6 @@ class ScenarioExecutor {
       if (widget is ElevatedButton ||
           widget is TextButton ||
           widget is OutlinedButton) {
-        // For button widgets, find the onPressed callback
         if (widget is ElevatedButton && widget.onPressed != null) {
           widget.onPressed!();
           tapped = true;
@@ -143,13 +139,9 @@ class ScenarioExecutor {
       el.visitChildren(visitor);
     }
 
-    // First check if the element itself is tappable
     visitor(element);
 
-    // If not, check ancestors
     if (!tapped) {
-      // The element with the key might be a child of the button.
-      // Walk up to find a tappable parent.
       Element? current = element;
       while (current != null && !tapped) {
         final widget = current.widget;
@@ -168,11 +160,10 @@ class ScenarioExecutor {
         }
 
         if (!tapped) {
-          // Walk up
           Element? parent;
           current.visitAncestorElements((ancestor) {
             parent = ancestor;
-            return false; // stop at first parent
+            return false;
           });
           current = parent;
         }
@@ -183,7 +174,6 @@ class ScenarioExecutor {
       throw Exception('No tappable widget found for: $target');
     }
 
-    // Give the framework a frame to process the state change
     onStateChanged?.call();
     await Future.delayed(const Duration(milliseconds: 50));
     _addLog('info', 'Clicked $target');
@@ -198,13 +188,11 @@ class ScenarioExecutor {
   Future<void> _executeScreenshot(Map<String, dynamic> step) async {
     final name = step['target'] as String? ?? 'screenshot_$_currentStep';
 
-    // Wait for current frame to finish rendering
     await Future.delayed(const Duration(milliseconds: 100));
 
     try {
-      final boundary =
-          screenshotKey.currentContext?.findRenderObject()
-              as RenderRepaintBoundary?;
+      final boundary = screenshotKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('RepaintBoundary not found for screenshot');
       }
@@ -237,7 +225,6 @@ class ScenarioExecutor {
       throw Exception('Widget not found: $target');
     }
 
-    // Find TextField/TextFormField in subtree
     bool inputSet = false;
     void visitor(Element el) {
       if (inputSet) return;
@@ -258,39 +245,9 @@ class ScenarioExecutor {
 
     onStateChanged?.call();
     await Future.delayed(const Duration(milliseconds: 50));
-    _addLog('info', 'Input "$text" into $target');
+    _addLog('info', 'Input set for $target');
   }
 
-  /// Find an Element in the tree by ValueKey<String>.
-  Element? _findElementByValueKey(String keyValue) {
-    final context = screenshotKey.currentContext;
-    if (context == null) return null;
-
-    Element? found;
-    void visitor(Element element) {
-      if (found != null) return;
-      final key = element.widget.key;
-      if (key is ValueKey<String> && key.value == keyValue) {
-        found = element;
-        return;
-      }
-      element.visitChildren(visitor);
-    }
-
-    // Start from the root context
-    (context as Element).visitChildren(visitor);
-    return found;
-  }
-
-  void _addLog(String level, String message) {
-    _logs.add({
-      'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'level': level,
-      'message': message,
-    });
-  }
-
-  /// Build result map for HTTP response.
   Map<String, dynamic> toResultMap() {
     return {
       'status': _status,
@@ -302,12 +259,26 @@ class ScenarioExecutor {
     };
   }
 
-  void reset() {
-    _screenshots.clear();
-    _logs.clear();
-    _status = 'idle';
-    _currentStep = 0;
-    _totalSteps = 0;
-    _error = null;
+  void _addLog(String level, String message) {
+    _logs.add({
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'level': level,
+      'message': message,
+    });
+  }
+
+  Element? _findElementByValueKey(String key) {
+    Element? result;
+    void visitor(Element element) {
+      if (result != null) return;
+      if (element.widget.key == ValueKey<String>(key)) {
+        result = element;
+        return;
+      }
+      element.visitChildren(visitor);
+    }
+
+    WidgetsBinding.instance.rootElement?.visitChildren(visitor);
+    return result;
   }
 }

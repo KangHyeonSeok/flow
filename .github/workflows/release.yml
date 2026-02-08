@@ -43,7 +43,7 @@ jobs:
         run: |
           git add VERSION
           git commit -m "chore: bump version to v${{ steps.bump.outputs.version }} [skip release]"
-          git tag "v${{ steps.bump.outputs.version }}"
+          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
           git push origin HEAD:main
           git push origin "v${{ steps.bump.outputs.version }}"
 

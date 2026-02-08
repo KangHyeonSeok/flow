@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'calculator_screen.dart';
-import 'e2e/e2e_wrapper.dart';
+import 'package:flow_e2e_flutter/flow_e2e_flutter.dart';
 
 /// Whether E2E test mode is enabled.
 /// Pass `--dart-define=E2E_TESTS=true` at build/run time to activate.
@@ -12,7 +12,9 @@ void main() {
   final app = const CalculatorApp();
 
   if (kE2ETests) {
-    runApp(E2EWrapper(child: app));
+    runApp(
+      E2EWrapper(child: app, appName: 'flutter-calculator', version: '1.0.0'),
+    );
   } else {
     runApp(app);
   }

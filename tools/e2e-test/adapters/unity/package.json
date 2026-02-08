@@ -1,0 +1,16 @@
+{
+  "name": "com.flow.e2e",
+  "version": "0.1.0",
+  "displayName": "Flow E2E Adapter",
+  "description": "Flow E2E test adapter for Unity apps.",
+  "unity": "2021.3",
+  "keywords": [
+    "flow",
+    "e2e",
+    "testing",
+    "unity"
+  ],
+  "author": {
+    "name": "Flow"
+  }
+}

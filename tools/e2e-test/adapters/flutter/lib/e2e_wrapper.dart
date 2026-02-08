@@ -7,20 +7,19 @@ import 'scenario_executor.dart';
 ///
 /// Wraps the app with a RepaintBoundary for screenshots,
 /// starts the HTTP server and UDP beacon.
-///
-/// Usage in main.dart:
-/// ```dart
-/// const isE2E = bool.fromEnvironment('E2E_TESTS');
-/// if (isE2E) {
-///   runApp(E2EWrapper(child: const CalculatorApp()));
-/// } else {
-///   runApp(const CalculatorApp());
-/// }
-/// ```
 class E2EWrapper extends StatefulWidget {
   final Widget child;
+  final String appName;
+  final int httpPort;
+  final String version;
 
-  const E2EWrapper({super.key, required this.child});
+  const E2EWrapper({
+    super.key,
+    required this.child,
+    required this.appName,
+    this.httpPort = E2EServer.defaultPort,
+    this.version = '0.0.0',
+  });
 
   @override
   State<E2EWrapper> createState() => _E2EWrapperState();
@@ -39,16 +38,20 @@ class _E2EWrapperState extends State<E2EWrapper> {
     _executor = ScenarioExecutor(
       screenshotKey: _screenshotKey,
       onStateChanged: () {
-        // Force rebuild to update UI after click actions
         if (mounted) setState(() {});
       },
     );
 
-    _server = E2EServer(executor: _executor, port: E2EServer.defaultPort);
+    _server = E2EServer(
+      executor: _executor,
+      port: widget.httpPort,
+      appName: widget.appName,
+    );
 
     _beacon = E2EBeacon(
-      httpPort: E2EServer.defaultPort,
-      appName: 'flutter-calculator',
+      httpPort: widget.httpPort,
+      appName: widget.appName,
+      version: widget.version,
     );
 
     _startServices();
@@ -58,7 +61,7 @@ class _E2EWrapperState extends State<E2EWrapper> {
     try {
       await _server.start();
       await _beacon.start();
-      print('[E2E] Services started — ready for test connections');
+      print('[E2E] Services started -- ready for test connections');
     } catch (e) {
       print('[E2E] Failed to start services: $e');
     }

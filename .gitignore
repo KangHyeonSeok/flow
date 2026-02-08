@@ -13,3 +13,4 @@
 /tools/flow-cli.Tests
 /.flow/rag/bin/models
 examples/testimage/testimage.png
+/.github/skills/skill-creator

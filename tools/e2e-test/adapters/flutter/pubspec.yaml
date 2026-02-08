@@ -1,0 +1,12 @@
+name: flow_e2e_flutter
+version: 0.1.0
+description: Flow E2E test adapter for Flutter apps.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shelf: ^1.4.2

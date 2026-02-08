@@ -35,9 +35,13 @@ E2E_TESTS
 
 > ⚠️ 릴리즈 빌드에서는 반드시 제거하세요.
 
-### 2. 스크립트 설치
+### 2. 패키지 설치 (UPM)
 
-`E2EServer.cs`와 `E2EBeacon.cs`를 Unity 프로젝트의 `Assets/Scripts/E2E/` 폴더에 복사합니다.
+Unity Package Manager에서 Git URL을 추가합니다:
+
+```
+https://github.com/KangHyeonSeok/flow.git?path=tools/e2e-test/adapters/unity
+```
 
 ### 3. 씬 설정
 

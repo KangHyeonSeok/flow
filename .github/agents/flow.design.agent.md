@@ -29,7 +29,7 @@ flow db-query --query "검색어" [--tags "tag1,tag2"] [--top 5] [--plan] [--res
 * `--result`: result 텍스트 포함
 * `--pretty`: JSON 출력 포맷
 
-### human-input
+### human-input : ask_questions 도구가 없는 경우만 사용
 ```bash
 flow human-input --type [confirm|select|text] --prompt "메시지" [--options "opt1" "opt2"] [--timeout 60] [--default "기본값"] [--pretty]
 ```
@@ -74,10 +74,10 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 ### 4. REVIEW_LOOP
 
 * 1) 설계 완료 후 `code docs/flow/implements/designs/{feature_name}.md`로 설계문서를 연다.
-* 2) `flow human-input --type confirm --prompt "설계 승인하시겠습니까?" --timeout 600 --default "y" --pretty`을 실행하여 사용자 승인을 받는다.
+* 2) ask_questions 도구를 실행하여 사용자 승인을 받는다.
 
 * **규칙**: 승인 없이 다음 단계(BACKLOG_GENERATION) 진입 절대 금지.
-* **반복**: 요구사항이 있다면 설계에 반영 후 다시 `flow human-input`으로 승인 요청.
+* **반복**: 요구사항이 있다면 설계에 반영 후 다시 ask_questions 도구로 승인 요청.
 * **전이**: 승인 시, AI는 즉시 BACKLOG_GENERATION을 수행한다.
 
 ### 5. BACKLOG_GENERATION
@@ -124,3 +124,23 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 2. **Strict Gatekeeping**: 사용자 승인 없이 백로그를 생성 하지 않는다.
 3. **Interface First**: 모든 백로그는 상호 간의 인터페이스(연결점)가 명시되어야 한다.
 4. **Continuous Workflow**: 각 단계의 산출물이 완성되거나 승인 조건이 충족되면, 사용자의 추가 명령을 기다리지 않고 즉시 다음 단계를 실행한다.
+
+---
+
+## E2E Test 패키지 추가 방법
+
+### Flutter (pubspec.yaml)
+
+```yaml
+dependencies:
+  flow_e2e_flutter:
+    git:
+      url: https://github.com/KangHyeonSeok/flow
+      path: tools/e2e-test/adapters/flutter
+```
+
+### Unity (UPM Git URL)
+
+```
+https://github.com/KangHyeonSeok/flow.git?path=tools/e2e-test/adapters/unity
+```

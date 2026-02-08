@@ -214,6 +214,32 @@ try {
         }
     }
 
+    # skill-creator 스킬이 없으면 GitHub에서 다운로드
+    $skillCreatorPath = Join-Path (Get-Location) ".github\skills\skill-creator"
+    $skillCreatorMarker = Join-Path $skillCreatorPath "SKILL.md"
+    if (-not (Test-Path $skillCreatorMarker)) {
+        Write-Step "skill-creator 스킬 다운로드 중..."
+        $skillZipUrl = "https://github.com/anthropics/skills/archive/refs/heads/main.zip"
+        $skillTempZip = Join-Path ([System.IO.Path]::GetTempPath()) "skill-creator.zip"
+        $skillTempDir = Join-Path ([System.IO.Path]::GetTempPath()) "skill-creator-extract-$([Guid]::NewGuid().ToString('N'))"
+        try {
+            Invoke-WebRequest -Uri $skillZipUrl -OutFile $skillTempZip -UseBasicParsing
+            Expand-Archive -Path $skillTempZip -DestinationPath $skillTempDir -Force
+            $skillSource = Join-Path $skillTempDir "skills-main\skills\skill-creator"
+            if (-not (Test-Path $skillSource)) {
+                throw "skill-creator 경로를 찾을 수 없습니다."
+            }
+            New-Item -ItemType Directory -Path (Split-Path $skillCreatorPath) -Force | Out-Null
+            Copy-Item -Path $skillSource -Destination $skillCreatorPath -Recurse -Force
+            Write-Success "skill-creator 스킬 다운로드 완료"
+        } catch {
+            Write-Warning "skill-creator 다운로드 실패: $_"
+        } finally {
+            if (Test-Path $skillTempZip) { Remove-Item -Path $skillTempZip -Force }
+            if (Test-Path $skillTempDir) { Remove-Item -Path $skillTempDir -Recurse -Force }
+        }
+    }
+
     # sqlite-vec 확장 로딩 확인 (필요 시 sqlite3 설치)
     $vecPath = Join-Path $flowDir "rag\bin\vec0.dll"
     Ensure-SqliteExtensionSupport -VecPath $vecPath | Out-Null

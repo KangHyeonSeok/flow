@@ -7,7 +7,7 @@ import 'dart:io';
 /// Broadcasts connection info (app name, platform, port) on UDP port 51320
 /// at 1-second intervals so the Python E2E test tool can discover this app.
 ///
-/// Only active when `E2E_TESTS=true` dart define is set.
+/// Only active when `E2E_TESTS=true` dart define is set by the host app.
 class E2EBeacon {
   /// Fixed UDP discovery port (must match Python listener).
   static const int discoveryPort = 51320;
@@ -17,11 +17,16 @@ class E2EBeacon {
 
   final int httpPort;
   final String appName;
+  final String version;
 
   RawDatagramSocket? _socket;
   Timer? _timer;
 
-  E2EBeacon({required this.httpPort, this.appName = 'flutter-calculator'});
+  E2EBeacon({
+    required this.httpPort,
+    required this.appName,
+    required this.version,
+  });
 
   /// Start broadcasting.
   Future<void> start() async {
@@ -29,7 +34,7 @@ class E2EBeacon {
     _socket!.broadcastEnabled = true;
 
     _timer = Timer.periodic(interval, (_) => _broadcast());
-    _broadcast(); // Immediate first broadcast
+    _broadcast();
 
     print(
       '[E2EBeacon] Broadcasting on UDP port $discoveryPort '
@@ -44,14 +49,14 @@ class E2EBeacon {
       'app': appName,
       'platform': 'flutter',
       'port': httpPort,
-      'version': '1.0.0',
+      'version': version,
     });
 
     try {
       final data = utf8.encode(message);
       _socket!.send(data, InternetAddress('255.255.255.255'), discoveryPort);
-    } catch (e) {
-      // Network temporarily unavailable — skip this cycle
+    } catch (_) {
+      // Network temporarily unavailable -- skip this cycle.
     }
   }
 

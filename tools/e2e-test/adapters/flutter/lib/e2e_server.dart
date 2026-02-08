@@ -7,10 +7,10 @@ import 'scenario_executor.dart';
 /// HTTP server for E2E test communication.
 ///
 /// Endpoints:
-/// - POST /e2e/run    — Submit test scenario for execution
-/// - GET  /e2e/status — Poll execution status
-/// - GET  /e2e/result — Retrieve results (screenshots, logs)
-/// - GET  /e2e/health — Health check
+/// - POST /e2e/run    -- Submit test scenario for execution
+/// - GET  /e2e/status -- Poll execution status
+/// - GET  /e2e/result -- Retrieve results (screenshots, logs)
+/// - GET  /e2e/health -- Health check
 Map<String, String> _extractHeaders(HttpHeaders httpHeaders) {
   final map = <String, String>{};
   httpHeaders.forEach((name, values) {
@@ -23,12 +23,19 @@ class E2EServer {
   static const int defaultPort = 51321;
 
   final int port;
+  final String appName;
+  final String platform;
   final ScenarioExecutor executor;
 
   HttpServer? _server;
   String _sessionId = '';
 
-  E2EServer({required this.executor, this.port = defaultPort});
+  E2EServer({
+    required this.executor,
+    required this.appName,
+    this.platform = 'flutter',
+    this.port = defaultPort,
+  });
 
   /// Start the HTTP server.
   Future<void> start() async {
@@ -38,7 +45,6 @@ class E2EServer {
     print('[E2EServer] Listening on http://0.0.0.0:$port');
 
     _server!.listen((HttpRequest request) async {
-      // Convert HttpRequest to shelf Request, handle, and respond
       try {
         final shelfRequest = Request(
           request.method,
@@ -73,7 +79,6 @@ class E2EServer {
     final path = request.url.path;
     final method = request.method.toUpperCase();
 
-    // Match routes — status and result accept optional /:session_id suffix
     if (method == 'POST' && path == 'e2e/run') {
       return await _handleRun(request);
     }
@@ -103,12 +108,10 @@ class E2EServer {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       _sessionId = 'e2e-${DateTime.now().millisecondsSinceEpoch}';
 
-      // Unwrap: Python client sends {"scenario": {...}}, extract inner map
       final scenario = decoded.containsKey('scenario')
           ? decoded['scenario'] as Map<String, dynamic>
           : decoded;
 
-      // Start execution asynchronously (don't await — return immediately)
       Future.microtask(() => executor.executeScenario(scenario));
 
       return _jsonResponse(200, {
@@ -143,8 +146,8 @@ class E2EServer {
   Response _handleHealth() {
     return _jsonResponse(200, {
       'status': 'ok',
-      'app': 'flutter-calculator',
-      'platform': 'flutter',
+      'app': appName,
+      'platform': platform,
     });
   }
 
