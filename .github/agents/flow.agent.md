@@ -14,6 +14,9 @@ handoffs:
 * **Flow의 목적**: 중단 없는 작업 연속 실행.
 * 상태에서 명확하게 사용자의 개입이 필요하다고 지시 하지 않는 한 계속 작업 한다.
 
+## 준비
+* **초기화**: `.\flow.ps1 state IDLE --force`
+
 ## 실행
 
 * `./flow state`로 현재 상태를 확인 후 agent_instruction을 참고 하여 다음 행동을 한다.

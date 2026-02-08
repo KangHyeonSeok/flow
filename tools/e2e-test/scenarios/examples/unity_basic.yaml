@@ -1,0 +1,28 @@
+meta:
+  app: flow-editor
+  platform: unity
+  resolution: 1920x1080
+  timeout: 60
+  description: "Unity 기본 프로젝트 생성 테스트"
+
+steps:
+  - type: input
+    target: "#projectName"
+    text: "E2E Test Project"
+
+  - type: click
+    target: "#createButton"
+
+  - type: select
+    target: "#templateDropdown"
+    value: "Warehouse"
+
+  - type: wait
+    ms: 2000
+
+  - type: screenshot
+
+assert:
+  - type: screenshot
+    name: "project_created"
+    description: "Warehouse 템플릿이 적용된 프로젝트가 생성된 화면"

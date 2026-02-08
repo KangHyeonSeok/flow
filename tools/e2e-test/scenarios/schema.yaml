@@ -1,0 +1,53 @@
+# E2E Test Scenario Schema
+# 이 파일은 시나리오 YAML 파일의 구조를 정의합니다.
+
+# meta: 시나리오 메타정보 (필수)
+#   app: 테스트 대상 앱 이름 (필수)
+#   platform: unity | flutter (필수)
+#   resolution: 해상도 (기본: 1920x1080)
+#   timeout: 전체 타임아웃 초 (기본: 300)
+#   description: 시나리오 설명
+
+# steps: 테스트 단계 목록 (선택)
+#   - type: 단계 유형 (필수)
+#     지원 유형:
+#       input: 텍스트 입력 (target, text 필수)
+#       click: 요소 클릭 (target 필수)
+#       select: 드롭다운 선택 (target, value 필수)
+#       wait: 대기 (ms 필수)
+#       screenshot: 스크린샷 캡처
+
+# assert: 검증 목록 (선택)
+#   - type: 검증 유형 (필수)
+#     지원 유형:
+#       screenshot: 스크린샷 VLM 검증
+#       text: 텍스트 존재 확인
+#       element: UI 요소 존재 확인
+#   - name: 검증 이름 (필수)
+#   - description: 기대 결과 설명 (VLM 검증에 사용)
+
+# 예시:
+meta:
+  app: example-app
+  platform: unity
+  resolution: 1920x1080
+  timeout: 300
+  description: "스키마 예시 시나리오"
+
+steps:
+  - type: input
+    target: "#nameField"
+    text: "Test"
+
+  - type: click
+    target: "#submitButton"
+
+  - type: wait
+    ms: 1000
+
+  - type: screenshot
+
+assert:
+  - type: screenshot
+    name: "result_screen"
+    description: "제출 완료 화면이 표시되어야 한다"

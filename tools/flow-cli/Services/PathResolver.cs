@@ -66,6 +66,9 @@ public class PathResolver
     public string GetResultPath(string featureName)
         => Path.Combine(GetFeatureDir(featureName), "result.md");
 
+    public string GetTestReportPath(string featureName)
+        => Path.Combine(GetFeatureDir(featureName), "test_report.json");
+
     private static string? FindProjectRoot()
     {
         var current = Directory.GetCurrentDirectory();

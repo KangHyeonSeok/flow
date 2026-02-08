@@ -1,0 +1,26 @@
+meta:
+  app: flow-editor
+  platform: flutter
+  resolution: 1080x1920
+  timeout: 60
+  description: "Flutter 기본 네비게이션 테스트"
+
+steps:
+  - type: click
+    target: "#menuButton"
+
+  - type: wait
+    ms: 500
+
+  - type: click
+    target: "#settingsItem"
+
+  - type: wait
+    ms: 500
+
+  - type: screenshot
+
+assert:
+  - type: screenshot
+    name: "settings_page"
+    description: "설정 페이지가 표시되어야 한다"

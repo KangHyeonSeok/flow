@@ -11,3 +11,4 @@
 /tools/flow-cli/obj
 /testscript
 /tools/flow-cli.Tests
+/.flow/rag/bin/models

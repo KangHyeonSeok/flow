@@ -116,7 +116,6 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
   1. **의존성**: 타 기능의 기반이 되는 모듈 우선.
   2. **리스크**: 불확실성이 큰 핵심 로직 우선.
 * **보고**: `queue-rationale.md`에 정렬 근거를 표로 정리하여 `code queue-rationale.md`으로 보고.
-* **초기화**: `.\flow.ps1 state IDEL --force`
 ---
 
 ## 🚫 금지 및 주의 사항
