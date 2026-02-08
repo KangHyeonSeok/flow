@@ -49,7 +49,24 @@ public class EmbeddingBridge
         }
         catch
         {
-            return null;
+            // fall through to status handling
         }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(output.Trim());
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("status", out var status) &&
+                string.Equals(status.GetString(), "preparing", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+        }
+        catch
+        {
+            // ignore non-status payloads
+        }
+
+        return null;
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System.CommandLine;
 using System.Text.Json;
+using EmbedCLI.Models;
 using EmbedCLI.Services;
 
 namespace EmbedCLI;
@@ -18,7 +19,8 @@ class Program
             try
             {
                 var manager = new ModelManager();
-                var paths = await manager.EnsureModelFilesAsync();
+                var result = await manager.EnsureModelFilesAsync(backgroundDownload: false);
+                var paths = result.Paths!;
                 
                 Console.WriteLine("✅ Model files ready:");
                 Console.WriteLine($"  - Model: {paths.ModelPath}");
@@ -34,6 +36,26 @@ class Program
         });
         rootCommand.AddCommand(testDownloadCommand);
 
+        // download-model 명령어 (백그라운드 다운로드용)
+        var downloadModelCommand = new Command("download-model", "Download model files (internal)");
+        var downloadForceOption = new Option<bool>("--force", "Ignore existing download lock");
+        downloadModelCommand.AddOption(downloadForceOption);
+        downloadModelCommand.SetHandler(async (bool force) =>
+        {
+            try
+            {
+                var manager = new ModelManager();
+                _ = await manager.EnsureModelFilesAsync(backgroundDownload: false, ignoreExistingLock: force);
+                Console.WriteLine("OK");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"ERROR: {ex.Message}");
+                Environment.ExitCode = 1;
+            }
+        }, downloadForceOption);
+        rootCommand.AddCommand(downloadModelCommand);
+
         // test-tokenizer 명령어 (토크나이저 테스트)
         var testTokenizerCommand = new Command("test-tokenizer", "Test tokenizer functionality");
         var textArgument = new Argument<string>("text", () => "Hello World", "Text to tokenize");
@@ -43,7 +65,8 @@ class Program
             try
             {
                 var manager = new ModelManager();
-                var paths = await manager.EnsureModelFilesAsync();
+                var result = await manager.EnsureModelFilesAsync(backgroundDownload: false);
+                var paths = result.Paths!;
                 
                 var tokenizer = new TokenizerService(paths.TokenizerPath);
                 var output = tokenizer.Tokenize(text);
@@ -66,7 +89,8 @@ class Program
             try
             {
                 var manager = new ModelManager();
-                var paths = await manager.EnsureModelFilesAsync();
+                var result = await manager.EnsureModelFilesAsync(backgroundDownload: false);
+                var paths = result.Paths!;
                 
                 var tokenizer = new TokenizerService(paths.TokenizerPath);
                 using var inference = new InferenceService(paths.ModelPath);
@@ -106,7 +130,8 @@ class Program
             try
             {
                 var manager = new ModelManager();
-                var paths = await manager.EnsureModelFilesAsync();
+                var result = await manager.EnsureModelFilesAsync(backgroundDownload: false);
+                var paths = result.Paths!;
                 
                 var tokenizer = new TokenizerService(paths.TokenizerPath);
                 using var inference = new InferenceService(paths.ModelPath);
@@ -159,7 +184,8 @@ class Program
             try
             {
                 var manager = new ModelManager();
-                var paths = await manager.EnsureModelFilesAsync();
+                var result = await manager.EnsureModelFilesAsync(backgroundDownload: false);
+                var paths = result.Paths!;
                 
                 var tokenizer = new TokenizerService(paths.TokenizerPath);
                 var testText = "Benchmark test text for performance measurement.";
@@ -279,7 +305,16 @@ class Program
 
             // 서비스 초기화
             var manager = new ModelManager();
-            var paths = await manager.EnsureModelFilesAsync();
+            var result = await manager.EnsureModelFilesAsync(backgroundDownload: true);
+            if (result.Status == ModelAvailability.Preparing || result.Paths == null)
+            {
+                var status = new EmbedStatusResponse { Status = "preparing" };
+                var preparingJson = JsonSerializer.Serialize(status, EmbedJsonContext.Default.EmbedStatusResponse);
+                Console.WriteLine(preparingJson);
+                return 0;
+            }
+
+            var paths = result.Paths;
 
             var tokenizer = new TokenizerService(paths.TokenizerPath);
             using var inference = new InferenceService(paths.ModelPath);

@@ -25,3 +25,8 @@ public class EmbeddingResult
     /// </summary>
     public bool FromCache { get; init; }
 }
+
+public class EmbedStatusResponse
+{
+    public required string Status { get; init; }
+}
