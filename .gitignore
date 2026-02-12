@@ -14,3 +14,4 @@
 /.flow/rag/bin/models
 examples/testimage/testimage.png
 /.github/skills/skill-creator
+tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json

@@ -13,7 +13,7 @@ void main() {
 
   if (kE2ETests) {
     runApp(
-      E2EWrapper(child: app, appName: 'flutter-calculator', version: '1.0.0'),
+      E2EWrapper(appName: 'flutter-calculator', version: '1.0.0', child: app),
     );
   } else {
     runApp(app);

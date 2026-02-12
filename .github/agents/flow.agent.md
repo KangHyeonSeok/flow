@@ -19,4 +19,4 @@ handoffs:
 
 ## 실행
 
-* `./flow state`로 현재 상태를 확인 후 agent_instruction을 참고 하여 다음 행동을 한다.
+* `.\flow.ps1 state`로 현재 상태를 확인 후 agent_instruction을 참고 하여 다음 행동을 한다.

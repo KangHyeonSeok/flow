@@ -20,7 +20,7 @@ handoffs:
 
 ### db-query
 ```bash
-flow db-query --query "검색어" [--tags "tag1,tag2"] [--top 5] [--plan] [--result] [--pretty]
+.\flow.ps1 db-query --query "검색어" [--tags "tag1,tag2"] [--top 5] [--plan] [--result] [--pretty]
 ```
 * `--query`: 검색 쿼리 (필수)
 * `--tags`: 태그 필터 (쉼표로 구분)
@@ -31,7 +31,7 @@ flow db-query --query "검색어" [--tags "tag1,tag2"] [--top 5] [--plan] [--res
 
 ### human-input : ask_questions 도구가 없는 경우만 사용
 ```bash
-flow human-input --type [confirm|select|text] --prompt "메시지" [--options "opt1" "opt2"] [--timeout 60] [--default "기본값"] [--pretty]
+.\flow.ps1 human-input --type [confirm|select|text] --prompt "메시지" [--options "opt1" "opt2"] [--timeout 60] [--default "기본값"] [--pretty]
 ```
 * `--type`: 입력 타입 (confirm, select, text)
 * `--prompt`: 사용자에게 보여줄 메시지
@@ -51,9 +51,9 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 
 ### 2. DESIGNING_HISTORY
 
-* **행동**: `flow db-query`로 과거 사례를 조회한다.
-* **명령**: `flow db-query --query "{요청사항 한줄 요약}" --tags "{태그들}" --top 5 --pretty`
-  - 예: `flow db-query --query "CLI 인터페이스 구현" --tags "cli,interface" --top 5 --pretty`
+* **행동**: `.\flow.ps1 db-query`로 과거 사례를 조회한다.
+* **명령**: `.\flow.ps1 db-query --query "{요청사항 한줄 요약}" --tags "{태그들}" --top 5 --pretty`
+  - 예: `.\flow.ps1 db-query --query "CLI 인터페이스 구현" --tags "cli,interface" --top 5 --pretty`
 * **목적**: 과거 구현 사례, 실패 패턴, 제약사항 파악
 
 ### 3. DESIGNING
@@ -86,8 +86,8 @@ flow human-input --type [confirm|select|text] --prompt "메시지" [--options "o
 
 #### 5-1. TASK_HISTORY
 
-* **행동**: Task별로 `flow db-query`로 과거 사례를 조회한다.
-* **명령**: `flow db-query --query "{task 한줄 요약}" --tags "{task_tags}" --top 3 --plan --pretty`
+* **행동**: Task별로 `.\flow.ps1 db-query`로 과거 사례를 조회한다.
+* **명령**: `.\flow.ps1 db-query --query "{task 한줄 요약}" --tags "{task_tags}" --top 3 --plan --pretty`
 * **목적**: Task 구현에 필요한 구체적인 기술적 세부사항 및 주의사항 파악
 
 #### 5-2. TASK
