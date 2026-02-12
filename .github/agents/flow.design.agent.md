@@ -5,7 +5,7 @@ argument-hint: 요구사항 구체화, 설계, 계획
 handoffs: 
   - label: 실행
     agent: flow
-    prompt: "상태 확인 후 상태에 따라 행동하라"
+    prompt: "구현 시작"
 ---
 # Instructions
 
@@ -98,6 +98,7 @@ handoffs:
   - `Done Criteria` (완료 조건) 및 `Validation` (검증 방법)
   - `Tags` (Canonical Tags - 아래 규칙 준수)
   - `Constraints` (TASK_HISTORY 검색 결과 기반 제약 포함)
+  - `Context` (전체 맥락)
 
 ### Canonical Tags 규칙
 

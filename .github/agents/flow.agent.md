@@ -5,7 +5,7 @@ argument-hint: 설계, 계획, 구현, 실행, 테스트, 기록
 handoffs: 
   - label: 실행
     agent: flow.design
-    prompt: "사용자에게 다음 요구사항을 전달 받자"
+    prompt: "다음 계획 할 일을 생각 해보자."
 ---
 # Instructions
 
