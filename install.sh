@@ -5,6 +5,20 @@
 set -e
 
 REPO="${FLOW_REPO:-KangHyeonSeok/flow}"
+WITH_E2E="${FLOW_WITH_E2E:-0}"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --with-e2e)
+            WITH_E2E=1
+            ;;
+        --repo)
+            shift
+            REPO="$1"
+            ;;
+    esac
+    shift
+done
 
 # 색상 정의
 RED='\033[0;31m'
@@ -24,6 +38,63 @@ success() {
 
 warn() {
     echo -e "  ${YELLOW}⚠️ $1${NC}"
+}
+
+install_e2e() {
+    local release_json="$1"
+    local version="$2"
+    local e2e_url
+
+    e2e_url=$(echo "$release_json" | grep -o '"browser_download_url": *"[^"]*flow-e2e-test-[^"]*\.zip"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/')
+    if [ -z "$e2e_url" ]; then
+        warn "flow-e2e-test zip 파일을 찾을 수 없습니다."
+        return 1
+    fi
+
+    step "E2E 테스트 도구 설치 중..."
+    local e2e_temp_zip
+    local e2e_temp_dir
+    e2e_temp_zip=$(mktemp /tmp/flow-e2e-test-XXXXXX.zip)
+    e2e_temp_dir=$(mktemp -d /tmp/flow-e2e-extract-XXXXXX)
+
+    if command -v curl &> /dev/null; then
+        curl -fsSL -o "$e2e_temp_zip" "$e2e_url"
+    elif command -v wget &> /dev/null; then
+        wget -qO "$e2e_temp_zip" "$e2e_url"
+    else
+        warn "curl 또는 wget이 필요합니다."
+        rm -f "$e2e_temp_zip"
+        rm -rf "$e2e_temp_dir"
+        return 1
+    fi
+
+    unzip -q "$e2e_temp_zip" -d "$e2e_temp_dir"
+    rm -rf ".flow/e2e-test"
+
+    if [ -d "$e2e_temp_dir/e2e-test" ]; then
+        mkdir -p ".flow"
+        cp -r "$e2e_temp_dir/e2e-test" ".flow/e2e-test"
+        success "e2e-test 파일 설치 완료"
+    else
+        warn "e2e-test 폴더를 찾을 수 없습니다."
+        rm -f "$e2e_temp_zip"
+        rm -rf "$e2e_temp_dir"
+        return 1
+    fi
+
+    if command -v python &> /dev/null; then
+        step "E2E Python 환경 설정 중..."
+        (
+            cd ".flow/e2e-test"
+            python -m e2e_test.installer.venv_manager --setup
+        ) || warn "자동 Python 환경 설정에 실패했습니다. 수동 실행: cd .flow/e2e-test && python -m e2e_test.installer.venv_manager --setup"
+    else
+        warn "python 명령을 찾지 못해 자동 설정을 건너뜁니다."
+    fi
+
+    rm -f "$e2e_temp_zip"
+    rm -rf "$e2e_temp_dir"
+    success "Flow E2E v$version 설치 완료"
 }
 
 echo ""
@@ -46,7 +117,7 @@ else
 fi
 
 VERSION=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"v\?\([^"]*\)".*/\1/')
-DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*\.zip"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/')
+DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*flow-prompts-[^"]*\.zip"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/')
 
 if [ -z "$DOWNLOAD_URL" ]; then
     warn "zip 파일을 찾을 수 없습니다."
@@ -170,6 +241,10 @@ if [ ! -f "$SKILL_CREATOR_DIR/SKILL.md" ]; then
 fi
 
 success "설치 완료"
+
+if [ "$WITH_E2E" = "1" ]; then
+    install_e2e "$RELEASE_JSON" "$VERSION"
+fi
 
 # 5. 설치된 버전 확인
 INSTALLED_VERSION=""

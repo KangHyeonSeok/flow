@@ -5,7 +5,8 @@
 [CmdletBinding()]
 param(
     [string]$Repo = "KangHyeonSeok/flow",
-    [switch]$Force
+    [switch]$Force,
+    [switch]$WithE2E
 )
 
 $ErrorActionPreference = 'Stop'
@@ -127,7 +128,7 @@ $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 try {
     $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "PowerShell" }
     $version = $release.tag_name -replace '^v', ''
-    $zipAsset = $release.assets | Where-Object { $_.name -match '\.zip$' } | Select-Object -First 1
+    $zipAsset = $release.assets | Where-Object { $_.name -match '^flow-prompts-.*\.zip$' } | Select-Object -First 1
     
     if (-not $zipAsset) {
         throw "zip 파일을 찾을 수 없습니다."
@@ -243,6 +244,17 @@ try {
     # sqlite-vec 확장 로딩 확인 (필요 시 sqlite3 설치)
     $vecPath = Join-Path $flowDir "rag\bin\vec0.dll"
     Ensure-SqliteExtensionSupport -VecPath $vecPath | Out-Null
+
+    if ($WithE2E) {
+        $e2eInstaller = Join-Path $flowDir "scripts\install-e2e.ps1"
+        if (Test-Path $e2eInstaller) {
+            Write-Step "E2E 테스트 도구 설치 중..."
+            & $e2eInstaller -Repo $Repo -Version $version -Force:$Force
+        }
+        else {
+            Write-Warning "E2E 설치 스크립트를 찾지 못했습니다: $e2eInstaller"
+        }
+    }
 
     # RAG DB가 없으면 초기화
     $ragDbPath = Join-Path $flowDir "rag\db\local.db"

@@ -54,6 +54,7 @@ jobs:
       - name: Create zip archive
         run: |
           mkdir -p temp-release/.github
+          mkdir -p temp-e2e
           cp -r .flow temp-release/
           find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
           if [ -d .github/agents ]; then
@@ -63,7 +64,14 @@ jobs:
           cd temp-release
           zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ .github/ flow.ps1
           cd ..
+          cp -r tools/e2e-test temp-e2e/e2e-test
+          find temp-e2e/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find temp-e2e/e2e-test -type f -name "*.pyc" -delete
+          cd temp-e2e
+          zip -r ../flow-e2e-test-${{ steps.bump.outputs.version }}.zip e2e-test/
+          cd ..
           rm -rf temp-release
+          rm -rf temp-e2e
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -79,10 +87,21 @@ jobs:
             ```powershell
             irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
             ```
+
+            **Windows + E2E 포함 설치:**
+            ```powershell
+            $script = irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1
+            & ([scriptblock]::Create($script)) -WithE2E
+            ```
             
             **macOS / Linux:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+            ```
+
+            **macOS / Linux + E2E 포함 설치:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash -s -- --with-e2e
             ```
             
             ### 업데이트 방법
@@ -91,12 +110,29 @@ jobs:
             ```powershell
             irm https://raw.githubusercontent.com/${{ github.repository }}/main/update.ps1 | iex
             ```
+
+            **Windows + E2E 포함 업데이트:**
+            ```powershell
+            $script = irm https://raw.githubusercontent.com/${{ github.repository }}/main/update.ps1
+            & ([scriptblock]::Create($script)) -WithE2E
+            ```
             
             **macOS / Linux:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/update.sh | bash
             ```
+
+            **macOS / Linux + E2E 포함 업데이트:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/update.sh | bash -s -- --with-e2e
+            ```
+
+            **설치 후 E2E만 별도 설치(Windows):**
+            ```powershell
+            .\.flow\scripts\install-e2e.ps1
+            ```
           files: |
             flow-prompts-${{ steps.bump.outputs.version }}.zip
+            flow-e2e-test-${{ steps.bump.outputs.version }}.zip
           draft: false
           prerelease: false
