@@ -1,0 +1,35 @@
+{
+  "name": "unity",
+  "version": "0.1.43",
+  "description": "Unity 프로젝트 빌드/테스트/린트/실행 모듈",
+  "detect": {
+    "files": [
+      "Assets",
+      "ProjectSettings"
+    ],
+    "description": "Assets + ProjectSettings 디렉토리가 모두 있으면 Unity 프로젝트"
+  },
+  "scripts": {
+    "lint": "scripts/lint.ps1",
+    "build": "scripts/build.ps1",
+    "test": "scripts/test.ps1",
+    "run": "scripts/run.ps1"
+  },
+  "args": {
+    "BuildTarget": {
+      "type": "string",
+      "default": "Win64",
+      "description": "Unity 빌드 타겟 (Win64, Android, iOS, WebGL, Linux64, OSXUniversal)"
+    },
+    "TestPlatform": {
+      "type": "string",
+      "default": "EditMode",
+      "description": "테스트 플랫폼 (EditMode, PlayMode)"
+    },
+    "OutputPath": {
+      "type": "string",
+      "default": "build/output",
+      "description": "빌드 출력 경로"
+    }
+  }
+}

@@ -25,8 +25,8 @@ handoffs:
 * `--query`: 검색 쿼리 (필수)
 * `--tags`: 태그 필터 (쉼표로 구분)
 * `--top`: 반환할 결과 수 (기본값: 5)
-* `--plan`: plan 텍스트 포함
-* `--result`: result 텍스트 포함
+* `--plan`: 구현 게획 텍스트 포함
+* `--result`: 개발 결과 텍스트 포함
 * `--pretty`: JSON 출력 포맷
 
 ### human-input : ask_questions 도구가 없는 경우만 사용
@@ -125,23 +125,3 @@ handoffs:
 2. **Strict Gatekeeping**: 사용자 승인 없이 백로그를 생성 하지 않는다.
 3. **Interface First**: 모든 백로그는 상호 간의 인터페이스(연결점)가 명시되어야 한다.
 4. **Continuous Workflow**: 각 단계의 산출물이 완성되거나 승인 조건이 충족되면, 사용자의 추가 명령을 기다리지 않고 즉시 다음 단계를 실행한다.
-
----
-
-## E2E Test 패키지 추가 방법
-
-### Flutter (pubspec.yaml)
-
-```yaml
-dependencies:
-  flow_e2e_flutter:
-    git:
-      url: https://github.com/KangHyeonSeok/flow
-      path: tools/e2e-test/adapters/flutter
-```
-
-### Unity (UPM Git URL)
-
-```
-https://github.com/KangHyeonSeok/flow.git?path=tools/e2e-test/adapters/unity
-```

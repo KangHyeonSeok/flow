@@ -69,6 +69,23 @@ public class PathResolver
     public string GetTestReportPath(string featureName)
         => Path.Combine(GetFeatureDir(featureName), "test_report.json");
 
+    /// <summary>
+    /// 빌드 모듈 루트 디렉토리 (.flow/build/).
+    /// </summary>
+    public string BuildModulesDir => Path.Combine(FlowRoot, "build");
+
+    /// <summary>
+    /// 특정 플랫폼의 빌드 모듈 디렉토리 (.flow/build/{platform}/).
+    /// </summary>
+    public string GetBuildModulePath(string platform)
+        => Path.Combine(BuildModulesDir, platform);
+
+    /// <summary>
+    /// 특정 플랫폼의 빌드 모듈 매니페스트 경로.
+    /// </summary>
+    public string GetBuildManifestPath(string platform)
+        => Path.Combine(GetBuildModulePath(platform), "manifest.json");
+
     private static string? FindProjectRoot()
     {
         var current = Directory.GetCurrentDirectory();
