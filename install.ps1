@@ -292,5 +292,5 @@ Write-Host "══════════════════════�
 Write-Success "Flow Prompt v$installedVersion installed"
 Write-Host "═══════════════════════════════════════" -ForegroundColor Green
 Write-Host ""
-Write-Host "  사용법: Copilot Chat에서 /flow 입력" -ForegroundColor Gray
+Write-Host "  사용법: Copilot Chat에서 agent -> flow.design 변경" -ForegroundColor Gray
 Write-Host ""

@@ -257,5 +257,5 @@ echo -e "${GREEN}═════════════════════
 success "Flow Prompt v$INSTALLED_VERSION installed"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo ""
-echo "  사용법: Copilot Chat에서 /flow 입력"
+echo "    사용법: Copilot Chat에서 agent -> flow.design 변경"
 echo ""
