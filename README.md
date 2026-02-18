@@ -64,3 +64,39 @@ curl -fsSL https://raw.githubusercontent.com/KangHyeonSeok/flow/main/update.sh |
   ✅ Already up to date (v0.1.0)
 ═══════════════════════════════════════
 ```
+
+## Capture 사용법
+
+`flow.ps1 capture`는 화면/윈도우 캡처를 수행합니다.
+
+```powershell
+# 열려있는 윈도우 목록 확인
+.\flow.ps1 capture list-windows
+
+# 1번 모니터 캡처
+.\flow.ps1 capture monitor --index 0 --output .\.flow\tmp\monitor.png
+
+# 프로세스 이름으로 윈도우 캡처 (제목에 공백/특수문자가 있을 때 권장)
+.\flow.ps1 capture window --process Notepad --output .\.flow\tmp\notepad.png
+```
+
+## VLM 사용법
+
+`flow.ps1 vlm`은 `.flow/bin/gemini_vlm.py`를 실행해 Gemini VLM 검증을 수행합니다.
+이미지는 최대 3개까지 전달할 수 있습니다.
+
+사전 준비:
+
+- `GEMINI_API_KEY` 환경변수 설정 또는 `~/.flow/env`에 `GEMINI_API_KEY=...` 저장
+- Python 3.12+ 및 `google-genai`, `pillow` 설치
+
+```powershell
+# 단일 이미지 검증
+.\flow.ps1 vlm --image .\image1.png --expected "이미지가 어두운 테마의 에디터 화면인지 확인"
+
+# 다중 이미지(최대 3개) 비교/질의
+.\flow.ps1 vlm `
+	--image .\.flow\tmp\monitor.png `
+	--image .\.flow\tmp\notepad.png `
+	--expected "두 이미지의 차이를 설명해줘."
+```

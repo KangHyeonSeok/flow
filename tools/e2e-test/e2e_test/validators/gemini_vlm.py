@@ -1,22 +1,25 @@
-"""Gemini VLM (Vision Language Model) validator for E2E test screenshots.
+"""Gemini VLM proxy validator for E2E tests.
 
-Uses Google's Gemini Flash model to validate test screenshots
-against expected descriptions using visual understanding.
+E2E module delegates VLM execution to `.flow/bin/gemini_vlm.py`.
 """
 
+from __future__ import annotations
+
 import base64
-import io
 import json
 import os
-import time
-from dataclasses import dataclass, field
+import shutil
+import subprocess
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 
 @dataclass
 class VLMValidationResult:
     """Result of VLM screenshot validation."""
+
     passed: bool
     confidence: float
     reason: str
@@ -31,28 +34,12 @@ class VLMValidationResult:
 
 
 def load_api_key(env_path: Optional[Path] = None) -> str:
-    """Load Gemini API key from environment or config file.
+    """Load Gemini API key from environment or config file."""
 
-    Search order:
-    1. GEMINI_API_KEY environment variable
-    2. ~/.flow/env file
-
-    Args:
-        env_path: Custom path to env file. Default: ~/.flow/env
-
-    Returns:
-        API key string.
-
-    Raises:
-        FileNotFoundError: If no API key source is found.
-        ValueError: If env file exists but doesn't contain the key.
-    """
-    # Check environment variable first
     api_key = os.environ.get("GEMINI_API_KEY")
     if api_key:
         return api_key.strip()
 
-    # Check ~/.flow/env file
     if env_path is None:
         env_path = Path.home() / ".flow" / "env"
 
@@ -79,70 +66,27 @@ def load_api_key(env_path: Optional[Path] = None) -> str:
     )
 
 
-# Default prompt template for VLM validation
-VALIDATION_PROMPT = """You are a UI test validator. Analyze this screenshot.
-
-Expected: {expected}
-
-Does the screenshot match the expected result?
-Answer ONLY in JSON format (no markdown, no extra text):
-{{
-  "pass": true or false,
-  "confidence": 0.0 to 1.0,
-  "reason": "detailed explanation"
-}}
-"""
-
-
 class GeminiValidator:
-    """Validates E2E test screenshots using Gemini VLM.
-
-    Uses Google's Gemini Flash model to analyze screenshots
-    and determine if they match expected test outcomes.
-    """
+    """Delegates screenshot validation to `.flow/bin/gemini_vlm.py`."""
 
     DEFAULT_MODEL = "gemini-2.0-flash"
     DEFAULT_CONFIDENCE_THRESHOLD = 0.8
-    MIN_REQUEST_INTERVAL = 0.1  # seconds between API calls
+    DEFAULT_TEMPERATURE = 0.0
+    DEFAULT_TOP_P = 0.0
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         model_name: Optional[str] = None,
         confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+        temperature: float = DEFAULT_TEMPERATURE,
+        top_p: float = DEFAULT_TOP_P,
     ):
-        """Initialize Gemini validator.
-
-        Args:
-            api_key: Gemini API key. If None, loads from env/config.
-            model_name: Gemini model name. Default: gemini-2.0-flash.
-            confidence_threshold: Minimum confidence for pass. Default: 0.8.
-        """
-        self.api_key = api_key or load_api_key()
+        self.api_key = api_key
         self.model_name = model_name or self.DEFAULT_MODEL
         self.confidence_threshold = confidence_threshold
-        self._last_request_time = 0.0
-        self._client = None
-
-    def _get_client(self):
-        """Lazy-initialize the Gemini GenAI client."""
-        if self._client is None:
-            from google import genai
-
-            self._client = genai.Client(api_key=self.api_key)
-        return self._client
-
-    @staticmethod
-    def _get_image_mime_type(image) -> str:
-        """Infer MIME type from a PIL image object."""
-        format_name = (getattr(image, "format", "") or "").lower()
-        if format_name in ("jpeg", "jpg"):
-            return "image/jpeg"
-        if format_name == "png":
-            return "image/png"
-        if format_name == "webp":
-            return "image/webp"
-        return "image/png"
+        self.temperature = temperature
+        self.top_p = top_p
 
     def validate_screenshot(
         self,
@@ -150,161 +94,168 @@ class GeminiValidator:
         expected: str,
         prompt_template: Optional[str] = None,
     ) -> VLMValidationResult:
-        """Validate a screenshot against expected description.
+        return self.validate_screenshots([screenshot_data], expected, prompt_template)
 
-        Args:
-            screenshot_data: Base64 encoded screenshot image.
-            expected: Description of what the screenshot should show.
-            prompt_template: Custom prompt template. Use {expected} placeholder.
-
-        Returns:
-            VLMValidationResult with pass/fail, confidence, and reason.
-        """
-        try:
-            from PIL import Image
-        except ImportError:
-            return VLMValidationResult(
-                passed=False,
-                confidence=0.0,
-                reason="Pillow not installed. Run: pip install pillow",
-            )
-
-        try:
-            # Decode screenshot
-            image_bytes = base64.b64decode(screenshot_data)
-            image = Image.open(io.BytesIO(image_bytes))
-
-            # Check image size (max 4MB)
-            if len(image_bytes) > 4 * 1024 * 1024:
-                return VLMValidationResult(
-                    passed=False,
-                    confidence=0.0,
-                    reason="Screenshot exceeds 4MB limit.",
-                )
-
-            # Rate limiting
-            self._rate_limit()
-
-            # Build prompt
-            template = prompt_template or VALIDATION_PROMPT
-            prompt = template.format(expected=expected)
-
-            # Call Gemini API
-            from google.genai import types
-
-            client = self._get_client()
-            response = client.models.generate_content(
-                model=self.model_name,
-                contents=[
-                    types.Part.from_text(text=prompt),
-                    types.Part.from_bytes(
-                        data=image_bytes,
-                        mime_type=self._get_image_mime_type(image),
-                    ),
-                ],
-            )
-
-            # Parse response
-            response_text = response.text if hasattr(response, "text") else str(response)
-            result = self._parse_response(response_text)
-
-            # Check confidence threshold
-            warning = None
-            if result["confidence"] < self.confidence_threshold:
-                warning = f"Low confidence: {result['confidence']:.2f} (threshold: {self.confidence_threshold})"
-
-            return VLMValidationResult(
-                passed=result["pass"],
-                confidence=result["confidence"],
-                reason=result["reason"],
-                warning=warning,
-            )
-
-        except Exception as e:
-            return VLMValidationResult(
-                passed=False,
-                confidence=0.0,
-                reason=f"VLM validation error: {str(e)}",
-            )
-
-    def validate_screenshot_file(
+    def validate_screenshots(
         self,
-        screenshot_path: Path,
+        screenshot_data_list: Sequence[str],
+        expected: str,
+        prompt_template: Optional[str] = None,
+    ) -> VLMValidationResult:
+        if not screenshot_data_list:
+            return VLMValidationResult(False, 0.0, "At least one screenshot is required.")
+        if len(screenshot_data_list) > 3:
+            return VLMValidationResult(
+                False,
+                0.0,
+                f"Maximum 3 screenshots supported (got {len(screenshot_data_list)}).",
+            )
+
+        prompt = expected
+        if prompt_template:
+            try:
+                prompt = prompt_template.format(expected=expected, image_count=len(screenshot_data_list))
+            except KeyError:
+                prompt = prompt_template.format(expected=expected)
+
+        with tempfile.TemporaryDirectory(prefix="flow-vlm-") as tmp_dir:
+            image_paths: list[Path] = []
+            for index, screenshot_data in enumerate(screenshot_data_list):
+                try:
+                    image_bytes = base64.b64decode(screenshot_data)
+                except Exception as e:
+                    return VLMValidationResult(False, 0.0, f"Invalid base64 screenshot data: {e}")
+
+                image_path = Path(tmp_dir) / f"image_{index + 1}.png"
+                image_path.write_bytes(image_bytes)
+                image_paths.append(image_path)
+
+            return self._invoke_flow_vlm(image_paths, prompt)
+
+    def validate_screenshot_file(self, screenshot_path: Path, expected: str) -> VLMValidationResult:
+        return self.validate_screenshot_files([screenshot_path], expected)
+
+    def validate_screenshot_files(
+        self,
+        screenshot_paths: Sequence[Path],
         expected: str,
     ) -> VLMValidationResult:
-        """Validate a screenshot file against expected description.
-
-        Args:
-            screenshot_path: Path to screenshot image file.
-            expected: Description of what the screenshot should show.
-
-        Returns:
-            VLMValidationResult.
-        """
-        screenshot_path = Path(screenshot_path)
-        if not screenshot_path.exists():
+        if not screenshot_paths:
+            return VLMValidationResult(False, 0.0, "At least one screenshot path is required.")
+        if len(screenshot_paths) > 3:
             return VLMValidationResult(
-                passed=False,
-                confidence=0.0,
-                reason=f"Screenshot file not found: {screenshot_path}",
+                False,
+                0.0,
+                f"Maximum 3 screenshots supported (got {len(screenshot_paths)}).",
             )
 
-        with open(screenshot_path, "rb") as f:
-            data = base64.b64encode(f.read()).decode("utf-8")
+        normalized: list[Path] = []
+        for screenshot_path in screenshot_paths:
+            path = Path(screenshot_path)
+            if not path.exists():
+                return VLMValidationResult(False, 0.0, f"Screenshot file not found: {path}")
+            normalized.append(path)
 
-        return self.validate_screenshot(data, expected)
+        return self._invoke_flow_vlm(normalized, expected)
 
-    def _rate_limit(self) -> None:
-        """Enforce minimum interval between API requests."""
-        elapsed = time.time() - self._last_request_time
-        if elapsed < self.MIN_REQUEST_INTERVAL:
-            time.sleep(self.MIN_REQUEST_INTERVAL - elapsed)
-        self._last_request_time = time.time()
+    def _invoke_flow_vlm(self, image_paths: Sequence[Path], expected: str) -> VLMValidationResult:
+        script_path = _resolve_flow_vlm_script()
+        if script_path is None:
+            return VLMValidationResult(
+                False,
+                0.0,
+                "Cannot find .flow/bin/gemini_vlm.py. Ensure Flow is installed and .flow/bin exists.",
+            )
 
-    @staticmethod
-    def _parse_response(text: str) -> dict:
-        """Parse Gemini response, extracting JSON.
+        python_cmd = _resolve_python_command(script_path)
+        if not python_cmd:
+            return VLMValidationResult(False, 0.0, "Python executable not found.")
 
-        Handles cases where the response may contain markdown code fences
-        or extra text around the JSON.
-        """
-        # Strip markdown code fences if present
-        text = text.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:])
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
+        args: list[str] = [str(script_path)]
+        for image_path in image_paths:
+            args.extend(["--image", str(image_path)])
+        args.extend(["--expected", expected])
+        args.extend(["--confidence", str(self.confidence_threshold)])
+        args.extend(["--temperature", str(self.temperature)])
+        args.extend(["--top-p", str(self.top_p)])
+        if self.model_name:
+            args.extend(["--model", self.model_name])
 
-        # Try to find JSON object
-        start = text.find("{")
-        end = text.rfind("}") + 1
+        env = os.environ.copy()
+        if self.api_key:
+            env["GEMINI_API_KEY"] = self.api_key
 
-        if start != -1 and end > start:
-            json_text = text[start:end]
-            try:
-                result = json.loads(json_text)
-                # Normalize field names
-                return {
-                    "pass": bool(result.get("pass", False)),
-                    "confidence": float(result.get("confidence", 0.0)),
-                    "reason": str(result.get("reason", "No reason provided")),
-                }
-            except (json.JSONDecodeError, KeyError, TypeError):
-                pass
+        try:
+            process = subprocess.run(
+                python_cmd + args,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return VLMValidationResult(False, 0.0, "VLM command timed out.")
+        except OSError as e:
+            return VLMValidationResult(False, 0.0, f"Failed to execute VLM command: {e}")
 
-        # Fallback: simple heuristic
-        text_lower = text.lower()
-        if "pass" in text_lower and "true" in text_lower:
-            return {
-                "pass": True,
-                "confidence": 0.5,
-                "reason": f"Heuristic parse from: {text[:200]}",
-            }
+        response_text = (process.stdout or process.stderr or "").strip()
+        parsed = _parse_json_payload(response_text)
+        if parsed is None:
+            return VLMValidationResult(False, 0.0, f"Cannot parse VLM response: {response_text[:200]}")
 
-        return {
-            "pass": False,
-            "confidence": 0.0,
-            "reason": f"Cannot parse VLM response: {text[:200]}",
-        }
+        return VLMValidationResult(
+            passed=bool(parsed.get("success", False)),
+            confidence=float(parsed.get("confidence", 0.0)),
+            reason=str(parsed.get("reason") or parsed.get("message") or "No reason provided"),
+            warning=parsed.get("warning"),
+        )
+
+
+def _parse_json_payload(raw: str) -> Optional[dict]:
+    raw = raw.strip()
+    if not raw:
+        return None
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            return json.loads(raw[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+
+
+def _resolve_flow_vlm_script() -> Optional[Path]:
+    current = Path(__file__).resolve()
+    candidates = [
+        current.parents[4] / ".flow" / "bin" / "gemini_vlm.py",  # repo/tools/e2e-test
+        current.parents[3] / "bin" / "gemini_vlm.py",              # ~/.flow/e2e-test
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _resolve_python_command(script_path: Path) -> list[str]:
+    candidates = [
+        script_path.parents[2] / ".venv" / "Scripts" / "python.exe",  # repo .venv
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return [str(candidate)]
+
+    if os.name == "nt":
+        py_launcher = shutil.which("py")
+        if py_launcher:
+            return [py_launcher, "-3"]
+
+    python_bin = shutil.which("python")
+    if python_bin:
+        return [python_bin]
+
+    return []
