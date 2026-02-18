@@ -26,6 +26,61 @@ function Write-Warning {
     Write-Host "  ⚠️ $Message" -ForegroundColor Yellow
 }
 
+function Resolve-PythonBootstrapCommand {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        return @("python")
+    }
+
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if ($py) {
+        return @("py", "-3")
+    }
+
+    return $null
+}
+
+function Ensure-VlmPythonEnvironment {
+    $venvDir = Join-Path (Get-Location) ".venv"
+    $venvPython = Join-Path $venvDir "Scripts\python.exe"
+
+    if (-not (Test-Path $venvPython)) {
+        $bootstrap = @(Resolve-PythonBootstrapCommand)
+        if (-not $bootstrap) {
+            Write-Warning "Python을 찾지 못해 VLM 가상환경 생성을 건너뜁니다. Python 3.12+ 설치 후 다시 실행하세요."
+            return $false
+        }
+
+        Write-Step "VLM Python 가상환경(.venv) 생성 중..."
+        $extraArgs = @()
+        if ($bootstrap.Length -gt 1) {
+            $extraArgs = $bootstrap[1..($bootstrap.Length - 1)]
+        }
+
+        & $bootstrap[0] @($extraArgs + @("-m", "venv", $venvDir))
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $venvPython)) {
+            Write-Warning "가상환경 생성 실패. 수동 실행: python -m venv .venv"
+            return $false
+        }
+    }
+
+    Write-Step "VLM 의존성 설치 중 (google-genai, pillow)..."
+    & $venvPython -m pip install --upgrade pip | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "pip 업그레이드 실패"
+        return $false
+    }
+
+    & $venvPython -m pip install --upgrade google-genai pillow
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "VLM 의존성 설치 실패. 수동 실행: .venv\Scripts\python.exe -m pip install -U google-genai pillow"
+        return $false
+    }
+
+    Write-Success "VLM Python 환경 준비 완료"
+    return $true
+}
+
 function Resolve-Sqlite3Path {
     if ($env:FLOW_SQLITE3_PATH -and (Test-Path $env:FLOW_SQLITE3_PATH)) {
         return $env:FLOW_SQLITE3_PATH
@@ -149,6 +204,8 @@ try {
 
 # 3. 버전 비교
 if ($currentVersion -eq $latestVersion -and -not $Force) {
+    Ensure-VlmPythonEnvironment | Out-Null
+
     Write-Host ""
     Write-Host "═══════════════════════════════════════" -ForegroundColor Green
     Write-Success "Already up to date (v$currentVersion)"
@@ -293,6 +350,8 @@ try {
     # sqlite-vec 확장 로딩 확인 (필요 시 sqlite3 설치)
     $vecPath = Join-Path $flowDir "rag\bin\vec0.dll"
     Ensure-SqliteExtensionSupport -VecPath $vecPath | Out-Null
+
+    Ensure-VlmPythonEnvironment | Out-Null
 
     if ($WithE2E) {
         $e2eInstaller = Join-Path $flowDir "scripts\install-e2e.ps1"

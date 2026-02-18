@@ -88,7 +88,8 @@ curl -fsSL https://raw.githubusercontent.com/KangHyeonSeok/flow/main/update.sh |
 사전 준비:
 
 - `GEMINI_API_KEY` 환경변수 설정 또는 `~/.flow/env`에 `GEMINI_API_KEY=...` 저장
-- Python 3.12+ 및 `google-genai`, `pillow` 설치
+- Python 3.12+ 설치
+- `install.ps1`/`update.ps1` 또는 `install.sh`/`update.sh` 실행 시 `.venv`와 `google-genai`, `pillow` 자동 설치
 
 ```powershell
 # 단일 이미지 검증

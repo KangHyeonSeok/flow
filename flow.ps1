@@ -5,6 +5,11 @@ function Resolve-PythonCommand {
 		return @($workspaceVenvPython)
 	}
 
+	$workspaceVenvUnixPython = Join-Path $PSScriptRoot ".venv/bin/python"
+	if (Test-Path $workspaceVenvUnixPython) {
+		return @($workspaceVenvUnixPython)
+	}
+
 	$python = Get-Command python -ErrorAction SilentlyContinue
 	if ($python) {
 		return @("python")
@@ -35,7 +40,7 @@ if ($args.Count -gt 0 -and $args[0] -eq "vlm") {
 
 	$pythonCommand = @(Resolve-PythonCommand)
 	if (-not $pythonCommand) {
-		Write-Error "Python executable not found. Install Python 3.12+ and retry."
+		Write-Error "Python executable not found. Run install/update script to auto-setup .venv, or install Python 3.12+ and retry."
 		exit 1
 	}
 

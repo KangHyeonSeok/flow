@@ -40,6 +40,50 @@ warn() {
     echo -e "  ${YELLOW}⚠️ $1${NC}"
 }
 
+resolve_python_command() {
+    if command -v python3 &> /dev/null; then
+        echo "python3"
+        return 0
+    fi
+    if command -v python &> /dev/null; then
+        echo "python"
+        return 0
+    fi
+    return 1
+}
+
+setup_vlm_python_environment() {
+    local venv_python=".venv/bin/python"
+
+    if [ ! -x "$venv_python" ]; then
+        local py_cmd
+        if ! py_cmd=$(resolve_python_command); then
+            warn "python을 찾지 못해 VLM 가상환경 생성을 건너뜁니다. Python 3.12+ 설치 후 다시 실행하세요."
+            return 1
+        fi
+
+        step "VLM Python 가상환경(.venv) 생성 중..."
+        "$py_cmd" -m venv .venv || {
+            warn "가상환경 생성 실패. 수동 실행: python -m venv .venv"
+            return 1
+        }
+    fi
+
+    step "VLM 의존성 설치 중 (google-genai, pillow)..."
+    "$venv_python" -m pip install --upgrade pip > /dev/null || {
+        warn "pip 업그레이드 실패"
+        return 1
+    }
+
+    "$venv_python" -m pip install --upgrade google-genai pillow || {
+        warn "VLM 의존성 설치 실패. 수동 실행: .venv/bin/python -m pip install -U google-genai pillow"
+        return 1
+    }
+
+    success "VLM Python 환경 준비 완료"
+    return 0
+}
+
 install_e2e() {
     local release_json="$1"
     local version="$2"
@@ -134,6 +178,8 @@ step "최신 버전: $LATEST_VERSION"
 
 # 3. 버전 비교
 if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
+    setup_vlm_python_environment || true
+
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════${NC}"
     success "Already up to date (v$CURRENT_VERSION)"
@@ -280,6 +326,8 @@ if [ ! -f "$SKILL_CREATOR_DIR/SKILL.md" ]; then
     trap - EXIT
     skill_cleanup
 fi
+
+setup_vlm_python_environment || true
 
 success "업데이트 완료"
 
