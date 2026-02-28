@@ -139,6 +139,8 @@ export class SpecLoader {
                 tags: spec.tags,
                 codeRefs: spec.codeRefs,
                 evidence: spec.evidence,
+                githubRefs: spec.githubRefs,
+                docLinks: spec.docLinks,
             });
 
             // Parent 엣지
@@ -171,6 +173,8 @@ export class SpecLoader {
                     tags: [],
                     codeRefs: cond.codeRefs,
                     evidence: cond.evidence,
+                    githubRefs: cond.githubRefs,
+                    docLinks: cond.docLinks,
                     featureId: spec.id,
                 });
 

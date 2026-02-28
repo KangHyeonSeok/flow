@@ -12,6 +12,31 @@ export type NodeType = 'feature' | 'condition';
 /** 증거 타입 */
 export type EvidenceType = 'screenshot' | 'log' | 'metric' | 'test-result';
 
+/** GitHub Ref 타입 */
+export type GitHubRefType = 'issue' | 'pr' | 'discussion';
+
+/** 문서 링크 타입 */
+export type DocLinkType = 'doc' | 'reference' | 'url';
+
+/** GitHub 이슈/PR/Discussion 연결 (v4) */
+export interface GitHubRef {
+    type: GitHubRefType;
+    number: number;
+    title?: string;
+    /** 미입력 시 number 기반으로 자동 구성 가능 */
+    url?: string;
+}
+
+/** 관련 문서·참고자료 링크 (v4) */
+export interface DocLink {
+    type: DocLinkType;
+    title: string;
+    /** doc 타입: 워크스페이스 기준 상대 경로 (에디터에서 바로 열기 지원) */
+    path?: string;
+    /** reference/url 타입: 외부 URL (브라우저로 열기) */
+    url?: string;
+}
+
 /** 증거 */
 export interface Evidence {
     type: EvidenceType;
@@ -28,8 +53,10 @@ export interface Condition {
     description: string;
     status: SpecStatus;
     codeRefs: string[];
-    evidence: Evidence[];
-}
+    evidence: Evidence[];    /** v4: GitHub 이슈/PR/Discussion 연결 */
+    githubRefs?: GitHubRef[];
+    /** v4: 관련 문서·참고자료 링크 */
+    docLinks?: DocLink[];}
 
 /** 스펙 (Feature) - 그래프의 주 노드 */
 export interface Spec {
@@ -48,6 +75,10 @@ export interface Spec {
     metadata: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
+    /** v4: GitHub 이슈/PR/Discussion 연결 */
+    githubRefs?: GitHubRef[];
+    /** v4: 관련 문서·참고자료 링크 */
+    docLinks?: DocLink[];
 }
 
 /** 그래프 노드 (Feature + Condition 통합) */
@@ -61,6 +92,10 @@ export interface GraphNode {
     tags: string[];
     codeRefs: string[];
     evidence: Evidence[];
+    /** v4: GitHub 이슈/PR/Discussion 연결 */
+    githubRefs?: GitHubRef[];
+    /** v4: 관련 문서·참고자료 링크 */
+    docLinks?: DocLink[];
     /** condition인 경우, 소속 feature id */
     featureId?: string;
 }

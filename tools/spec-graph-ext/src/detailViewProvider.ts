@@ -5,7 +5,7 @@
  */
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
-import { STATUS_COLORS, SpecStatus, GraphNode } from './types';
+import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink } from './types';
 
 export class DetailViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'specDetail';
@@ -42,6 +42,10 @@ export class DetailViewProvider implements vscode.WebviewViewProvider {
                 await this.openCodeRef(msg.codeRef);
             } else if (msg.type === 'openSpec') {
                 await this.openSpecFile(msg.specId);
+            } else if (msg.type === 'openExternal') {
+                await vscode.env.openExternal(vscode.Uri.parse(msg.url));
+            } else if (msg.type === 'openDocLink') {
+                await this.openDocLink(msg.path);
             }
         });
 
@@ -106,6 +110,25 @@ body {
             `<a class="code-ref" data-ref="${this.escapeAttr(r)}">${this.escapeHtml(r)}</a>`
         ).join('');
 
+        const githubRefsHtml = (node.githubRefs || []).map((ref: GitHubRef) => {
+            const label = ref.title ? `#${ref.number} ${ref.title}` : `#${ref.number}`;
+            const icon = ref.type === 'issue' ? '⚑' : ref.type === 'pr' ? '⟳' : '◉';
+            const url = ref.url || null;
+            return url
+                ? `<span class="github-ref ${ref.type}" data-url="${this.escapeAttr(url)}">${icon} ${this.escapeHtml(label)}</span>`
+                : `<span class="github-ref ${ref.type}">${icon} ${this.escapeHtml(label)}</span>`;
+        }).join('');
+
+        const docLinksHtml = (node.docLinks || []).map((link: DocLink) => {
+            const icon = link.type === 'doc' ? '📄' : link.type === 'reference' ? '📚' : '🔗';
+            if (link.path) {
+                return `<a class="doc-link ${link.type}" data-path="${this.escapeAttr(link.path)}">${icon} ${this.escapeHtml(link.title)}</a>`;
+            } else if (link.url) {
+                return `<a class="doc-link ${link.type}" data-url="${this.escapeAttr(link.url)}">${icon} ${this.escapeHtml(link.title)}</a>`;
+            }
+            return `<span class="doc-link ${link.type}">${icon} ${this.escapeHtml(link.title)}</span>`;
+        }).join('');
+
         const fileId = isFeature ? node.id : node.featureId;
 
         return /*html*/ `<!DOCTYPE html>
@@ -145,6 +168,19 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     color: var(--vscode-button-secondaryForeground);
     border: none; border-radius: 3px; cursor: pointer; font-size: 12px;
 }
+.github-ref {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; margin: 2px 4px 2px 0; border-radius: 10px;
+    font-size: 11px; cursor: pointer;
+    background: var(--vscode-badge-background); color: var(--vscode-badge-foreground);
+    border: 1px solid var(--vscode-widget-border);
+}
+.github-ref:hover { opacity: 0.8; text-decoration: underline; }
+.doc-link {
+    display: block; font-size: 12px; padding: 2px 0;
+    color: var(--vscode-textLink-foreground); cursor: pointer;
+}
+.doc-link:hover { text-decoration: underline; }
 </style></head><body>
 <h2>${this.escapeHtml(node.id)}${isFeature ? ': ' + this.escapeHtml(node.label) : ''}</h2>
 <span class="badge" style="background:${color}">${node.status}</span>
@@ -154,6 +190,8 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
 
 ${tagsHtml ? '<h3>Tags</h3>' + tagsHtml : ''}
 ${refsHtml ? '<h3>Code References</h3>' + refsHtml : ''}
+${githubRefsHtml ? '<h3>GitHub</h3>' + githubRefsHtml : ''}
+${docLinksHtml ? '<h3>Related Docs</h3>' + docLinksHtml : ''}
 ${conditionsHtml ? '<h3>Conditions</h3>' + conditionsHtml : ''}
 
 ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄 ${fileId}.json 열기</button>` : ''}
@@ -163,6 +201,21 @@ ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄
     document.querySelectorAll('.code-ref').forEach(el => {
         el.addEventListener('click', () => {
             vscode.postMessage({ type: 'openCodeRef', codeRef: el.dataset.ref });
+        });
+    });
+    document.querySelectorAll('.github-ref[data-url]').forEach(el => {
+        el.addEventListener('click', () => {
+            vscode.postMessage({ type: 'openExternal', url: el.dataset.url });
+        });
+    });
+    document.querySelectorAll('.doc-link[data-path]').forEach(el => {
+        el.addEventListener('click', () => {
+            vscode.postMessage({ type: 'openDocLink', path: el.dataset.path });
+        });
+    });
+    document.querySelectorAll('.doc-link[data-url]').forEach(el => {
+        el.addEventListener('click', () => {
+            vscode.postMessage({ type: 'openExternal', url: el.dataset.url });
         });
     });
     document.querySelectorAll('.btn-open').forEach(el => {
@@ -204,6 +257,18 @@ ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄
             vscode.window.showWarningMessage(`파일을 찾을 수 없습니다: ${filePath}`);
         }
     }
+
+    private async openDocLink(relativePath: string): Promise<void> {
+        const pathMod = require('path');
+        const fullPath = vscode.Uri.file(pathMod.join(this.workspaceRoot, relativePath));
+        try {
+            const doc = await vscode.workspace.openTextDocument(fullPath);
+            await vscode.window.showTextDocument(doc, { preview: true });
+        } catch {
+            vscode.window.showWarningMessage(`문서를 찾을 수 없습니다: ${relativePath}`);
+        }
+    }
+
 
     private async openSpecFile(specId: string): Promise<void> {
         const pathMod = require('path');
