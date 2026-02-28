@@ -1,0 +1,125 @@
+{
+  "name": "spec-graph",
+  "displayName": "Spec Graph",
+  "description": "Feature Dependency Graph 시각화 - 스펙 트리뷰 및 Cytoscape.js 기반 그래프 렌더링",
+  "version": "0.1.44",
+  "publisher": "flow-team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flow-team/flow"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "activationEvents": [
+    "workspaceContains:docs/specs/*.json"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "specGraph",
+          "title": "Spec Graph",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "specGraph": [
+        {
+          "id": "specTree",
+          "name": "스펙 트리",
+          "icon": "resources/icon.svg"
+        },
+        {
+          "id": "specDetail",
+          "type": "webview",
+          "name": "스펙 상세"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "specGraph.openGraph",
+        "title": "Spec Graph: 그래프 열기",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "specGraph.refresh",
+        "title": "Spec Graph: 새로고침",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "specGraph.focusNode",
+        "title": "Spec Graph: 노드 포커스"
+      },
+      {
+        "command": "specGraph.openSpec",
+        "title": "Spec Graph: 스펙 파일 열기",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "specGraph.filterByStatus",
+        "title": "Spec Graph: 상태별 필터",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "specGraph.filterByTag",
+        "title": "Spec Graph: 태그별 필터",
+        "icon": "$(tag)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "specGraph.openGraph",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
+          "command": "specGraph.refresh",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
+          "command": "specGraph.filterByStatus",
+          "when": "view == specTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "specGraph.openSpec",
+          "when": "view == specTree",
+          "group": "inline"
+        },
+        {
+          "command": "specGraph.focusNode",
+          "when": "view == specTree"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "build": "npm run compile",
+    "package": "vsce package --no-dependencies --allow-missing-repository",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "cytoscape": "^3.28.0"
+  }
+}

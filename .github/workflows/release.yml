@@ -24,6 +24,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Bump VERSION
         id: bump
         run: |
@@ -50,6 +55,24 @@ jobs:
       - name: Copy VERSION to .flow
         run: |
           cp VERSION .flow/version.txt
+
+      - name: Build Spec Graph Extension (.vsix)
+        run: |
+          cd tools/spec-graph-ext
+          # package.json 버전 동기화
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            pkg.version = '${{ steps.bump.outputs.version }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          npm ci
+          npm run build
+          # LICENSE 복사
+          cp ../../LICENSE ./LICENSE 2>/dev/null || true
+          npx vsce package --no-dependencies --allow-missing-repository
+          # .vsix 파일을 프로젝트 루트로 이동
+          mv *.vsix ../../spec-graph-${{ steps.bump.outputs.version }}.vsix
 
       - name: Create zip archive
         run: |
@@ -131,8 +154,16 @@ jobs:
             ```powershell
             .\.flow\scripts\install-e2e.ps1
             ```
+
+            ### Spec Graph VSCode Extension
+            
+            `spec-graph-${{ steps.bump.outputs.version }}.vsix` 파일을 다운로드 후:
+            ```
+            code --install-extension spec-graph-${{ steps.bump.outputs.version }}.vsix
+            ```
           files: |
             flow-prompts-${{ steps.bump.outputs.version }}.zip
             flow-e2e-test-${{ steps.bump.outputs.version }}.zip
+            spec-graph-${{ steps.bump.outputs.version }}.vsix
           draft: false
           prerelease: false

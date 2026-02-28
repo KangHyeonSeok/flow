@@ -1,0 +1,17 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}/tools/spec-graph-ext"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/tools/spec-graph-ext/dist/**/*.js"
+            ],
+            "preLaunchTask": "npm: build - spec-graph-ext"
+        }
+    ]
+}
