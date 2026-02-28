@@ -11,8 +11,9 @@ public partial class FlowApp
         [Option("content", Description = "Document content")] string content = "",
         [Option("tags", Description = "Canonical tags (comma-separated)")] string tags = "",
         [Option("commit-id", Description = "Git commit hash")] string commitId = "",
-        [Option("plan", Description = "Path to plan.md (default: current feature plan)")] string? planPath = null,
-        [Option("result", Description = "Path to result.md (default: current feature result)")] string? resultPath = null,
+        [Option("feature", Description = "Feature name")] string? featureName = null,
+        [Option("plan", Description = "Path to plan.md")] string? planPath = null,
+        [Option("result", Description = "Path to result.md")] string? resultPath = null,
         [Option("pretty", Description = "Pretty print JSON output")] bool pretty = false)
     {
         try
@@ -20,12 +21,10 @@ public partial class FlowApp
             if (string.IsNullOrWhiteSpace(content))
                 throw new ArgumentException("Content is required. Use --content to specify.");
 
-            var (featureName, context) = StateService.GetCurrentState();
-
-            // Resolve plan text from file path (default to current feature plan)
+            // Resolve plan text from file path
             var planText = "";
             var resolvedPlanPath = string.IsNullOrWhiteSpace(planPath)
-                ? (string.IsNullOrEmpty(featureName) ? null : PathResolver.GetPlanPath(featureName))
+                ? null
                 : (Path.IsPathRooted(planPath)
                     ? planPath
                     : Path.Combine(PathResolver.ProjectRoot, planPath));
@@ -33,10 +32,10 @@ public partial class FlowApp
             if (!string.IsNullOrEmpty(resolvedPlanPath) && File.Exists(resolvedPlanPath))
                 planText = File.ReadAllText(resolvedPlanPath);
 
-            // Resolve result text from file path (default to current feature result)
+            // Resolve result text from file path
             var resultText = "";
             var resolvedResultPath = string.IsNullOrWhiteSpace(resultPath)
-                ? (string.IsNullOrEmpty(featureName) ? null : PathResolver.GetResultPath(featureName))
+                ? null
                 : (Path.IsPathRooted(resultPath)
                     ? resultPath
                     : Path.Combine(PathResolver.ProjectRoot, resultPath));
@@ -49,8 +48,8 @@ public partial class FlowApp
                 Content = content,
                 CanonicalTags = tags,
                 CommitId = commitId,
-                FeatureName = featureName,
-                StateAtCreation = context.Phase,
+                FeatureName = featureName ?? "",
+                StateAtCreation = "",
                 PlanText = planText,
                 ResultText = resultText
             };
@@ -60,7 +59,7 @@ public partial class FlowApp
             JsonOutput.Write(JsonOutput.Success("db-add", new
             {
                 id,
-                feature_name = featureName,
+                feature_name = featureName ?? "",
                 tags
             }, $"문서 추가됨 (ID: {id})"), pretty);
         }

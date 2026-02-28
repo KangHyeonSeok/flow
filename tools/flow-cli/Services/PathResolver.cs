@@ -9,12 +9,7 @@ public class PathResolver
     public string ProjectRoot { get; }
     public string FlowRoot { get; }
     public string DocsDir { get; }
-    public string BacklogsDir { get; }
-    public string ImplementsDir { get; }
-    public string MetaDir { get; }
-    public string CurrentStatePath { get; }
     public string SettingsPath { get; }
-    public string StatesPath { get; }
     public virtual string RagDbPath { get; }
     public string EmbedExePath { get; }
 
@@ -26,12 +21,7 @@ public class PathResolver
 
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
-        BacklogsDir = Path.Combine(DocsDir, "backlogs");
-        ImplementsDir = Path.Combine(DocsDir, "implements");
-        MetaDir = Path.Combine(DocsDir, "meta");
-        CurrentStatePath = Path.Combine(MetaDir, "current_state.json");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
-        StatesPath = Path.Combine(FlowRoot, "states.json");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
     }
@@ -44,30 +34,10 @@ public class PathResolver
         ProjectRoot = projectRoot;
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
-        BacklogsDir = Path.Combine(DocsDir, "backlogs");
-        ImplementsDir = Path.Combine(DocsDir, "implements");
-        MetaDir = Path.Combine(DocsDir, "meta");
-        CurrentStatePath = Path.Combine(MetaDir, "current_state.json");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
-        StatesPath = Path.Combine(FlowRoot, "states.json");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
     }
-
-    public string GetFeatureDir(string featureName)
-        => Path.Combine(ImplementsDir, featureName);
-
-    public string GetMetaDir(string featureName)
-        => Path.Combine(MetaDir, featureName);
-
-    public string GetPlanPath(string featureName)
-        => Path.Combine(GetFeatureDir(featureName), "plan.md");
-
-    public string GetResultPath(string featureName)
-        => Path.Combine(GetFeatureDir(featureName), "result.md");
-
-    public string GetTestReportPath(string featureName)
-        => Path.Combine(GetFeatureDir(featureName), "test_report.json");
 
     /// <summary>
     /// 빌드 모듈 루트 디렉토리 (.flow/build/).

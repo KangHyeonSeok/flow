@@ -94,22 +94,6 @@ public partial class FlowApp
             if (saveReport)
             {
                 args.Add("--save-report");
-
-                // Determine report directory from current feature
-                try
-                {
-                    var (featureName, _) = StateService.GetCurrentState();
-                    if (!string.IsNullOrEmpty(featureName))
-                    {
-                        var reportDir = PathResolver.GetFeatureDir(featureName);
-                        args.Add("--report-dir");
-                        args.Add(reportDir);
-                    }
-                }
-                catch
-                {
-                    // No active feature; report will be saved to default location
-                }
             }
 
             // Execute Python E2E tool
