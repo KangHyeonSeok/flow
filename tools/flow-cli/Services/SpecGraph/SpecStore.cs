@@ -38,6 +38,18 @@ public class SpecStore
         _schemaVersionPath = Path.Combine(_specsDir, ".schema-version");
     }
 
+    /// <summary>
+    /// 외부 스펙 저장소 경로를 직접 지정하는 생성자.
+    /// ~/.flow/specs/{repo}/ 등 별도 체크아웃 경로 사용 시.
+    /// </summary>
+    public SpecStore(string specsDir, bool externalRepo)
+    {
+        _specsDir = specsDir;
+        _backupDir = Path.Combine(_specsDir, ".backup");
+        _evidenceDir = Path.Combine(Path.GetDirectoryName(_specsDir) ?? _specsDir, "evidence");
+        _schemaVersionPath = Path.Combine(_specsDir, ".schema-version");
+    }
+
     /// <summary>디렉토리 초기화</summary>
     public void Initialize()
     {

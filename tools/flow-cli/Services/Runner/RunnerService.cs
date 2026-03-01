@@ -16,6 +16,7 @@ public class RunnerService
     private readonly string _flowRoot;
     private readonly RunnerConfig _config;
     private readonly SpecStore _specStore;
+    private readonly SpecRepoService? _specRepo;
     private readonly GitWorktreeService _git;
     private readonly CopilotService _copilot;
     private readonly RunnerLogService _log;
@@ -40,8 +41,21 @@ public class RunnerService
         _instanceId = $"runner-{Environment.ProcessId}-{DateTime.UtcNow:HHmmss}";
         _pidFilePath = Path.Combine(_flowRoot, _config.PidFile);
 
-        _specStore = new SpecStore(projectRoot);
         _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId);
+
+        // 스펙 저장소 설정: specRepository가 있으면 ~/.flow/specs/{repo}/ 에서 스펙 로드
+        if (!string.IsNullOrWhiteSpace(_config.SpecRepository))
+        {
+            _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, _log);
+            _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
+            _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {_specRepo.LocalPath}");
+        }
+        else
+        {
+            _specStore = new SpecStore(projectRoot);
+            _log.Warn("init", "specRepository 미설정, 프로젝트 내 docs/specs/ 사용");
+        }
+
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
         _copilot = new CopilotService(_config, _log);
     }
@@ -61,9 +75,23 @@ public class RunnerService
         // 0. 이전 크래시 복구
         RecoverFromCrash();
 
-        // 1. git pull로 동기화
-        _log.Info("sync", "스펙 그래프 동기화 시작");
-        await _git.PullAsync(_config.RemoteName, _config.MainBranch);
+        // 1. 스펙 저장소 동기화
+        if (_specRepo != null)
+        {
+            _log.Info("sync", "스펙 저장소 동기화 시작");
+            var synced = await _specRepo.SyncAsync();
+            if (!synced)
+            {
+                _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
+                return results;
+            }
+        }
+        else
+        {
+            // specRepository 미설정 시 프로젝트 자체 git pull
+            _log.Info("sync", "프로젝트 git pull 동기화 시작");
+            await _git.PullAsync(_config.RemoteName, _config.MainBranch);
+        }
 
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
@@ -225,8 +253,14 @@ public class RunnerService
             await _git.RemoveWorktreeAsync(spec.Id);
             MarkSpecCompleted(spec);
 
-            // 7. push
+            // 7. 프로젝트 변경사항 push
             await _git.PushAsync(_config.RemoteName, _config.MainBranch);
+
+            // 8. 스펙 저장소 변경사항 push (별도 저장소인 경우)
+            if (_specRepo != null)
+            {
+                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to active");
+            }
 
             result.Success = true;
             return FinalizeResult(result);
