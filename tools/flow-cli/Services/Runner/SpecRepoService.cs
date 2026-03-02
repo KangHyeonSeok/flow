@@ -21,7 +21,29 @@ public class SpecRepoService
     /// </summary>
     /// <param name="specRepository">git URL (예: https://github.com/user/flow-spec.git)</param>
     /// <param name="specBranch">브랜치 이름 (기본: main)</param>
+    /// <param name="localCachePath">로컬 캐시 경로 (예: .flow/spec-cache/)</param>
     /// <param name="log">로그 서비스</param>
+    public SpecRepoService(string specRepository, string specBranch, string localCachePath, RunnerLogService log)
+    {
+        _log = log;
+        _specRepository = specRepository;
+        _specBranch = specBranch;
+
+        // git URL에서 저장소 이름 추출
+        _repoName = ExtractRepoName(specRepository);
+
+        // 로컬 캐시 경로 (.flow/spec-cache/)
+        _localPath = localCachePath;
+
+        // 스펙 JSON이 있는 하위 디렉토리 (docs/specs/ 구조)
+        _specsDir = Path.Combine(_localPath, "docs", "specs");
+    }
+
+    /// <summary>
+    /// 스펙 저장소 서비스 생성 (하위 호환 - localCachePath 없음).
+    /// ~/.flow/specs/{저장소이름}/ 경로를 사용한다.
+    /// </summary>
+    [Obsolete("localCachePath를 명시적으로 지정하는 생성자를 사용하세요.")]
     public SpecRepoService(string specRepository, string specBranch, RunnerLogService log)
     {
         _log = log;
@@ -36,7 +58,7 @@ public class SpecRepoService
         _localPath = Path.Combine(userHome, ".flow", "specs", _repoName);
 
         // 스펙 JSON이 있는 하위 디렉토리
-        _specsDir = Path.Combine(_localPath, "specs");
+        _specsDir = Path.Combine(_localPath, "docs", "specs");
     }
 
     /// <summary>로컬 체크아웃 경로 (예: ~/.flow/specs/flow-spec/)</summary>

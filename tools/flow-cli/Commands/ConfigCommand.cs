@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Cocona;
+using FlowCLI.Services;
 using FlowCLI.Utils;
 
 namespace FlowCLI;
@@ -9,39 +10,58 @@ public partial class FlowApp
     [Command("config", Description = "View or update configuration")]
     public void Config(
         [Option("log", Description = "Set logging on/off")] string? log = null,
+        [Option("spec-repo", Description = "Set specRepository git URL")] string? specRepo = null,
         [Option("pretty", Description = "Pretty print JSON output")] bool pretty = false)
     {
         try
         {
-            var settingsPath = PathResolver.SettingsPath;
+            var configService = new FlowConfigService(PathResolver.ConfigPath);
 
-            if (log != null)
+            bool anyWrite = log != null || specRepo != null;
+
+            if (anyWrite)
             {
-                // Update logging setting
-                var enabled = log.ToLowerInvariant() is "on" or "true" or "1";
-                var settings = new Dictionary<string, object>
+                var config = configService.Load();
+
+                // --spec-repo: specRepository URL 설정 (F-080-C2)
+                if (specRepo != null)
                 {
-                    ["logging"] = new Dictionary<string, object> { ["enabled"] = enabled }
-                };
+                    config.SpecRepository = specRepo;
+                }
 
-                var json = JsonSerializer.Serialize(settings, JsonOutput.Pretty);
-                File.WriteAllText(settingsPath, json);
+                // --log: 로깅 설정
+                if (log != null)
+                {
+                    var enabled = log.ToLowerInvariant() is "on" or "true" or "1";
+                    config.Logging ??= new Models.FlowLoggingConfig();
+                    config.Logging.Enabled = enabled;
+                }
 
+                configService.Save(config);
+
+                var savedConfig = configService.Load();
                 JsonOutput.Write(JsonOutput.Success("config",
-                    new { logging = new { enabled } },
-                    $"로깅 {(enabled ? "활성화" : "비활성화")}"), pretty);
+                    new
+                    {
+                        specRepository = savedConfig.SpecRepository,
+                        specBranch = savedConfig.SpecBranch,
+                        logging = savedConfig.Logging
+                    },
+                    "설정 저장 완료"), pretty);
             }
             else
             {
-                // Read current config
-                object? settings = null;
-                if (File.Exists(settingsPath))
-                {
-                    var json = File.ReadAllText(settingsPath);
-                    settings = JsonSerializer.Deserialize<JsonElement>(json);
-                }
+                // Read current config from config.json (F-080-C1, C2)
+                var config = configService.Load();
 
-                JsonOutput.Write(JsonOutput.Success("config", settings, "현재 설정"), pretty);
+                JsonOutput.Write(JsonOutput.Success("config",
+                    new
+                    {
+                        specRepository = config.SpecRepository,
+                        specBranch = config.SpecBranch,
+                        logging = config.Logging
+                    },
+                    "현재 설정"), pretty);
             }
         }
         catch (Exception ex)

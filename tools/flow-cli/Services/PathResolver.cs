@@ -10,6 +10,13 @@ public class PathResolver
     public string FlowRoot { get; }
     public string DocsDir { get; }
     public string SettingsPath { get; }
+
+    /// <summary>.flow/config.json 경로 (specRepository 및 Runner 설정)</summary>
+    public string ConfigPath { get; }
+
+    /// <summary>.flow/spec-cache/ 경로 (스펙 저장소 로컬 캐시)</summary>
+    public string SpecCacheDir { get; }
+
     public virtual string RagDbPath { get; }
     public string EmbedExePath { get; }
 
@@ -22,6 +29,8 @@ public class PathResolver
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
+        ConfigPath = Path.Combine(FlowRoot, "config.json");
+        SpecCacheDir = Path.Combine(FlowRoot, "spec-cache");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
     }
@@ -35,6 +44,8 @@ public class PathResolver
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
+        ConfigPath = Path.Combine(FlowRoot, "config.json");
+        SpecCacheDir = Path.Combine(FlowRoot, "spec-cache");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
     }

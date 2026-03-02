@@ -32,7 +32,7 @@ public class RunnerService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public RunnerService(string projectRoot, RunnerConfig config)
+    public RunnerService(string projectRoot, RunnerConfig config, string specCacheDir)
     {
         _projectRoot = projectRoot;
         _flowRoot = Path.Combine(projectRoot, ".flow");
@@ -43,18 +43,19 @@ public class RunnerService
 
         _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId);
 
-        // 스펙 저장소 설정: specRepository가 있으면 ~/.flow/specs/{repo}/ 에서 스펙 로드
-        if (!string.IsNullOrWhiteSpace(_config.SpecRepository))
+        // specRepository 필수 검증 (F-080-C5)
+        if (string.IsNullOrWhiteSpace(_config.SpecRepository))
         {
-            _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, _log);
-            _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
-            _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {_specRepo.LocalPath}");
+            throw new InvalidOperationException(
+                "specRepository가 설정되지 않았습니다. " +
+                "'.flow/config.json'에 specRepository(git URL)를 설정하세요. " +
+                "예: flow config --spec-repo https://github.com/user/flow-spec.git");
         }
-        else
-        {
-            _specStore = new SpecStore(projectRoot);
-            _log.Warn("init", "specRepository 미설정, 프로젝트 내 docs/specs/ 사용");
-        }
+
+        // 스펙 저장소 설정: .flow/spec-cache/ 에서 스펙 로드 (F-080-C3, C4)
+        _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, specCacheDir, _log);
+        _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
+        _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {specCacheDir}");
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
         _copilot = new CopilotService(_config, _log);
@@ -75,22 +76,13 @@ public class RunnerService
         // 0. 이전 크래시 복구
         RecoverFromCrash();
 
-        // 1. 스펙 저장소 동기화
-        if (_specRepo != null)
+        // 1. 스펙 저장소 동기화 (F-080-C3: git clone/pull로 최신 스펙을 로컬 캐시로 가져옴)
+        _log.Info("sync", "스펙 저장소 동기화 시작");
+        var synced = await _specRepo!.SyncAsync();
+        if (!synced)
         {
-            _log.Info("sync", "스펙 저장소 동기화 시작");
-            var synced = await _specRepo.SyncAsync();
-            if (!synced)
-            {
-                _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
-                return results;
-            }
-        }
-        else
-        {
-            // specRepository 미설정 시 프로젝트 자체 git pull
-            _log.Info("sync", "프로젝트 git pull 동기화 시작");
-            await _git.PullAsync(_config.RemoteName, _config.MainBranch);
+            _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
+            return results;
         }
 
         // 2. 구현 대상 스펙 탐색

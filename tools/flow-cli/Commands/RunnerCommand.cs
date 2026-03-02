@@ -23,6 +23,17 @@ public partial class FlowApp
             if (interval > 0) config.PollIntervalMinutes = interval;
             if (!string.IsNullOrEmpty(model)) config.CopilotModel = model;
 
+            // specRepository 필수 검증 (F-080-C5)
+            if (string.IsNullOrWhiteSpace(config.SpecRepository))
+            {
+                JsonOutput.Write(JsonOutput.Error("runner-start",
+                    "specRepository가 설정되지 않았습니다. " +
+                    "'.flow/config.json'에 specRepository(git URL)를 설정하세요. " +
+                    "예: flow config --spec-repo https://github.com/user/flow-spec.git"), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
             // 이미 실행 중인 인스턴스 확인
             var existing = RunnerService.GetRunningInstance(PathResolver.FlowRoot, config.PidFile);
             if (existing?.Status == "running")
@@ -33,7 +44,8 @@ public partial class FlowApp
                 return;
             }
 
-            var runner = new RunnerService(PathResolver.ProjectRoot, config);
+            // .flow/spec-cache/ 경로 전달 (F-080-C3, C4)
+            var runner = new RunnerService(PathResolver.ProjectRoot, config, PathResolver.SpecCacheDir);
 
             if (daemon)
             {
@@ -236,25 +248,45 @@ public partial class FlowApp
     }
 
     /// <summary>
-    /// Runner 설정 로드. .flow/runner-config.json이 있으면 사용, 없으면 기본값.
+    /// Runner 설정 로드.
+    /// 1) .flow/config.json 에서 specRepository, specBranch 로드 (F-080-C1)
+    /// 2) .flow/runner-config.json 에서 나머지 런타임 설정 로드
+    /// config.json의 specRepository가 runner-config.json보다 우선한다.
     /// </summary>
     private RunnerConfig LoadRunnerConfig()
     {
-        var configPath = Path.Combine(PathResolver.FlowRoot, "runner-config.json");
-        if (File.Exists(configPath))
+        // 1. runner-config.json에서 기본 런타임 설정 로드
+        var runnerConfigPath = Path.Combine(PathResolver.FlowRoot, "runner-config.json");
+        RunnerConfig config;
+        if (File.Exists(runnerConfigPath))
         {
             try
             {
-                var json = File.ReadAllText(configPath);
-                var config = System.Text.Json.JsonSerializer.Deserialize<RunnerConfig>(json,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                return config ?? new RunnerConfig();
+                var json = File.ReadAllText(runnerConfigPath);
+                config = System.Text.Json.JsonSerializer.Deserialize<RunnerConfig>(json,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new RunnerConfig();
             }
             catch
             {
-                return new RunnerConfig();
+                config = new RunnerConfig();
             }
         }
-        return new RunnerConfig();
+        else
+        {
+            config = new RunnerConfig();
+        }
+
+        // 2. config.json에서 specRepository 로드 (F-080-C1, C2)
+        var flowConfigService = new Services.FlowConfigService(PathResolver.ConfigPath);
+        var flowConfig = flowConfigService.Load();
+
+        if (!string.IsNullOrWhiteSpace(flowConfig.SpecRepository))
+        {
+            config.SpecRepository = flowConfig.SpecRepository;
+            config.SpecBranch = flowConfig.SpecBranch;
+        }
+
+        return config;
     }
 }
