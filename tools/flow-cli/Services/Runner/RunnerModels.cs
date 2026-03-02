@@ -18,10 +18,13 @@ public class RunnerConfig
     public string PidFile { get; set; } = "runner.pid";
 
     /// <summary>Copilot CLI 기본 모델</summary>
-    public string CopilotModel { get; set; } = "claude-sonnet-4-20250514";
+    public string CopilotModel { get; set; } = "claude-sonnet-4.6";
 
-    /// <summary>Copilot CLI 실행 파일명</summary>
+    /// <summary>Copilot CLI 실행 파일명 (CopilotCliPath 미설정 시 사용)</summary>
     public string CopilotCommand { get; set; } = "copilot";
+
+    /// <summary>Copilot CLI 절대 경로. 설정 시 CopilotCommand보다 우선 적용. .ps1 파일은 pwsh로 자동 실행.</summary>
+    public string? CopilotCliPath { get; set; }
 
     /// <summary>구현 대상 스펙 상태 목록</summary>
     public string[] TargetStatuses { get; set; } = ["draft", "needs-review"];

@@ -53,13 +53,54 @@ public class CopilotService
         try
         {
             var escapedPrompt = prompt.Replace("\"", "\\\"");
-            var arguments = $"-p \"{escapedPrompt}\" --model {_config.CopilotModel}";
+            // --yolo: 모든 권한 허용 (비대화형 모드에서 권한 확인 없이 파일 편집/도구 실행)
+            // --autopilot: 멀티턴 자동 계속 실행
+            var copilotArgs = $"-p \"{escapedPrompt}\" --model {_config.CopilotModel} --yolo --autopilot";
+
+            string fileName;
+            string arguments;
+            var cliPath = _config.CopilotCliPath;
+            if (!string.IsNullOrEmpty(cliPath) && cliPath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName = "pwsh";
+                arguments = $"-NonInteractive -File \"{cliPath}\" {copilotArgs}";
+            }
+            else if (!string.IsNullOrEmpty(cliPath) && cliPath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName = "cmd.exe";
+                arguments = $"/c \"{cliPath}\" {copilotArgs}";
+            }
+            else if (!string.IsNullOrEmpty(cliPath))
+            {
+                fileName = cliPath;
+                arguments = copilotArgs;
+            }
+            else
+            {
+                // CopilotCommand 자동 해석: Windows에서 .ps1/.bat 가능성 고려
+                var resolved = ResolveCommand(_config.CopilotCommand);
+                if (resolved != null && resolved.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+                {
+                    fileName = "pwsh";
+                    arguments = $"-NonInteractive -File \"{resolved}\" {copilotArgs}";
+                }
+                else if (resolved != null && resolved.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+                {
+                    fileName = "cmd.exe";
+                    arguments = $"/c \"{resolved}\" {copilotArgs}";
+                }
+                else
+                {
+                    fileName = _config.CopilotCommand;
+                    arguments = copilotArgs;
+                }
+            }
 
             using var process = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = _config.CopilotCommand,
+                    FileName = fileName,
                     Arguments = arguments,
                     WorkingDirectory = workDir,
                     RedirectStandardOutput = true,
@@ -174,6 +215,37 @@ public class CopilotService
 
             오류를 분석하고 수정한 후 빌드가 통과하는지 확인하세요.
             """;
+    }
+
+    /// <summary>
+    /// 커맨드 이름을 PATH에서 탐색하여 전체 경로를 반환한다. 찾지 못하면 null.
+    /// </summary>
+    private static string? ResolveCommand(string command)
+    {
+        try
+        {
+            // where.exe (Windows) / which (Unix) 로 경로 탐색
+            var whereExe = OperatingSystem.IsWindows() ? "where.exe" : "which";
+            using var proc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = whereExe,
+                    Arguments = command,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+            proc.Start();
+            var output = proc.StandardOutput.ReadLine();
+            proc.WaitForExit();
+            return string.IsNullOrWhiteSpace(output) ? null : output.Trim();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static async Task<bool> WaitForExitAsync(Process process, int timeoutMs)
