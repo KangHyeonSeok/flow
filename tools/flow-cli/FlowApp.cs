@@ -16,4 +16,7 @@ public partial class FlowApp
 
     private EmbeddingBridge? _embeddingBridge;
     private EmbeddingBridge EmbeddingBridge => _embeddingBridge ??= new EmbeddingBridge(PathResolver);
+
+    private FlowConfigService? _flowConfigService;
+    private FlowConfigService FlowConfigService => _flowConfigService ??= new FlowConfigService(PathResolver.ConfigPath);
 }

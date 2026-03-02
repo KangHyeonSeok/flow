@@ -90,7 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!specId) { return; }
 
             const filePath = vscode.Uri.file(
-                require('path').join(workspaceRoot, 'docs', 'specs', `${specId}.json`)
+                require('path').join(specLoader.specsDirectory, `${specId}.json`)
             );
             try {
                 const doc = await vscode.workspace.openTextDocument(filePath);

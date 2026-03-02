@@ -17,8 +17,51 @@ export class SpecLoader {
     private watcher: vscode.FileSystemWatcher | undefined;
 
     constructor(private workspaceRoot: string) {
-        this.specsDir = path.join(workspaceRoot, 'docs', 'specs');
+        this.specsDir = this.resolveSpecsDir(workspaceRoot);
         this.setupWatcher();
+    }
+
+    /**
+     * .flow/config.json의 specRepository가 설정되어 있으면
+     * ~/.flow/specs/{repoName}/docs/specs/ 경로를 반환한다.
+     * 그렇지 않으면 워크스페이스의 docs/specs/ 경로를 반환한다.
+     */
+    private resolveSpecsDir(workspaceRoot: string): string {
+        const configPath = path.join(workspaceRoot, '.flow', 'config.json');
+        if (fs.existsSync(configPath)) {
+            try {
+                const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                const specRepository: string | undefined = config.specRepository;
+                if (specRepository) {
+                    const repoName = this.extractRepoName(specRepository);
+                    const userHome = process.env.HOME
+                        || process.env.USERPROFILE
+                        || require('os').homedir();
+                    return path.join(userHome, '.flow', 'specs', repoName, 'docs', 'specs');
+                }
+            } catch {
+                // 파싱 실패 시 기본 경로 사용
+            }
+        }
+        return path.join(workspaceRoot, 'docs', 'specs');
+    }
+
+    /**
+     * git URL에서 저장소 이름을 추출한다.
+     * 예: "https://github.com/user/flow-spec.git" → "flow-spec"
+     */
+    private extractRepoName(gitUrl: string): string {
+        let url = gitUrl.trimEnd();
+        if (url.endsWith('/')) { url = url.slice(0, -1); }
+        if (url.toLowerCase().endsWith('.git')) { url = url.slice(0, -4); }
+        const lastSep = Math.max(url.lastIndexOf('/'), url.lastIndexOf('\\'), url.lastIndexOf(':'));
+        const name = lastSep >= 0 ? url.slice(lastSep + 1) : url;
+        return name || 'spec-repo';
+    }
+
+    /** 현재 사용 중인 스펙 디렉토리 경로 */
+    get specsDirectory(): string {
+        return this.specsDir;
     }
 
     private setupWatcher(): void {
