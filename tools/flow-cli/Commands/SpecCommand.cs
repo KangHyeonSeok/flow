@@ -110,6 +110,7 @@ public partial class FlowApp
         [Option("parent", Description = "상위 스펙 ID")] string? parent = null,
         [Option("status", Description = "상태 (draft|active|needs-review|verified|deprecated)")] string status = "draft",
         [Option("tags", Description = "태그 (콤마 구분)")] string? tags = null,
+        [Option("dependencies", Description = "의존 스펙 ID 목록 (콤마 구분)")] string? dependencies = null,
         [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
     {
         try
@@ -123,7 +124,8 @@ public partial class FlowApp
                 Description = description ?? title,
                 Parent = parent,
                 Status = status,
-                Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() ?? new()
+                Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() ?? new(),
+                Dependencies = dependencies?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList() ?? new()
             };
 
             var created = SpecStore.Create(spec);
