@@ -2,7 +2,7 @@
   "name": "spec-graph",
   "displayName": "Spec Graph",
   "description": "Feature Dependency Graph 시각화 - 스펙 트리뷰 및 Cytoscape.js 기반 그래프 렌더링",
-  "version": "0.1.51",
+  "version": "0.1.52",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
@@ -85,6 +85,16 @@
         "command": "specGraph.debugInfo",
         "title": "Spec Graph: 디버그 정보",
         "icon": "$(info)"
+      },
+      {
+        "command": "specGraph.openSpecView",
+        "title": "Spec Graph: 스펙 문서 보기",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "specGraph.openSpecViewFocused",
+        "title": "Spec Graph: 선택 스펙 문서 보기",
+        "icon": "$(open-preview)"
       }
     ],
     "menus": {
@@ -101,6 +111,11 @@
         },
         {
           "command": "specGraph.openGraphPreview",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
+          "command": "specGraph.openSpecView",
           "when": "view == specTree",
           "group": "navigation"
         },
@@ -123,6 +138,10 @@
         },
         {
           "command": "specGraph.focusNode",
+          "when": "view == specTree"
+        },
+        {
+          "command": "specGraph.openSpecViewFocused",
           "when": "view == specTree"
         }
       ]

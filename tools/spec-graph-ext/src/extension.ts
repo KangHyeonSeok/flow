@@ -12,6 +12,7 @@ import { SpecLoader } from './specLoader';
 import { SpecTreeProvider } from './specTreeProvider';
 import { GraphPanel } from './graphPanel';
 import { DetailViewProvider } from './detailViewProvider';
+import { SpecViewProvider } from './specViewProvider';
 import { SpecStatus } from './types';
 
 let specLoader: SpecLoader;
@@ -149,6 +150,26 @@ export function activate(context: vscode.ExtensionContext): void {
             if (picked) {
                 const value = (picked as any).value;
                 treeProvider.setStatusFilter(value === 'all' ? null : value);
+            }
+        }),
+    );
+
+    // 스펙 문서 뷰 열기 (전체)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.openSpecView', () => {
+            output.appendLine('[command] specGraph.openSpecView');
+            SpecViewProvider.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+        }),
+    );
+
+    // 스펙 문서 뷰 열기 (선택된 노드 포커스)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.openSpecViewFocused', (item: any) => {
+            output.appendLine('[command] specGraph.openSpecViewFocused');
+            const specId = item?.spec?.id || item;
+            const panel = SpecViewProvider.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+            if (specId && typeof specId === 'string') {
+                panel.focusSpec(specId);
             }
         }),
     );
