@@ -96,16 +96,9 @@ jobs:
           fi
           cp flow.ps1 temp-release/
           cd temp-release
-          zip -r ../flow-prompts-${{ steps.bump.outputs.version }}.zip .flow/ .github/ flow.ps1
-          cd ..
-          cp -r tools/e2e-test temp-e2e/e2e-test
-          find temp-e2e/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
-          find temp-e2e/e2e-test -type f -name "*.pyc" -delete
-          cd temp-e2e
-          zip -r ../flow-e2e-test-${{ steps.bump.outputs.version }}.zip e2e-test/
+          zip -r ../flow.zip .flow/ .github/ flow.ps1
           cd ..
           rm -rf temp-release
-          rm -rf temp-e2e
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -166,15 +159,7 @@ jobs:
             .\.flow\scripts\install-e2e.ps1
             ```
 
-            ### Spec Graph VSCode Extension
-            
-            `spec-graph-${{ steps.bump.outputs.version }}.vsix` 파일을 다운로드 후:
-            ```
-            code --install-extension spec-graph-${{ steps.bump.outputs.version }}.vsix
-            ```
           files: |
-            flow-prompts-${{ steps.bump.outputs.version }}.zip
-            flow-e2e-test-${{ steps.bump.outputs.version }}.zip
-            spec-graph-${{ steps.bump.outputs.version }}.vsix
+            flow.zip
           draft: false
           prerelease: false

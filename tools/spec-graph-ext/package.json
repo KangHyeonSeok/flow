@@ -2,7 +2,7 @@
   "name": "spec-graph",
   "displayName": "Spec Graph",
   "description": "Feature Dependency Graph 시각화 - 스펙 트리뷰 및 Cytoscape.js 기반 그래프 렌더링",
-  "version": "0.1.52",
+  "version": "0.1.54",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
