@@ -76,12 +76,23 @@ jobs:
 
       - name: Create zip archive
         run: |
-          mkdir -p temp-release/.github
+          mkdir -p temp-release/.github/skills
           mkdir -p temp-e2e
           cp -r .flow temp-release/
           find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
+          echo '{}' > temp-release/.flow/config.json
+          cp spec-graph-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
+          cp -r tools/e2e-test temp-release/.flow/e2e-test
+          find temp-release/.flow/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
+          find temp-release/.flow/e2e-test -type f -name "*.pyc" -delete
           if [ -d .github/agents ]; then
             cp -r .github/agents temp-release/.github/
+          fi
+          if [ -d .github/skills/flow-spec-create ]; then
+            cp -r .github/skills/flow-spec-create temp-release/.github/skills/
+          fi
+          if [ -d .github/skills/flow-spec-graph ]; then
+            cp -r .github/skills/flow-spec-graph temp-release/.github/skills/
           fi
           cp flow.ps1 temp-release/
           cd temp-release

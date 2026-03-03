@@ -570,7 +570,7 @@ export class GraphPanel {
                 },
                 minZoom: 0.2,
                 maxZoom: 4,
-                wheelSensitivity: 0.3,
+                wheelSensitivity: 0.45,
             });
         } catch (e) {
             console.error('[SpecGraph] Cytoscape init failed', e);
@@ -586,10 +586,11 @@ export class GraphPanel {
             vscode.postMessage({ type: 'selectNode', nodeId: id });
         });
 
-        // 빈 공간 클릭 시 상세 패널 닫기
+        // 빈 공간 클릭 시 상세 패널 닫기 + 필터 해제
         cy.on('tap', function(evt) {
             if (evt.target === cy) {
                 hideDetail();
+                clearFocusFilter();
             }
         });
 
@@ -762,21 +763,83 @@ export class GraphPanel {
             });
         });
 
+        // ─── 포커스 필터 상태 ───
+        let _focusActive = false;
+
+        function applyFocusFilter(nodeId) {
+            _focusActive = true;
+            const focused = cy.getElementById(nodeId);
+            if (!focused || focused.length === 0) return;
+
+            const parentEdges = cy.edges('[type="parent"]');
+
+            // 선택 노드가 target인 엣지의 source = 상위 스펙
+            const parentNodes = parentEdges.filter(e => e.target().id() === nodeId).sources();
+            // 선택 노드가 source인 엣지의 target = 하위 스펙
+            const childNodes  = parentEdges.filter(e => e.source().id() === nodeId).targets();
+
+            // 각 feature 노드의 condition 노드
+            function getConditionNodes(featureCol) {
+                return cy.edges('[type="condition"]')
+                    .filter(e => featureCol.map(n => n.id()).includes(e.source().id()))
+                    .targets();
+            }
+
+            const visibleNodes = cy.collection()
+                .union(focused)
+                .union(parentNodes)
+                .union(childNodes)
+                .union(getConditionNodes(focused))
+                .union(getConditionNodes(parentNodes))
+                .union(getConditionNodes(childNodes));
+
+            const visibleEdges = visibleNodes.edgesWith(visibleNodes);
+
+            cy.elements().hide();
+            visibleNodes.show();
+            visibleEdges.show();
+
+            cy.fit(visibleNodes.union(visibleEdges), 40);
+
+            // 하이라이트
+            cy.elements().removeClass('highlighted');
+            focused.addClass('highlighted');
+        }
+
+        function clearFocusFilter() {
+            if (!_focusActive) return;
+            _focusActive = false;
+            cy.elements().show();
+            // 조건 표시 체크박스 상태 반영
+            const showConditions = document.getElementById('chkConditions').checked;
+            if (!showConditions) {
+                cy.nodes('[nodeType="condition"]').hide();
+                cy.edges('[type="condition"]').hide();
+            }
+            cy.elements().removeClass('highlighted');
+        }
+
         // ─── Extension → Webview 메시지 수신 ───
         window.addEventListener('message', function(event) {
             const msg = event.data;
             if (msg.type === 'focusNode') {
-                const node = cy.getElementById(msg.nodeId);
-                if (node && node.length > 0) {
-                    // 기존 하이라이트 제거
-                    cy.elements().removeClass('highlighted');
-                    node.addClass('highlighted');
-                    cy.animate({
-                        center: { eles: node },
-                        zoom: 2,
-                    }, { duration: 400 });
-                    showDetail(msg.nodeId);
-                }
+                applyFocusFilter(msg.nodeId);
+                showDetail(msg.nodeId);
+            }
+        });
+
+        // ─── F키: 선택된 노드에 포커싱 ───
+        document.addEventListener('keydown', function(e) {
+            if (e.key !== 'f' && e.key !== 'F') return;
+            // 입력 필드에서는 무시
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+            const selected = cy.$(':selected');
+            if (selected.length > 0) {
+                cy.animate({
+                    fit: { eles: selected, padding: 80 },
+                }, { duration: 350 });
             }
         });
 
