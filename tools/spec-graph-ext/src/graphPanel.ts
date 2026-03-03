@@ -21,6 +21,7 @@ export class GraphPanel {
         extensionUri: vscode.Uri,
         private loader: SpecLoader,
         private workspaceRoot: string,
+        private readonly isPrimaryPanel: boolean,
     ) {
         this.panel = panel;
         this.extensionUri = extensionUri;
@@ -63,9 +64,31 @@ export class GraphPanel {
             },
         );
 
-        GraphPanel.currentPanel = new GraphPanel(panel, extensionUri, loader, workspaceRoot);
+        GraphPanel.currentPanel = new GraphPanel(panel, extensionUri, loader, workspaceRoot, true);
         GraphPanel.currentPanel.update();
         return GraphPanel.currentPanel;
+    }
+
+    /** 별도 웹 렌더링 프리뷰 패널 생성 */
+    static openPreview(
+        extensionUri: vscode.Uri,
+        loader: SpecLoader,
+        workspaceRoot: string,
+    ): GraphPanel {
+        const panel = vscode.window.createWebviewPanel(
+            `${GraphPanel.viewType}.preview`,
+            'Spec Graph Web Preview',
+            vscode.ViewColumn.Beside,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [extensionUri],
+            },
+        );
+
+        const previewPanel = new GraphPanel(panel, extensionUri, loader, workspaceRoot, false);
+        previewPanel.update();
+        return previewPanel;
     }
 
     /** 특정 노드에 포커스 */
@@ -76,8 +99,12 @@ export class GraphPanel {
 
     /** 그래프 데이터 갱신 */
     async update(): Promise<void> {
-        const graph = await this.loader.getGraph();
-        this.panel.webview.html = this.getHtml(graph);
+        try {
+            const graph = await this.loader.getGraph();
+            this.panel.webview.html = this.getHtml(graph, !this.isPrimaryPanel);
+        } catch (e) {
+            this.panel.webview.html = this.getErrorHtml(`그래프 로드 실패: ${String(e)}`);
+        }
     }
 
     /** Webview → Extension 메시지 핸들링 */
@@ -138,7 +165,7 @@ export class GraphPanel {
     /** 스펙 JSON 파일 열기 */
     private async openSpecFile(specId: string): Promise<void> {
         const filePath = vscode.Uri.file(
-            require('path').join(this.workspaceRoot, 'docs', 'specs', `${specId}.json`)
+            require('path').join(this.loader.specsDirectory, `${specId}.json`)
         );
         try {
             const doc = await vscode.workspace.openTextDocument(filePath);
@@ -149,8 +176,13 @@ export class GraphPanel {
     }
 
     /** Webview HTML 생성 */
-    private getHtml(graph: SpecGraph): string {
+    private getHtml(graph: SpecGraph, isPreview: boolean): string {
         const nonce = getNonce();
+
+        // Cytoscape.js 로컬 파일 URI
+        const cytoscapeUri = this.panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this.extensionUri, 'dist', 'cytoscape.min.js')
+        );
 
         // Cytoscape.js 노드/엣지 데이터 구성
         const elements = this.buildCytoscapeElements(graph);
@@ -163,7 +195,7 @@ export class GraphPanel {
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
                    style-src 'unsafe-inline';
-                   script-src 'nonce-${nonce}' https://cdnjs.cloudflare.com;
+                   script-src 'nonce-${nonce}' ${this.panel.webview.cspSource};
                    img-src ${this.panel.webview.cspSource} data:;
                    font-src ${this.panel.webview.cspSource};">
     <title>Spec Graph</title>
@@ -373,6 +405,9 @@ export class GraphPanel {
             <input type="checkbox" id="chkConditions" checked> 조건 표시
         </label>
         <div class="separator"></div>
+        ${isPreview ? '<span style="font-size:11px;color:var(--vscode-descriptionForeground,#888)">Web Preview</span><div class="separator"></div>' : ''}
+        <span style="font-size:11px;color:var(--vscode-descriptionForeground,#888)">nodes: ${graph.nodes.length}, edges: ${graph.edges.length}</span>
+        <div class="separator"></div>
         <div class="legend">
             <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div> verified</div>
             <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> active</div>
@@ -390,7 +425,7 @@ export class GraphPanel {
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <script src="${cytoscapeUri}"></script>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
 
@@ -404,10 +439,23 @@ export class GraphPanel {
         const statusColors = ${JSON.stringify(STATUS_COLORS)};
 
         // ─── Cytoscape 초기화 ───
-        const cy = cytoscape({
-            container: document.getElementById('cy'),
-            elements: elements,
-            style: [
+        const cyContainer = document.getElementById('cy');
+        function renderGraphError(message) {
+            cyContainer.innerHTML = '<div style="padding:16px;color:var(--vscode-errorForeground,#f48771);font-size:12px;line-height:1.5">'
+                + message + '<br><span style="color:var(--vscode-descriptionForeground,#888)">개발자 도구 콘솔에서 상세 로그를 확인하세요.</span></div>';
+        }
+
+        if (typeof cytoscape !== 'function') {
+            renderGraphError('Cytoscape 로딩에 실패했습니다. dist/cytoscape.min.js 포함 여부를 확인하세요.');
+            throw new Error('cytoscape is not available in webview runtime');
+        }
+
+        let cy;
+        try {
+            cy = cytoscape({
+                container: cyContainer,
+                elements: elements,
+                style: [
                 // Feature 노드
                 {
                     selector: 'node[nodeType="feature"]',
@@ -511,19 +559,24 @@ export class GraphPanel {
                     }
                 },
             ],
-            layout: {
-                name: 'cose',
-                animate: true,
-                animationDuration: 500,
-                nodeRepulsion: function() { return 8000; },
-                idealEdgeLength: function() { return 80; },
-                gravity: 0.3,
-                padding: 30,
-            },
-            minZoom: 0.2,
-            maxZoom: 4,
-            wheelSensitivity: 0.3,
-        });
+                layout: {
+                    name: 'cose',
+                    animate: true,
+                    animationDuration: 500,
+                    nodeRepulsion: function() { return 8000; },
+                    idealEdgeLength: function() { return 80; },
+                    gravity: 0.3,
+                    padding: 30,
+                },
+                minZoom: 0.2,
+                maxZoom: 4,
+                wheelSensitivity: 0.3,
+            });
+        } catch (e) {
+            console.error('[SpecGraph] Cytoscape init failed', e);
+            renderGraphError('그래프 초기화에 실패했습니다. 데이터 포맷과 레이아웃 설정을 확인하세요.');
+            throw e;
+        }
 
         // ─── 노드 클릭 이벤트 ───
         cy.on('tap', 'node', function(evt) {
@@ -572,7 +625,7 @@ export class GraphPanel {
             if (nodeData.codeRefs && nodeData.codeRefs.length > 0) {
                 html += '<h3>Code References</h3>';
                 for (const ref of nodeData.codeRefs) {
-                    html += '<a class="code-ref" onclick="openCodeRef(\'' + escapeHtml(ref) + '\')">'
+                    html += '<a class="code-ref" data-ref="' + escapeAttr(ref) + '">'
                           + escapeHtml(ref) + '</a>';
                 }
             }
@@ -588,7 +641,7 @@ export class GraphPanel {
                           + '<span style="font-size:11px;color:#aaa">' + escapeHtml(c.description) + '</span>';
                     if (c.codeRefs && c.codeRefs.length > 0) {
                         for (const ref of c.codeRefs) {
-                            html += '<br><a class="code-ref" onclick="openCodeRef(\'' + escapeHtml(ref) + '\')">'
+                            html += '<br><a class="code-ref" data-ref="' + escapeAttr(ref) + '">'
                                   + escapeHtml(ref) + '</a>';
                         }
                     }
@@ -599,11 +652,30 @@ export class GraphPanel {
             // 스펙 파일 열기 버튼
             const fileId = isFeature ? nodeId : nodeData.featureId;
             if (fileId) {
-                html += '<button class="btn-open-file" onclick="openSpecFile(\'' + escapeHtml(fileId) + '\')">'
+                html += '<button class="btn-open-file" data-spec-id="' + escapeAttr(fileId) + '">'
                       + '📄 ' + fileId + '.json 열기</button>';
             }
 
             content.innerHTML = html;
+
+            content.querySelectorAll('.code-ref').forEach(el => {
+                el.addEventListener('click', () => {
+                    const ref = el.getAttribute('data-ref');
+                    if (ref) {
+                        openCodeRef(ref);
+                    }
+                });
+            });
+
+            const openBtn = content.querySelector('.btn-open-file');
+            if (openBtn) {
+                openBtn.addEventListener('click', () => {
+                    const specId = openBtn.getAttribute('data-spec-id');
+                    if (specId) {
+                        openSpecFile(specId);
+                    }
+                });
+            }
         }
 
         function hideDetail() {
@@ -717,7 +789,42 @@ export class GraphPanel {
                       .replace(/"/g, '&quot;')
                       .replace(/'/g, '&#039;');
         }
+
+        function escapeAttr(str) {
+            return escapeHtml(str);
+        }
     </script>
+</body>
+</html>`;
+    }
+
+    private getErrorHtml(message: string): string {
+        return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: var(--vscode-font-family, sans-serif);
+            background: var(--vscode-editor-background, #1e1e1e);
+            color: var(--vscode-editor-foreground, #d4d4d4);
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .error {
+            color: var(--vscode-errorForeground, #f48771);
+            margin-bottom: 10px;
+        }
+        .hint {
+            color: var(--vscode-descriptionForeground, #999);
+        }
+    </style>
+</head>
+<body>
+    <div class="error">${escapeHtmlMessage(message)}</div>
+    <div class="hint">명령 팔레트에서 "Spec Graph: 디버그 정보"를 실행해 스펙 로딩 상태를 확인하세요.</div>
 </body>
 </html>`;
     }
@@ -771,7 +878,9 @@ export class GraphPanel {
     }
 
     dispose(): void {
-        GraphPanel.currentPanel = undefined;
+        if (this.isPrimaryPanel) {
+            GraphPanel.currentPanel = undefined;
+        }
         this.panel.dispose();
         while (this.disposables.length) {
             const d = this.disposables.pop();
@@ -787,4 +896,12 @@ function getNonce(): string {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
+}
+
+function escapeHtmlMessage(input: string): string {
+    return input.replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }

@@ -22,28 +22,51 @@ export class SpecLoader {
     }
 
     /**
-     * .flow/config.json의 specRepository가 설정되어 있으면
-     * ~/.flow/specs/{repoName}/docs/specs/ 경로를 반환한다.
-     * 그렇지 않으면 워크스페이스의 docs/specs/ 경로를 반환한다.
+     * specRepository 설정이 있으면 ~/.flow/specs/{repoName}/ 하위에서 스펙 디렉토리를 찾아 반환한다.
+     * 설정은 .flow/config.json 에서 읽는다. (runner-config.json은 config.json으로 통합됨)
+     * 로컬 docs/specs/에 파일이 있으면 그것을 우선 사용한다.
      */
     private resolveSpecsDir(workspaceRoot: string): string {
+        // 1. 로컬 docs/specs/ 에 스펙 파일이 있으면 그것을 우선 사용
+        const localSpecsDir = path.join(workspaceRoot, 'docs', 'specs');
+        if (fs.existsSync(localSpecsDir)) {
+            const jsonFiles = fs.readdirSync(localSpecsDir).filter(f => f.endsWith('.json'));
+            if (jsonFiles.length > 0) {
+                return localSpecsDir;
+            }
+        }
+
+        // 2. .flow/config.json 에서 specRepository 탐색
+        const specRepository = this.readSpecRepository(workspaceRoot);
+        if (specRepository) {
+            const repoName = this.extractRepoName(specRepository);
+            const userHome = process.env.HOME
+                || process.env.USERPROFILE
+                || require('os').homedir();
+            const repoDir = path.join(userHome, '.flow', 'specs', repoName);
+            if (fs.existsSync(repoDir)) {
+                // 리포 내 specs/ 서브디렉토리 우선, 없으면 리포 루트 사용
+                const subDir = path.join(repoDir, 'specs');
+                return fs.existsSync(subDir) ? subDir : repoDir;
+            }
+        }
+
+        return localSpecsDir;
+    }
+
+    /**
+     * .flow/config.json 에서 specRepository를 읽는다.
+     * (runner-config.json은 config.json으로 통합됨)
+     */
+    private readSpecRepository(workspaceRoot: string): string | undefined {
         const configPath = path.join(workspaceRoot, '.flow', 'config.json');
         if (fs.existsSync(configPath)) {
             try {
                 const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                const specRepository: string | undefined = config.specRepository;
-                if (specRepository) {
-                    const repoName = this.extractRepoName(specRepository);
-                    const userHome = process.env.HOME
-                        || process.env.USERPROFILE
-                        || require('os').homedir();
-                    return path.join(userHome, '.flow', 'specs', repoName, 'docs', 'specs');
-                }
-            } catch {
-                // 파싱 실패 시 기본 경로 사용
-            }
+                if (config.specRepository) { return config.specRepository as string; }
+            } catch { /* 파싱 실패 시 무시 */ }
         }
-        return path.join(workspaceRoot, 'docs', 'specs');
+        return undefined;
     }
 
     /**

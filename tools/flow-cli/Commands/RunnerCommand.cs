@@ -248,45 +248,29 @@ public partial class FlowApp
     }
 
     /// <summary>
-    /// Runner 설정 로드.
-    /// 1) .flow/config.json 에서 specRepository, specBranch 로드 (F-080-C1)
-    /// 2) .flow/runner-config.json 에서 나머지 런타임 설정 로드
-    /// config.json의 specRepository가 runner-config.json보다 우선한다.
+    /// Runner 설정 로드. .flow/config.json 단일 파일에서 모든 설정을 읽는다.
+    /// (runner-config.json은 config.json으로 통합됨)
     /// </summary>
     private RunnerConfig LoadRunnerConfig()
     {
-        // 1. runner-config.json에서 기본 런타임 설정 로드
-        var runnerConfigPath = Path.Combine(PathResolver.FlowRoot, "runner-config.json");
-        RunnerConfig config;
-        if (File.Exists(runnerConfigPath))
-        {
-            try
-            {
-                var json = File.ReadAllText(runnerConfigPath);
-                config = System.Text.Json.JsonSerializer.Deserialize<RunnerConfig>(json,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    ?? new RunnerConfig();
-            }
-            catch
-            {
-                config = new RunnerConfig();
-            }
-        }
-        else
-        {
-            config = new RunnerConfig();
-        }
+        var flowConfig = FlowConfigService.Load();
 
-        // 2. config.json에서 specRepository 로드 (F-080-C1, C2)
-        var flowConfigService = new Services.FlowConfigService(PathResolver.ConfigPath);
-        var flowConfig = flowConfigService.Load();
-
-        if (!string.IsNullOrWhiteSpace(flowConfig.SpecRepository))
+        return new RunnerConfig
         {
-            config.SpecRepository = flowConfig.SpecRepository;
-            config.SpecBranch = flowConfig.SpecBranch;
-        }
-
-        return config;
+            SpecRepository        = flowConfig.SpecRepository,
+            SpecBranch            = flowConfig.SpecBranch,
+            PollIntervalMinutes   = flowConfig.PollIntervalMinutes,
+            MaxConcurrentSpecs    = flowConfig.MaxConcurrentSpecs,
+            LogDir                = flowConfig.LogDir,
+            PidFile               = flowConfig.PidFile,
+            CopilotModel          = flowConfig.CopilotModel,
+            CopilotCommand        = flowConfig.CopilotCommand,
+            CopilotCliPath        = flowConfig.CopilotCliPath,
+            TargetStatuses        = flowConfig.TargetStatuses,
+            WorktreeDir           = flowConfig.WorktreeDir,
+            CopilotTimeoutMinutes = flowConfig.CopilotTimeoutMinutes,
+            RemoteName            = flowConfig.RemoteName,
+            MainBranch            = flowConfig.MainBranch,
+        };
     }
 }

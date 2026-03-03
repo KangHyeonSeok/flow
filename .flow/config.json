@@ -1,4 +1,5 @@
 {
-  "specRepository": "https://github.com/user/flow-spec.git",
-  "specBranch": "main"
+  "specRepository": "https://KangHyeonSeok@github.com/KangHyeonSeok/flow-spec",
+  "specBranch": "main",
+  "copilotCliPath": "C:\\Users\\HyeonSeok\\AppData\\Roaming\\npm\\copilot.ps1"
 }

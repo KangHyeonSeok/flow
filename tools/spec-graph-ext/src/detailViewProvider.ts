@@ -273,7 +273,7 @@ ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄
     private async openSpecFile(specId: string): Promise<void> {
         const pathMod = require('path');
         const filePath = vscode.Uri.file(
-            pathMod.join(this.workspaceRoot, 'docs', 'specs', `${specId}.json`)
+            pathMod.join(this.loader.specsDirectory, `${specId}.json`)
         );
         try {
             const doc = await vscode.workspace.openTextDocument(filePath);

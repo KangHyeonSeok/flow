@@ -2,7 +2,7 @@
   "name": "spec-graph",
   "displayName": "Spec Graph",
   "description": "Feature Dependency Graph 시각화 - 스펙 트리뷰 및 Cytoscape.js 기반 그래프 렌더링",
-  "version": "0.1.44",
+  "version": "0.1.52",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
@@ -15,7 +15,10 @@
     "Visualization"
   ],
   "activationEvents": [
-    "workspaceContains:docs/specs/*.json"
+    "onStartupFinished",
+    "workspaceContains:docs/specs/*.json",
+    "workspaceContains:**/docs/specs/*.json",
+    "workspaceContains:.flow/config.json"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -38,7 +41,8 @@
         {
           "id": "specDetail",
           "type": "webview",
-          "name": "스펙 상세"
+          "name": "스펙 상세",
+          "icon": "resources/icon.svg"
         }
       ]
     },
@@ -47,6 +51,11 @@
         "command": "specGraph.openGraph",
         "title": "Spec Graph: 그래프 열기",
         "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "specGraph.openGraphPreview",
+        "title": "Spec Graph: 웹 프리뷰 열기",
+        "icon": "$(browser)"
       },
       {
         "command": "specGraph.refresh",
@@ -71,6 +80,11 @@
         "command": "specGraph.filterByTag",
         "title": "Spec Graph: 태그별 필터",
         "icon": "$(tag)"
+      },
+      {
+        "command": "specGraph.debugInfo",
+        "title": "Spec Graph: 디버그 정보",
+        "icon": "$(info)"
       }
     ],
     "menus": {
@@ -86,7 +100,17 @@
           "group": "navigation"
         },
         {
+          "command": "specGraph.openGraphPreview",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
           "command": "specGraph.filterByStatus",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
+          "command": "specGraph.debugInfo",
           "when": "view == specTree",
           "group": "navigation"
         }
@@ -106,7 +130,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap && node -e \"require('fs').copyFileSync('node_modules/cytoscape/dist/cytoscape.min.js', 'dist/cytoscape.min.js')\"",
     "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "build": "npm run compile",
     "package": "vsce package --no-dependencies --allow-missing-repository",

@@ -8,7 +8,64 @@ namespace FlowCLI;
 public partial class FlowApp
 {
     private SpecStore? _specStore;
-    private SpecStore SpecStore => _specStore ??= new SpecStore(PathResolver.ProjectRoot);
+    private SpecStore SpecStore => _specStore ??= CreateSpecStore();
+
+    /// <summary>
+    /// SpecStore를 생성한다.
+    /// 1) 워크스페이스 내 docs/specs/ 에 스펙 파일이 있으면 그것을 사용.
+    /// 2) 없으면 .flow/config.json 의 specRepository URL에서 리포 이름을 추출하여
+    ///    ~/.flow/specs/{repo-name}/ 경로를 사용.
+    /// </summary>
+    private SpecStore CreateSpecStore()
+    {
+        var localSpecsDir = Path.Combine(PathResolver.ProjectRoot, "docs", "specs");
+
+        // 로컬에 스펙 파일이 있으면 로컬 저장소 사용
+        if (Directory.Exists(localSpecsDir) &&
+            Directory.GetFiles(localSpecsDir, "*.json").Length > 0)
+        {
+            return new SpecStore(PathResolver.ProjectRoot);
+        }
+
+        // config.json 에서 SpecRepository URL 읽기
+        var repoUrl = FlowConfigService.GetSpecRepository();
+        if (!string.IsNullOrWhiteSpace(repoUrl))
+        {
+            var repoName = ExtractRepoName(repoUrl);
+            var homeRepoDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".flow", "specs", repoName);
+
+            if (Directory.Exists(homeRepoDir))
+            {
+                // 리포 내 specs/ 서브디렉토리가 있으면 그것을 우선 사용
+                var repoSpecsSubDir = Path.Combine(homeRepoDir, "specs");
+                var actualSpecsDir = Directory.Exists(repoSpecsSubDir)
+                    ? repoSpecsSubDir
+                    : homeRepoDir;
+                return new SpecStore(actualSpecsDir, externalRepo: true);
+            }
+        }
+
+        // 기본: 로컬 docs/specs/ 사용
+        return new SpecStore(PathResolver.ProjectRoot);
+    }
+
+    /// <summary>
+    /// Git 리포지토리 URL에서 리포 이름을 추출한다.
+    /// 예) https://github.com/user/flow-spec.git → flow-spec
+    ///     git@github.com:user/flow-spec.git    → flow-spec
+    /// </summary>
+    private static string ExtractRepoName(string repoUrl)
+    {
+        var name = repoUrl.TrimEnd('/');
+        // .git 확장자 제거
+        if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+        // 마지막 슬래시 또는 콜론 이후 부분 추출
+        var idx = name.LastIndexOfAny(['/', ':']);
+        return idx >= 0 ? name[(idx + 1)..] : name;
+    }
 
     private SpecValidator? _specValidator;
     private SpecValidator SpecValidator => _specValidator ??= new SpecValidator();

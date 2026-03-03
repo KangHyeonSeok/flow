@@ -15,14 +15,21 @@ import { DetailViewProvider } from './detailViewProvider';
 import { SpecStatus } from './types';
 
 let specLoader: SpecLoader;
+let output: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext): void {
+    output = vscode.window.createOutputChannel('Spec Graph');
+    context.subscriptions.push(output);
+    output.appendLine('[activate] Spec Graph extension activated');
+
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
+        output.appendLine('[activate] No workspace folder found');
         return;
     }
 
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
+    output.appendLine(`[activate] workspaceRoot=${workspaceRoot}`);
 
     // 1. SpecLoader 초기화
     specLoader = new SpecLoader(workspaceRoot);
@@ -54,7 +61,32 @@ export function activate(context: vscode.ExtensionContext): void {
     // 그래프 열기
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openGraph', () => {
+            output.appendLine('[command] specGraph.openGraph');
             GraphPanel.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+        }),
+    );
+
+    // 웹 렌더링 프리뷰 (별도 패널)
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.openGraphPreview', () => {
+            output.appendLine('[command] specGraph.openGraphPreview');
+            GraphPanel.openPreview(context.extensionUri, specLoader, workspaceRoot);
+        }),
+    );
+
+    // 디버그 정보 출력
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.debugInfo', async () => {
+            const graph = await specLoader.getGraph();
+            const msg = [
+                `[debug] specsDirectory=${specLoader.specsDirectory}`,
+                `[debug] specs=${graph.specs.length}`,
+                `[debug] nodes=${graph.nodes.length}`,
+                `[debug] edges=${graph.edges.length}`,
+            ].join('\n');
+            output.appendLine(msg);
+            output.show(true);
+            vscode.window.showInformationMessage(`Spec Graph: specs=${graph.specs.length}, nodes=${graph.nodes.length}, edges=${graph.edges.length}`);
         }),
     );
 
@@ -143,7 +175,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // 5. 초기 로드
     specLoader.load().then(() => {
+        const graph = specLoader.getSpecs();
+        output.appendLine(`[load] completed specs=${graph.length}, specsDirectory=${specLoader.specsDirectory}`);
         vscode.window.setStatusBarMessage('$(type-hierarchy) Spec Graph 로드 완료', 3000);
+    }).catch((err) => {
+        output.appendLine(`[load] failed: ${String(err)}`);
+        vscode.window.showErrorMessage(`Spec Graph 로드 실패: ${String(err)}`);
     });
 }
 
