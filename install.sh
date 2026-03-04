@@ -161,7 +161,7 @@ else
 fi
 
 VERSION=$(echo "$RELEASE_JSON" | grep -o '"tag_name": *"[^"]*"' | head -1 | sed 's/.*"v\?\([^"]*\)".*/\1/')
-DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*flow-prompts-[^"]*\.zip"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/')
+DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": *"[^"]*flow\.zip"' | head -1 | sed 's/.*"\(http[^"]*\)".*/\1/')
 
 if [ -z "$DOWNLOAD_URL" ]; then
     warn "zip 파일을 찾을 수 없습니다."
