@@ -134,6 +134,31 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
+    // 스펙 삭제
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.deleteSpec', async (item: any) => {
+            const specId = item?.spec?.id || (typeof item === 'string' ? item : undefined);
+            if (!specId) { return; }
+
+            const confirm = await vscode.window.showWarningMessage(
+                `스펙 "${specId}"을(를) 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`,
+                { modal: true },
+                '삭제',
+            );
+
+            if (confirm !== '삭제') { return; }
+
+            const filePath = require('path').join(specLoader.specsDirectory, `${specId}.json`);
+            try {
+                require('fs').unlinkSync(filePath);
+                await specLoader.reload();
+                vscode.window.showInformationMessage(`스펙 "${specId}" 삭제 완료`);
+            } catch (err) {
+                vscode.window.showErrorMessage(`스펙 삭제 실패: ${String(err)}`);
+            }
+        }),
+    );
+
     // 상태별 필터
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.filterByStatus', async () => {
