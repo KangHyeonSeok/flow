@@ -183,7 +183,7 @@ $apiUrl = "https://api.github.com/repos/$Repo/releases/latest"
 try {
     $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "PowerShell" }
     $version = $release.tag_name -replace '^v', ''
-    $zipAsset = $release.assets | Where-Object { $_.name -match '^flow-prompts-.*\.zip$' } | Select-Object -First 1
+    $zipAsset = $release.assets | Where-Object { $_.name -match '^flow\.zip$' } | Select-Object -First 1
     
     if (-not $zipAsset) {
         throw "zip 파일을 찾을 수 없습니다."

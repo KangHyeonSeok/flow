@@ -221,7 +221,7 @@ Write-Host ""
 # 4. 설치 스크립트 실행
 Write-Step "업데이트 중..."
 
-$zipAsset = $release.assets | Where-Object { $_.name -match '^flow-prompts-.*\.zip$' } | Select-Object -First 1
+$zipAsset = $release.assets | Where-Object { $_.name -match '^flow\.zip$' } | Select-Object -First 1
 if (-not $zipAsset) {
     Write-Warning "zip 파일을 찾을 수 없습니다."
     exit 1
@@ -247,7 +247,7 @@ if (Test-Path $flowDir) {
 }
 
 # zip 다운로드
-$tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "flow-prompts-$latestVersion.zip"
+$tempZip = Join-Path ([System.IO.Path]::GetTempPath()) "flow.zip"
 try {
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip -UseBasicParsing
     Write-Success "다운로드 완료"
