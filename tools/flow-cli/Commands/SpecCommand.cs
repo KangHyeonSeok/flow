@@ -519,4 +519,44 @@ public partial class FlowApp
             Environment.ExitCode = 1;
         }
     }
+
+    // ─── flow spec-index ─────────────────────────────────────────────
+    [Command("spec-index", Description = "스펙 내용을 RAG 벡터 DB에 인덱싱합니다")]
+    public void SpecIndex(
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var specs = SpecStore.GetAll();
+            int inserted = 0, updated = 0;
+
+            foreach (var spec in specs)
+            {
+                // Build indexable text from spec fields
+                var conditionText = spec.Conditions.Count > 0
+                    ? "\n조건:\n" + string.Join("\n", spec.Conditions.Select(c => $"- {c.Description}"))
+                    : "";
+                var tagText = spec.Tags.Count > 0
+                    ? "\n태그: " + string.Join(", ", spec.Tags)
+                    : "";
+                var content = $"[{spec.Id}] {spec.Title}\n{spec.Description}{conditionText}{tagText}\n상태: {spec.Status}";
+
+                var (_, wasInserted) = DatabaseService.UpsertSpecDocument(spec.Id, content);
+                if (wasInserted) inserted++;
+                else updated++;
+            }
+
+            JsonOutput.Write(JsonOutput.Success("spec-index", new
+            {
+                total = specs.Count,
+                inserted,
+                updated
+            }, $"스펙 인덱싱 완료: {inserted}개 추가, {updated}개 업데이트"), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-index", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
 }

@@ -489,5 +489,59 @@ public class DatabaseService : IDisposable
         return records.Take(top).ToList();
     }
 
+    /// <summary>
+    /// Upsert a spec document by spec ID into the RAG database.
+    /// Matches on feature_name = "spec:{specId}".
+    /// If a document already exists, updates its content and resets its vector index entry.
+    /// Returns (documentId, wasInserted).
+    /// </summary>
+    public (int id, bool wasInserted) UpsertSpecDocument(string specId, string content)
+    {
+        var featureName = $"spec:{specId}";
+        var conn = GetConnection();
+
+        int existingId = 0;
+        using (var findCmd = conn.CreateCommand())
+        {
+            findCmd.CommandText = "SELECT id FROM documents WHERE feature_name = @feature LIMIT 1";
+            findCmd.Parameters.AddWithValue("@feature", featureName);
+            var result = findCmd.ExecuteScalar();
+            existingId = result != null ? Convert.ToInt32(result) : 0;
+        }
+
+        if (existingId > 0)
+        {
+            // Update content and invalidate vector index so it gets re-embedded
+            using var updateCmd = conn.CreateCommand();
+            updateCmd.CommandText = """
+                UPDATE documents SET content = @content, updated_at = datetime('now') WHERE id = @id;
+                DELETE FROM vec_documents WHERE rowid = @id;
+                DELETE FROM vector_index_meta WHERE document_id = @id;
+                """;
+            updateCmd.Parameters.AddWithValue("@content", content);
+            updateCmd.Parameters.AddWithValue("@id", existingId);
+            updateCmd.ExecuteNonQuery();
+
+            _ = EnsureVectorIndexAsync(); // re-index in background
+            return (existingId, false);
+        }
+        else
+        {
+            var record = new TaskRecord
+            {
+                Content = content,
+                CanonicalTags = "spec",
+                FeatureName = featureName,
+                CommitId = "",
+                PlanText = "",
+                ResultText = "",
+                StateAtCreation = "",
+                Metadata = "{}"
+            };
+            var id = AddDocument(record);
+            return (id, true);
+        }
+    }
+
     public void Dispose() => _connection?.Dispose();
 }

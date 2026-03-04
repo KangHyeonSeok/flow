@@ -18,6 +18,13 @@ try { $hookInput = $inputJson | ConvertFrom-Json } catch {}
 
 $flowScript = Join-Path $PSScriptRoot "..\..\flow.ps1"
 
+# 세션 시작 시 스펙을 벡터 DB에 인덱싱 (백그라운드 - hook 타임아웃에 영향 없음)
+Start-Process pwsh `
+    -ArgumentList "-NoProfile", "-NonInteractive", "-Command",
+        "& '$flowScript' spec-index 2>`$null" `
+    -WindowStyle Hidden `
+    -WorkingDirectory (Join-Path $PSScriptRoot "..\..")
+
 # Gather spec context
 $specList = ""
 $specTree = ""

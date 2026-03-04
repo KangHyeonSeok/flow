@@ -11,6 +11,15 @@ param()
 
 $ErrorActionPreference = "SilentlyContinue"
 
+# Always output valid JSON even on unexpected errors
+trap {
+    $output = @{ hookSpecificOutput = @{ hookEventName = "UserPromptSubmit"; additionalContext = "" } } | ConvertTo-Json -Depth 3
+    Write-Output $output
+    exit 0
+}
+
+try {
+
 # Read stdin (hook input JSON) - use StreamReader for proper UTF-8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $reader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), [System.Text.Encoding]::UTF8)
@@ -40,9 +49,23 @@ foreach ($kw in $implKeywords) {
 
 if (-not $isImplRequest) {
     # Not an implementation request - pass through silently
-    $output = @{ continue = $true } | ConvertTo-Json
+    $output = @{ hookSpecificOutput = @{ hookEventName = "UserPromptSubmit"; additionalContext = "" } } | ConvertTo-Json -Depth 3
     Write-Output $output
     exit 0
+}
+
+# ─── 구현 요청: 백그라운드로 스펙 자동 업데이트 시작 ─────────────────────
+# 프롬프트를 임시 파일에 저장 후 spec-auto-update.ps1 을 완전히 detached 프로세스로 실행.
+# hook 자체는 즉시 리턴한다.
+$promptTempFile = Join-Path $env:TEMP ".flow-spec-prompt-$(Get-Date -Format 'yyyyMMddHHmmssff').txt"
+$prompt | Set-Content $promptTempFile -Encoding UTF8
+
+$autoUpdateScript = Join-Path $PSScriptRoot "spec-auto-update.ps1"
+if (Test-Path $autoUpdateScript) {
+    Start-Process pwsh `
+        -ArgumentList "-NoProfile", "-NonInteractive", "-File", $autoUpdateScript, "-PromptFile", $promptTempFile `
+        -WindowStyle Hidden `
+        -WorkingDirectory (Join-Path $PSScriptRoot "..\..")
 }
 
 # Check if a spec ID is mentioned in the prompt
@@ -92,15 +115,25 @@ $sessionData = @{ specIds = @($allTrackedIds) }
 $sessionData | ConvertTo-Json -Depth 5 | Set-Content $sessionFile -Encoding UTF8
 
 if ($specIds.Count -eq 0) {
-    $messages += "구현 요청이 감지되었습니다. 관련 스펙 ID가 명시되지 않아 에이전트가 스펙을 생성하거나 기존 스펙을 찾아 연결합니다."
+    $messages += "구현 요청이 감지되었습니다. 백그라운드에서 관련 스펙을 벡터 검색하여 자동 업데이트/생성 중입니다."
+} else {
+    $messages += "백그라운드에서 관련 스펙 벡터 검색 및 자동 업데이트도 병행 실행 중입니다."
 }
 
-$systemMsg = ($messages -join "`n")
+$additionalContext = "[Flow Spec Hook] " + ($messages -join "`n")
 
 $output = @{
-    continue      = $true
-    systemMessage = "[Flow Spec Hook] $systemMsg"
+    hookSpecificOutput = @{
+        hookEventName    = "UserPromptSubmit"
+        additionalContext = $additionalContext
+    }
 } | ConvertTo-Json -Depth 5
 
 Write-Output $output
 exit 0
+
+} catch {
+    $output = @{ hookSpecificOutput = @{ hookEventName = "UserPromptSubmit"; additionalContext = "" } } | ConvertTo-Json -Depth 3
+    Write-Output $output
+    exit 0
+}

@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "pwsh -NoProfile -File .github/hooks/prompt-submit.ps1",
+        "timeout": 15
+      }
+    ]
+  }
+}
