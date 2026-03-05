@@ -111,4 +111,4 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
 
 ## VS Code 확장
 
-`spec-graph-ext` 패키지가 VS Code에서 스펙 트리뷰 + Cytoscape.js 그래프 시각화를 제공한다.
+`flow-ext` 패키지가 VS Code에서 스펙 트리뷰 + Cytoscape.js 그래프 시각화를 제공한다.

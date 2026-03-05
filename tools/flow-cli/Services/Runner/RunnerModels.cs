@@ -27,7 +27,7 @@ public class RunnerConfig
     public string? CopilotCliPath { get; set; }
 
     /// <summary>구현 대상 스펙 상태 목록</summary>
-    public string[] TargetStatuses { get; set; } = ["draft", "needs-review"];
+    public string[] TargetStatuses { get; set; } = ["requested"];
 
     /// <summary>Worktree 기본 디렉토리 (.flow 기준 상대 경로)</summary>
     public string WorktreeDir { get; set; } = "worktrees";

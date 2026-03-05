@@ -56,9 +56,9 @@ jobs:
         run: |
           cp VERSION .flow/version.txt
 
-      - name: Build Spec Graph Extension (.vsix)
+      - name: Build Flow Extension (.vsix)
         run: |
-          cd tools/spec-graph-ext
+          cd tools/flow-ext
           # package.json 버전 동기화
           node -e "
             const fs = require('fs');
@@ -72,7 +72,7 @@ jobs:
           cp ../../LICENSE ./LICENSE 2>/dev/null || true
           npx vsce package --no-dependencies --allow-missing-repository
           # .vsix 파일을 프로젝트 루트로 이동
-          mv *.vsix ../../spec-graph-${{ steps.bump.outputs.version }}.vsix
+          mv *.vsix ../../flow-ext-${{ steps.bump.outputs.version }}.vsix
 
       - name: Create zip archive
         run: |
@@ -81,7 +81,7 @@ jobs:
           cp -r .flow temp-release/
           find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
           echo '{}' > temp-release/.flow/config.json
-          cp spec-graph-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
+          cp flow-ext-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
           cp -r tools/e2e-test temp-release/.flow/e2e-test
           find temp-release/.flow/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
           find temp-release/.flow/e2e-test -type f -name "*.pyc" -delete

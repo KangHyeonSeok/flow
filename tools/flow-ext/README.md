@@ -42,7 +42,7 @@
 ## 빌드
 
 ```bash
-cd tools/spec-graph-ext
+cd tools/flow-ext
 npm install
 npm run build
 ```
@@ -83,7 +83,7 @@ npm run watch    # TypeScript 파일 변경 감시
 ## 아키텍처
 
 ```
-spec-graph-ext/
+flow-ext/
 ├── src/
 │   ├── extension.ts         # 진입점, 명령어 등록
 │   ├── types.ts             # 타입 정의 (Spec, GraphNode, Edge)

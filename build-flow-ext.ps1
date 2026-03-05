@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Spec Graph VSCode Extension 빌드 및 패키징
+    Flow VSCode Extension 빌드 및 패키징
 
 .DESCRIPTION
     tools/flow-ext 확장을 빌드하고 .vsix 설치 파일을 생성합니다.
@@ -13,8 +13,8 @@
     .vsix 파일 출력 디렉토리 (기본: 프로젝트 루트의 dist/)
 
 .EXAMPLE
-    .\build-specgraph.ps1
-    .\build-specgraph.ps1 -Version "1.2.3" -OutputDir "./artifacts"
+    .\build-flow-ext.ps1
+    .\build-flow-ext.ps1 -Version "1.2.3" -OutputDir "./artifacts"
 #>
 param(
     [string]$Version,
@@ -28,7 +28,7 @@ if (-not (Test-Path (Join-Path $ProjectRoot "VERSION"))) {
 }
 $ExtDir = Join-Path $ProjectRoot "tools" "flow-ext"
 
-Write-Host "=== Spec Graph Extension Build ===" -ForegroundColor Cyan
+Write-Host "=== Flow Extension Build ===" -ForegroundColor Cyan
 
 # 1. 버전 결정
 if (-not $Version) {
@@ -117,7 +117,7 @@ try {
     # 10. .vsix 파일을 출력 디렉토리로 이동
     $vsixFile = Get-ChildItem "*.vsix" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($vsixFile) {
-        $destName = "spec-graph-$Version.vsix"
+        $destName = "flow-ext-$Version.vsix"
         $destPath = Join-Path $OutputDir $destName
         Move-Item $vsixFile.FullName $destPath -Force
         Write-Host ""

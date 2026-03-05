@@ -6,12 +6,12 @@
             "type": "extensionHost",
             "request": "launch",
             "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}/tools/spec-graph-ext"
+                "--extensionDevelopmentPath=${workspaceFolder}/tools/flow-ext"
             ],
             "outFiles": [
-                "${workspaceFolder}/tools/spec-graph-ext/dist/**/*.js"
+                "${workspaceFolder}/tools/flow-ext/dist/**/*.js"
             ],
-            "preLaunchTask": "npm: build - spec-graph-ext"
+            "preLaunchTask": "npm: build - flow-ext"
         }
     ]
 }

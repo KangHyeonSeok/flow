@@ -1,11 +1,12 @@
 /**
- * Spec Graph VSCode Extension
+ * Flow VSCode Extension
  *
- * 기능 의존성 그래프 시각화
+ * Flow 통합 확장
  * - 사이드바 트리뷰: 스펙 계층 구조
  * - Webview 그래프: Cytoscape.js 기반 DAG 렌더링
  * - 상세 패널: 노드 선택 시 상세 정보
  * - 코드 참조 이동: codeRefs 클릭 시 에디터에서 열기
+ * - Flow Runner 데몬 시작/중지
  */
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
@@ -19,11 +20,13 @@ import { SpecStatus } from './types';
 
 let specLoader: SpecLoader;
 let output: vscode.OutputChannel;
+let daemonStatusBarItem: vscode.StatusBarItem;
+let daemonPollTimer: NodeJS.Timeout | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-    output = vscode.window.createOutputChannel('Spec Graph');
+    output = vscode.window.createOutputChannel('Flow');
     context.subscriptions.push(output);
-    output.appendLine('[activate] Spec Graph extension activated');
+    output.appendLine('[activate] Flow extension activated');
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -33,6 +36,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
     output.appendLine(`[activate] workspaceRoot=${workspaceRoot}`);
+
+    // 0. Daemon StatusBar 아이템
+    daemonStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
+    daemonStatusBarItem.command = 'flowExt.startDaemon';
+    context.subscriptions.push(daemonStatusBarItem);
+    updateDaemonStatusBar(false);
+    daemonStatusBarItem.show();
+
+    // 주기적 데몬 상태 폴링 (10초)
+    daemonPollTimer = setInterval(async () => {
+        const running = await checkDaemonRunning(workspaceRoot);
+        await setDaemonRunningContext(running);
+    }, 10_000);
+    context.subscriptions.push({ dispose: () => { if (daemonPollTimer) { clearInterval(daemonPollTimer); } } });
+
+    // 초기 상태 확인
+    checkDaemonRunning(workspaceRoot).then(running => setDaemonRunningContext(running));
 
     // 1. SpecLoader 초기화
     specLoader = new SpecLoader(workspaceRoot);
@@ -297,13 +317,143 @@ export function activate(context: vscode.ExtensionContext): void {
     specLoader.load().then(async () => {
         const graph = specLoader.getSpecs();
         output.appendLine(`[load] completed specs=${graph.length}, specsDirectory=${specLoader.specsDirectory}`);
-        vscode.window.setStatusBarMessage('$(type-hierarchy) Spec Graph 로드 완료', 3000);
+        vscode.window.setStatusBarMessage('$(type-hierarchy) Flow 로드 완료', 3000);
 
         const gitRoot = findGitRoot(specLoader.specsDirectory);
         if (gitRoot) { await updatePendingPushContext(gitRoot); }
     }).catch((err) => {
         output.appendLine(`[load] failed: ${String(err)}`);
-        vscode.window.showErrorMessage(`Spec Graph 로드 실패: ${String(err)}`);
+        vscode.window.showErrorMessage(`Flow 로드 실패: ${String(err)}`);
+    });
+
+    // Flow Runner 데몬 시작
+    context.subscriptions.push(
+        vscode.commands.registerCommand('flowExt.startDaemon', async () => {
+            output.appendLine('[command] flowExt.startDaemon');
+            const flowExe = resolveFlowExecutable(workspaceRoot);
+            if (!flowExe) {
+                vscode.window.showErrorMessage('flow CLI를 찾을 수 없습니다. PATH 또는 flow.executablePath 설정을 확인하세요.');
+                return;
+            }
+
+            const terminal = vscode.window.createTerminal({
+                name: 'Flow Runner',
+                hideFromUser: false,
+            });
+            terminal.show(false);
+            terminal.sendText(`${flowExe} runner-start --daemon`);
+            output.appendLine(`[daemon] 시작: ${flowExe} runner-start --daemon`);
+
+            // 잠시 대기 후 상태 확인
+            await new Promise(r => setTimeout(r, 2000));
+            const running = await checkDaemonRunning(workspaceRoot);
+            await setDaemonRunningContext(running);
+            if (running) {
+                vscode.window.showInformationMessage('Flow Runner 데몬이 시작되었습니다.');
+            }
+        }),
+    );
+
+    // Flow Runner 데몬 중지
+    context.subscriptions.push(
+        vscode.commands.registerCommand('flowExt.stopDaemon', async () => {
+            output.appendLine('[command] flowExt.stopDaemon');
+            const flowExe = resolveFlowExecutable(workspaceRoot);
+            if (!flowExe) {
+                vscode.window.showErrorMessage('flow CLI를 찾을 수 없습니다.');
+                return;
+            }
+
+            try {
+                await execCommandAsync(flowExe, ['runner-stop'], workspaceRoot);
+                await setDaemonRunningContext(false);
+                vscode.window.showInformationMessage('Flow Runner 데몬이 중지되었습니다.');
+            } catch (err) {
+                const msg = String(err);
+                output.appendLine(`[daemon] 중지 실패: ${msg}`);
+                vscode.window.showErrorMessage(`Flow Runner 중지 실패: ${msg}`);
+            }
+        }),
+    );
+}
+
+/** flow CLI 실행 경로를 반환한다. 설정값 → PATH 순으로 탐색. */
+function resolveFlowExecutable(workspaceRoot: string): string | null {
+    const path = require('path') as typeof import('path');
+    const fs = require('fs') as typeof import('fs');
+
+    // 1. 사용자 설정
+    const configPath = vscode.workspace.getConfiguration('flow').get<string>('executablePath', '');
+    if (configPath && fs.existsSync(configPath)) { return configPath; }
+
+    // 2. 워크스페이스 루트의 flow.ps1 (Windows)
+    const flowPs1 = path.join(workspaceRoot, 'flow.ps1');
+    if (process.platform === 'win32' && fs.existsSync(flowPs1)) {
+        return `powershell -ExecutionPolicy Bypass -File "${flowPs1}"`;
+    }
+
+    // 3. PATH에서 flow 탐색
+    try {
+        const which = require('child_process').execSync(
+            process.platform === 'win32' ? 'where flow' : 'which flow',
+            { encoding: 'utf8' }
+        ).trim().split('\n')[0].trim();
+        if (which && fs.existsSync(which)) { return which; }
+    } catch { /* not found */ }
+
+    return null;
+}
+
+/** `flow runner-status` JSON 결과를 파싱하여 데몬 실행 여부를 반환한다. */
+async function checkDaemonRunning(workspaceRoot: string): Promise<boolean> {
+    const flowExe = resolveFlowExecutable(workspaceRoot);
+    if (!flowExe) { return false; }
+    try {
+        const stdout = await execCommandAsync(flowExe, ['runner-status'], workspaceRoot);
+        const json = JSON.parse(stdout);
+        return json?.data?.running === true;
+    } catch {
+        return false;
+    }
+}
+
+/** VSCode context와 상태 바를 데몬 실행 상태에 따라 업데이트한다. */
+async function setDaemonRunningContext(running: boolean): Promise<void> {
+    await vscode.commands.executeCommand('setContext', 'flowExt.daemonRunning', running);
+    updateDaemonStatusBar(running);
+}
+
+/** 상태 바 아이템의 텍스트/툴팁/커맨드를 업데이트한다. */
+function updateDaemonStatusBar(running: boolean): void {
+    if (!daemonStatusBarItem) { return; }
+    if (running) {
+        daemonStatusBarItem.text = '$(sync~spin) Flow Runner';
+        daemonStatusBarItem.tooltip = 'Flow Runner 데몬 실행 중 — 클릭하여 중지';
+        daemonStatusBarItem.command = 'flowExt.stopDaemon';
+        daemonStatusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+    } else {
+        daemonStatusBarItem.text = '$(play) Flow Runner';
+        daemonStatusBarItem.tooltip = 'Flow Runner 데몬 시작';
+        daemonStatusBarItem.command = 'flowExt.startDaemon';
+        daemonStatusBarItem.color = undefined;
+    }
+}
+
+/** 외부 명령어를 실행하고 stdout을 반환한다. 실패 시 reject. */
+function execCommandAsync(exe: string, args: string[], cwd: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        // PowerShell 래퍼인 경우 특수 처리
+        if (exe.startsWith('powershell')) {
+            // exe: powershell ... -File "path" → args를 추가
+            const fullCmd = `${exe} ${args.join(' ')}`;
+            require('child_process').exec(fullCmd, { cwd }, (err: any, stdout: string, stderr: string) => {
+                if (err) { reject(stderr.trim() || String(err)); } else { resolve(stdout.trim()); }
+            });
+        } else {
+            cp.execFile(exe, args, { cwd }, (err, stdout, stderr) => {
+                if (err) { reject(stderr.trim() || String(err)); } else { resolve(stdout.trim()); }
+            });
+        }
     });
 }
 

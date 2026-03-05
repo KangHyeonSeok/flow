@@ -1,7 +1,7 @@
 {
-  "name": "spec-graph",
-  "displayName": "Spec Graph",
-  "description": "Feature Dependency Graph 시각화 - 스펙 트리뷰 및 Cytoscape.js 기반 그래프 렌더링",
+  "name": "flow-ext",
+  "displayName": "Flow",
+  "description": "Flow 통합 확장 - 스펙 그래프 시각화, 칸반 보드, Flow Runner 데몬 관리",
   "version": "0.1.54",
   "publisher": "flow-team",
   "repository": {
@@ -25,14 +25,14 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "specGraph",
-          "title": "Spec Graph",
+          "id": "flowExt",
+          "title": "Flow",
           "icon": "resources/icon.svg"
         }
       ]
     },
     "views": {
-      "specGraph": [
+      "flowExt": [
         {
           "id": "specTree",
           "name": "스펙 트리",
@@ -110,8 +110,30 @@
         "command": "specGraph.openKanban",
         "title": "Spec Graph: 칸반 보드 열기",
         "icon": "$(table)"
+      },
+      {
+        "command": "flowExt.startDaemon",
+        "title": "Flow Runner 시작",
+        "icon": "$(play)"
+      },
+      {
+        "command": "flowExt.stopDaemon",
+        "title": "Flow Runner 중지",
+        "icon": "$(debug-stop)"
       }
     ],
+    "keybindings": [],
+    "configuration": {
+      "type": "object",
+      "title": "Flow",
+      "properties": {
+        "flow.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "flow CLI 실행 파일 경로 (비워두면 PATH에서 자동 탐색)"
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -153,6 +175,16 @@
           "command": "specGraph.openKanban",
           "when": "view == specTree",
           "group": "navigation"
+        },
+        {
+          "command": "flowExt.startDaemon",
+          "when": "view == specTree && !flowExt.daemonRunning",
+          "group": "navigation@0"
+        },
+        {
+          "command": "flowExt.stopDaemon",
+          "when": "view == specTree && flowExt.daemonRunning",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [
