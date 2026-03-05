@@ -336,13 +336,15 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
 
-            const terminal = vscode.window.createTerminal({
-                name: 'Flow Runner',
-                hideFromUser: false,
-            });
-            terminal.show(false);
-            terminal.sendText(`${flowExe} runner-start --daemon`);
-            output.appendLine(`[daemon] 시작: ${flowExe} runner-start --daemon`);
+            // 터미널 대신 detached 백그라운드 프로세스로 시작한다.
+            // terminal.sendText()로 실행하면 VS Code ConPTY 콘솔 세션에 붙어서
+            // checkDaemonRunning() 호출 시 Windows가 CTRL_C_EVENT를 콘솔 그룹 전체에
+            // 브로드캐스트하여 daemon이 즉시 종료되는 문제가 발생한다.
+            const spawned = spawnDaemonBackground(workspaceRoot, output);
+            if (!spawned) {
+                vscode.window.showErrorMessage('Flow Runner 데몬 시작 실패: flow 실행 파일을 찾을 수 없습니다.');
+                return;
+            }
 
             // 잠시 대기 후 상태 확인
             await new Promise(r => setTimeout(r, 2000));
@@ -350,6 +352,8 @@ export function activate(context: vscode.ExtensionContext): void {
             await setDaemonRunningContext(running);
             if (running) {
                 vscode.window.showInformationMessage('Flow Runner 데몬이 시작되었습니다.');
+            } else {
+                vscode.window.showWarningMessage('Flow Runner 데몬 시작을 확인할 수 없습니다. 로그를 확인하세요.');
             }
         }),
     );
@@ -375,6 +379,48 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
     );
+}
+
+/**
+ * daemon을 터미널 없이 detached 백그라운드 프로세스로 시작한다.
+ * ConPTY 터미널에 붙지 않으므로 CTRL_C_EVENT 브로드캐스트 간섭이 없다.
+ */
+function spawnDaemonBackground(workspaceRoot: string, output: vscode.OutputChannel): boolean {
+    const path = require('path') as typeof import('path');
+    const fs = require('fs') as typeof import('fs');
+    const { spawn } = require('child_process') as typeof import('child_process');
+
+    let cmd: string;
+    let args: string[];
+
+    if (process.platform === 'win32') {
+        const flowPs1 = path.join(workspaceRoot, 'flow.ps1');
+        if (fs.existsSync(flowPs1)) {
+            cmd = 'powershell.exe';
+            args = ['-ExecutionPolicy', 'Bypass', '-NonInteractive', '-File', flowPs1, 'runner-start', '--daemon'];
+        } else {
+            const flowExeBin = path.join(workspaceRoot, '.flow', 'bin', 'flow.exe');
+            if (!fs.existsSync(flowExeBin)) { return false; }
+            cmd = flowExeBin;
+            args = ['runner-start', '--daemon'];
+        }
+    } else {
+        const flowExe = resolveFlowExecutable(workspaceRoot);
+        if (!flowExe) { return false; }
+        cmd = flowExe;
+        args = ['runner-start', '--daemon'];
+    }
+
+    output.appendLine(`[daemon] 백그라운드 시작: ${cmd} ${args.join(' ')}`);
+
+    const child = spawn(cmd, args, {
+        detached: true,
+        stdio: 'ignore',
+        cwd: workspaceRoot,
+        windowsHide: true,
+    });
+    child.unref();
+    return true;
 }
 
 /** flow CLI 실행 경로를 반환한다. 설정값 → PATH 순으로 탐색. */
