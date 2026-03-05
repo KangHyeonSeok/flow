@@ -167,31 +167,40 @@ public class RunnerService
 
     /// <summary>
     /// Runner를 데몬 모드로 실행한다 (주기적 폴링).
+    /// 처리할 스펙이 없으면 30초마다 재확인하고, 스펙이 처리된 경우 설정된 주기(PollIntervalMinutes)만큼 대기한다.
     /// </summary>
     public async Task RunDaemonAsync(CancellationToken cancellationToken = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         WritePidFile();
-        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 주기: {_config.PollIntervalMinutes}분)");
+        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 주기: {_config.PollIntervalMinutes}분, 유휴 재확인: 30초)");
 
         try
         {
             while (!_cts.Token.IsCancellationRequested)
             {
+                List<SpecWorkResult> results = [];
                 try
                 {
-                    await RunOnceAsync();
+                    results = await RunOnceAsync();
                 }
                 catch (Exception ex)
                 {
                     _log.Error("daemon", $"사이클 실행 중 오류: {ex.Message}");
                 }
 
-                // 다음 사이클까지 대기
+                // 처리된 스펙이 있으면 설정된 주기 대기, 없으면 30초 후 재확인
+                var delay = results.Count > 0
+                    ? TimeSpan.FromMinutes(_config.PollIntervalMinutes)
+                    : TimeSpan.FromSeconds(30);
+
+                if (results.Count == 0)
+                    _log.Info("daemon", $"구현 대상 스펙 없음 — 30초 후 재확인");
+
                 try
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(_config.PollIntervalMinutes), _cts.Token);
+                    await Task.Delay(delay, _cts.Token);
                 }
                 catch (OperationCanceledException)
                 {
