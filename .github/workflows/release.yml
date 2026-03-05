@@ -29,6 +29,11 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
       - name: Bump VERSION
         id: bump
         run: |
@@ -56,6 +61,16 @@ jobs:
         run: |
           cp VERSION .flow/version.txt
 
+      - name: Build Flow CLI (single-file, multi-platform)
+        run: |
+          VER=${{ steps.bump.outputs.version }}
+          CSPROJ=tools/flow-cli/flow-cli.csproj
+          PROPS="-p:Version=$VER -p:AssemblyVersion=$VER -p:FileVersion=$VER"
+
+          dotnet publish $CSPROJ -c Release -r win-x64   --self-contained -o build-win   $PROPS
+          dotnet publish $CSPROJ -c Release -r linux-x64  --self-contained -o build-linux $PROPS
+          dotnet publish $CSPROJ -c Release -r osx-arm64  --self-contained -o build-osx   $PROPS
+
       - name: Build Flow Extension (.vsix)
         run: |
           cd tools/flow-ext
@@ -76,11 +91,19 @@ jobs:
 
       - name: Create zip archive
         run: |
+          mkdir -p temp-release/.flow/bin
           mkdir -p temp-release/.github/skills
           mkdir -p temp-e2e
           cp -r .flow temp-release/
           find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
           echo '{}' > temp-release/.flow/config.json
+
+          # Flow CLI 단일 파일 바이너리 포함
+          cp build-win/flow.exe        temp-release/.flow/bin/flow.exe
+          cp build-linux/flow          temp-release/.flow/bin/flow-linux
+          cp build-osx/flow            temp-release/.flow/bin/flow-osx-arm64
+          chmod +x temp-release/.flow/bin/flow-linux
+          chmod +x temp-release/.flow/bin/flow-osx-arm64
           cp flow-ext-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
           cp -r tools/e2e-test temp-release/.flow/e2e-test
           find temp-release/.flow/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +

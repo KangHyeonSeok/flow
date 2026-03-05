@@ -216,6 +216,24 @@ else
     exit 1
 fi
 
+# 플랫폼별 flow CLI 바이너리 실행 권한 부여
+UNAME_S=$(uname -s 2>/dev/null || echo "")
+UNAME_M=$(uname -m 2>/dev/null || echo "")
+if [ "$UNAME_S" = "Darwin" ]; then
+    if [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
+        chmod +x "$FLOW_DIR/bin/flow-osx-arm64"
+        # arm64/x86_64 모두 동일 바이너리 사용 (Rosetta 경유)
+        cp "$FLOW_DIR/bin/flow-osx-arm64" "$FLOW_DIR/bin/flow"
+        chmod +x "$FLOW_DIR/bin/flow"
+    fi
+elif [ "$UNAME_S" = "Linux" ]; then
+    if [ -f "$FLOW_DIR/bin/flow-linux" ]; then
+        chmod +x "$FLOW_DIR/bin/flow-linux"
+        cp "$FLOW_DIR/bin/flow-linux" "$FLOW_DIR/bin/flow"
+        chmod +x "$FLOW_DIR/bin/flow"
+    fi
+fi
+
 # .github/prompts 폴더 복사 (있으면)
 if [ -d "$TEMP_DIR/prompts" ]; then
     if find "$TEMP_DIR/prompts" -mindepth 1 -maxdepth 1 -print -quit | read -r; then

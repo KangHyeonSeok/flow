@@ -125,8 +125,23 @@ try {
         Write-Host "  .vsix: $destPath" -ForegroundColor Green
         Write-Host "  크기: $([math]::Round($((Get-Item $destPath).Length / 1KB), 1)) KB" -ForegroundColor Green
         Write-Host ""
-        Write-Host "설치 방법:" -ForegroundColor Cyan
-        Write-Host "  code --install-extension `"$destPath`"" -ForegroundColor White
+
+        # 11. 확장 설치
+        Write-Host "[5/5] 확장 설치 중..." -ForegroundColor White
+        $codeCmd = Get-Command code -ErrorAction SilentlyContinue
+        if ($codeCmd) {
+            code --install-extension "$destPath" --force
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "=== 설치 완료 ===" -ForegroundColor Green
+                Write-Host "  VS Code를 재시작하면 변경 사항이 적용됩니다." -ForegroundColor Cyan
+            } else {
+                Write-Host "[WARN] 설치 실패. 수동으로 설치하세요:" -ForegroundColor Yellow
+                Write-Host "  code --install-extension `"$destPath`"" -ForegroundColor White
+            }
+        } else {
+            Write-Host "[WARN] 'code' 명령을 찾을 수 없습니다. 수동으로 설치하세요:" -ForegroundColor Yellow
+            Write-Host "  code --install-extension `"$destPath`"" -ForegroundColor White
+        }
     } else {
         Write-Host "[ERROR] .vsix 파일을 찾을 수 없습니다" -ForegroundColor Red
         exit 1

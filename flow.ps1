@@ -53,4 +53,12 @@ if ($args.Count -gt 0 -and $args[0] -eq "vlm") {
 	exit $LASTEXITCODE
 }
 
-& "$PSScriptRoot/.flow/bin/flow.exe" @args
+# 플랫폼에 따라 적절한 바이너리 선택
+if ($IsLinux) {
+	$flowBin = "$PSScriptRoot/.flow/bin/flow-linux"
+} elseif ($IsMacOS) {
+	$flowBin = "$PSScriptRoot/.flow/bin/flow-osx-arm64"
+} else {
+	$flowBin = "$PSScriptRoot/.flow/bin/flow.exe"
+}
+& $flowBin @args
