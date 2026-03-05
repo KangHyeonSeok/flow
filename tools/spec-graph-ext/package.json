@@ -105,6 +105,11 @@
         "command": "specGraph.pushSpecs",
         "title": "Spec Graph: 원격 저장소에 Push",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "specGraph.openKanban",
+        "title": "Spec Graph: 칸반 보드 열기",
+        "icon": "$(table)"
       }
     ],
     "menus": {
@@ -141,6 +146,11 @@
         },
         {
           "command": "specGraph.pushSpecs",
+          "when": "view == specTree",
+          "group": "navigation"
+        },
+        {
+          "command": "specGraph.openKanban",
           "when": "view == specTree",
           "group": "navigation"
         }

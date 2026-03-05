@@ -4,7 +4,7 @@
  */
 
 /** 스펙 상태 */
-export type SpecStatus = 'draft' | 'active' | 'needs-review' | 'verified' | 'deprecated';
+export type SpecStatus = 'draft' | 'requested' | 'context-gathering' | 'plan' | 'active' | 'needs-review' | 'verified' | 'deprecated';
 
 /** 노드 타입 */
 export type NodeType = 'feature' | 'condition';
@@ -117,6 +117,9 @@ export interface SpecGraph {
 /** 상태별 색상 매핑 */
 export const STATUS_COLORS: Record<SpecStatus, string> = {
     'draft': '#9e9e9e',
+    'requested': '#9c27b0',
+    'context-gathering': '#00bcd4',
+    'plan': '#3f51b5',
     'active': '#2196f3',
     'needs-review': '#ff9800',
     'verified': '#4caf50',
@@ -126,6 +129,9 @@ export const STATUS_COLORS: Record<SpecStatus, string> = {
 /** 상태별 아이콘 ID (codicon) */
 export const STATUS_ICONS: Record<SpecStatus, string> = {
     'draft': 'circle-outline',
+    'requested': 'send',
+    'context-gathering': 'search',
+    'plan': 'list-tree',
     'active': 'circle-filled',
     'needs-review': 'warning',
     'verified': 'check',

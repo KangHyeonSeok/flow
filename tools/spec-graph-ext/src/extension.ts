@@ -14,6 +14,7 @@ import { SpecTreeProvider } from './specTreeProvider';
 import { GraphPanel } from './graphPanel';
 import { DetailViewProvider } from './detailViewProvider';
 import { SpecViewProvider } from './specViewProvider';
+import { KanbanPanel } from './kanbanPanel';
 import { SpecStatus } from './types';
 
 let specLoader: SpecLoader;
@@ -165,7 +166,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // 상태별 필터
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.filterByStatus', async () => {
-            const statuses: (SpecStatus | 'all')[] = ['all', 'draft', 'active', 'needs-review', 'verified', 'deprecated'];
+            const statuses: (SpecStatus | 'all')[] = ['all', 'draft', 'requested', 'context-gathering', 'plan', 'active', 'needs-review', 'verified', 'deprecated'];
             const items = statuses.map(s => ({
                 label: s === 'all' ? '$(list-flat) 전체' : `$(${getStatusIcon(s as SpecStatus)}) ${s}`,
                 value: s,
@@ -199,6 +200,14 @@ export function activate(context: vscode.ExtensionContext): void {
             if (specId && typeof specId === 'string') {
                 panel.focusSpec(specId);
             }
+        }),
+    );
+
+    // 칸반 보드 열기
+    context.subscriptions.push(
+        vscode.commands.registerCommand('specGraph.openKanban', () => {
+            output.appendLine('[command] specGraph.openKanban');
+            KanbanPanel.createOrShow(context.extensionUri, specLoader, workspaceRoot);
         }),
     );
 
@@ -301,6 +310,9 @@ export function activate(context: vscode.ExtensionContext): void {
 function getStatusIcon(status: SpecStatus): string {
     const map: Record<SpecStatus, string> = {
         'draft': 'circle-outline',
+        'requested': 'send',
+        'context-gathering': 'search',
+        'plan': 'list-tree',
         'active': 'circle-filled',
         'needs-review': 'warning',
         'verified': 'check',

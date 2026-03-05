@@ -88,6 +88,9 @@ public class SpecNode
     [JsonPropertyName("evidence")]
     public List<SpecEvidence> Evidence { get; set; } = new();
 
+    [JsonPropertyName("priority")]
+    public string? Priority { get; set; }  // P1 | P2 | P3 (기본 P3)
+
     [JsonPropertyName("tags")]
     public List<string> Tags { get; set; } = new();
 
@@ -182,5 +185,48 @@ public class ValidationError
 public class ValidationWarning
 {
     public string SpecId { get; set; } = "";
+    public string Message { get; set; } = "";
+}
+
+/// <summary>spec-order 결과 – 위상 정렬 기반 구현 순서</summary>
+public class SpecOrderResult
+{
+    public List<SpecOrderPhase> Phases { get; set; } = new();
+    public bool HasCycles { get; set; }
+    public List<string> CycleNodes { get; set; } = new();
+    public string? FromId { get; set; }
+    public int TotalSpecs { get; set; }
+}
+
+/// <summary>하나의 Phase (동시 구현 가능한 스펙 그룹)</summary>
+public class SpecOrderPhase
+{
+    public int Phase { get; set; }
+    public List<SpecOrderEntry> Specs { get; set; } = new();
+}
+
+/// <summary>Phase 내 개별 스펙 항목</summary>
+public class SpecOrderEntry
+{
+    public string Id { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Status { get; set; } = "";
+    public string Priority { get; set; } = "P3";
+    public int ConditionsCount { get; set; }
+    public List<string> Dependencies { get; set; } = new();
+}
+
+/// <summary>AI 최적화 순서 제안</summary>
+public class AiOrderSuggestion
+{
+    public List<SpecOrderPhase> Phases { get; set; } = new();
+    public string Reasoning { get; set; } = "";
+}
+
+/// <summary>의존성 제약 위반 항목</summary>
+public class DependencyViolation
+{
+    public string SpecId { get; set; } = "";
+    public string DependsOn { get; set; } = "";
     public string Message { get; set; } = "";
 }

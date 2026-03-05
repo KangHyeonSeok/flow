@@ -558,6 +558,187 @@ public partial class FlowApp
         }
     }
 
+    // ─── flow spec-order ─────────────────────────────────────────────
+    [Command("spec-order", Description = "의존성 그래프 기반으로 스펙 구현 순서를 결정합니다")]
+    public void SpecOrder(
+        [Option("from", Description = "이 스펙 기준 부분 순서 산출")] string? from = null,
+        [Option("ai", Description = "LLM으로 최적화된 순서 제안")] bool ai = false,
+        [Option("model", Description = "AI 호출 모델 (--ai 전용)")] string? model = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var specs = SpecStore.GetAll();
+            var orderer = new SpecOrderer();
+            var baseOrder = orderer.ComputeOrder(specs, from);
+
+            if (baseOrder.HasCycles)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-order",
+                    "순환 참조가 감지되었습니다. 순서를 계산할 수 없습니다.",
+                    new { cycleNodes = baseOrder.CycleNodes }), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            // ── AI 최적화 모드 ────────────────────────────────────────
+            if (ai)
+            {
+                var aiResult = TryRunAiOrder(orderer, baseOrder, model, pretty);
+                if (aiResult != null) return;
+                // AI 실패 시 기본 순서로 폴백 (콘솔 경고는 TryRunAiOrder 내에서 출력)
+            }
+
+            // ── 기본 위상정렬 결과 출력 ───────────────────────────────
+            var msg = from != null
+                ? $"[{from}] 기준 {baseOrder.TotalSpecs}개 스펙의 구현 순서 (Phase {baseOrder.Phases.Count}단계)"
+                : $"{baseOrder.TotalSpecs}개 스펙의 구현 순서 (Phase {baseOrder.Phases.Count}단계)";
+
+            JsonOutput.Write(JsonOutput.Success("spec-order", new
+            {
+                from,
+                totalSpecs = baseOrder.TotalSpecs,
+                phaseCount = baseOrder.Phases.Count,
+                phases = baseOrder.Phases,
+                aiOptimized = false
+            }, msg), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-order", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
+    /// <summary>
+    /// AI 최적화 순서를 시도한다.
+    /// 성공 시 결과를 출력하고 true 반환. 실패 시 경고 출력 후 null 반환.
+    /// </summary>
+    private bool? TryRunAiOrder(SpecOrderer orderer, SpecOrderResult baseOrder, string? model, bool pretty)
+    {
+        try
+        {
+            var config = FlowConfigService.Load();
+            var effectiveModel = model ?? config.CopilotModel;
+            var copilotCmd = !string.IsNullOrEmpty(config.CopilotCliPath)
+                ? config.CopilotCliPath
+                : config.CopilotCommand;
+
+            var prompt = orderer.BuildAiPrompt(baseOrder);
+
+            // 프롬프트를 임시 파일에 저장 (특수문자 안전 처리)
+            var tempFile = Path.Combine(Path.GetTempPath(),
+                $".flow-spec-order-{Guid.NewGuid():N}.txt");
+            File.WriteAllText(tempFile, prompt, System.Text.Encoding.UTF8);
+
+            // PowerShell을 통해 실행해서 인수 이스케이프 문제 방지
+            var psScript = $"""
+$prompt = Get-Content '{tempFile.Replace("'", "''")}' -Raw
+Remove-Item '{tempFile.Replace("'", "''")}' -Force -ErrorAction SilentlyContinue
+& {copilotCmd} -p $prompt --model {effectiveModel} --yolo 2>&1
+""";
+
+            using var process = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "pwsh",
+                    Arguments = $"-NoProfile -NonInteractive -Command \"{psScript.Replace("\"", "\\\"")}\"",
+                    WorkingDirectory = PathResolver.ProjectRoot,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            var output = new System.Text.StringBuilder();
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+            process.Start();
+            process.BeginOutputReadLine();
+            var timeoutMs = config.CopilotTimeoutMinutes * 60 * 1000;
+            process.WaitForExit(timeoutMs > 0 ? timeoutMs : 120_000);
+
+            // 출력에서 JSON 블록 추출
+            var rawOutput = output.ToString();
+            var aiSuggestion = TryParseAiSuggestion(rawOutput);
+
+            if (aiSuggestion == null)
+            {
+                Console.Error.WriteLine("[spec-order] AI 응답 파싱 실패 - 기본 순서로 폴백합니다.");
+                return null;
+            }
+
+            // ── 의존성 제약 위반 검증 (C4) ──────────────────────────
+            var violations = orderer.ValidateDependencyConstraints(baseOrder, aiSuggestion.Phases);
+
+            if (violations.Count > 0)
+            {
+                // 위반 발견: 해당 제안 자동 거부
+                JsonOutput.Write(JsonOutput.Error("spec-order",
+                    $"AI 제안에 {violations.Count}개의 의존성 제약 위반이 감지되어 자동 거부합니다. 기본 순서를 사용합니다.",
+                    new
+                    {
+                        from = baseOrder.FromId,
+                        totalSpecs = baseOrder.TotalSpecs,
+                        phaseCount = baseOrder.Phases.Count,
+                        phases = baseOrder.Phases,
+                        aiOptimized = false,
+                        aiRejected = true,
+                        violations
+                    }), pretty);
+                return true;
+            }
+
+            // 위반 없음: AI 제안 채택
+            var totalPhases = aiSuggestion.Phases.Count;
+            JsonOutput.Write(JsonOutput.Success("spec-order", new
+            {
+                from = baseOrder.FromId,
+                totalSpecs = baseOrder.TotalSpecs,
+                phaseCount = totalPhases,
+                phases = aiSuggestion.Phases,
+                aiOptimized = true,
+                reasoning = aiSuggestion.Reasoning
+            }, $"AI 최적화 순서 적용 완료 (Phase {totalPhases}단계). {aiSuggestion.Reasoning}"), pretty);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[spec-order --ai] 오류: {ex.Message} - 기본 순서로 폴백합니다.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// AI 출력 텍스트에서 JSON 블록을 파싱합니다.
+    /// </summary>
+    private static AiOrderSuggestion? TryParseAiSuggestion(string rawOutput)
+    {
+        if (string.IsNullOrWhiteSpace(rawOutput))
+            return null;
+
+        // JSON 블록 추출: 첫 번째 '{' ~ 마지막 '}'
+        var start = rawOutput.IndexOf('{');
+        var end = rawOutput.LastIndexOf('}');
+
+        if (start < 0 || end <= start)
+            return null;
+
+        var jsonBlock = rawOutput[start..(end + 1)];
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<AiOrderSuggestion>(jsonBlock,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     // ─── flow spec backup ─────────────────────────────────────────────
     [Command("spec-backup", Description = "스펙 파일을 백업합니다")]
     public void SpecBackup(
