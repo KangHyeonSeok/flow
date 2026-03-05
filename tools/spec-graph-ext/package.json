@@ -95,6 +95,16 @@
         "command": "specGraph.openSpecViewFocused",
         "title": "Spec Graph: 선택 스펙 문서 보기",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "specGraph.deleteSpec",
+        "title": "스펙 삭제",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "specGraph.pushSpecs",
+        "title": "Spec Graph: 원격 저장소에 Push",
+        "icon": "$(cloud-upload)"
       }
     ],
     "menus": {
@@ -128,6 +138,11 @@
           "command": "specGraph.debugInfo",
           "when": "view == specTree",
           "group": "navigation"
+        },
+        {
+          "command": "specGraph.pushSpecs",
+          "when": "view == specTree",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -143,6 +158,10 @@
         {
           "command": "specGraph.openSpecViewFocused",
           "when": "view == specTree"
+        },
+        {
+          "command": "specGraph.deleteSpec",
+          "when": "view == specTree && viewItem == feature"
         }
       ]
     }

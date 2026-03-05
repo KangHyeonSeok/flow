@@ -145,24 +145,101 @@ public partial class FlowApp
     [Command("spec-get", Description = "스펙을 조회합니다")]
     public void SpecGet(
         [Argument(Description = "스펙 ID")] string id,
-        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+        [Option("json", Description = "Raw JSON 출력")] bool json = false,
+        [Option("pretty", Description = "Pretty print JSON (--json 과 함께 사용)")] bool pretty = false)
     {
         try
         {
             var spec = SpecStore.Get(id);
             if (spec == null)
             {
-                JsonOutput.Write(JsonOutput.Error("spec-get", $"스펙 '{id}'을(를) 찾을 수 없습니다."), pretty);
+                if (json)
+                    JsonOutput.Write(JsonOutput.Error("spec-get", $"스펙 '{id}'을(를) 찾을 수 없습니다."), pretty);
+                else
+                    Console.WriteLine($"ERROR: 스펙 '{id}'을(를) 찾을 수 없습니다.");
                 Environment.ExitCode = 1;
                 return;
             }
-            JsonOutput.Write(JsonOutput.Success("spec-get", spec), pretty);
+            if (json)
+            {
+                JsonOutput.Write(JsonOutput.Success("spec-get", spec), pretty);
+            }
+            else
+            {
+                Console.WriteLine(FormatSpecForAI(spec));
+            }
         }
         catch (Exception ex)
         {
-            JsonOutput.Write(JsonOutput.Error("spec-get", ex.Message), pretty);
+            if (json)
+                JsonOutput.Write(JsonOutput.Error("spec-get", ex.Message), pretty);
+            else
+                Console.WriteLine($"ERROR: {ex.Message}");
             Environment.ExitCode = 1;
         }
+    }
+
+    private static string FormatSpecForAI(SpecNode spec)
+    {
+        var sb = new System.Text.StringBuilder();
+
+        // 헤더
+        sb.AppendLine($"[{spec.Id}] {spec.Title}");
+        sb.AppendLine(new string('─', 60));
+
+        // 기본 정보
+        var meta = new List<string> { $"status:{spec.Status}", $"type:{spec.NodeType}" };
+        if (!string.IsNullOrEmpty(spec.Parent)) meta.Add($"parent:{spec.Parent}");
+        if (spec.Dependencies.Count > 0) meta.Add($"deps:{string.Join(",", spec.Dependencies)}");
+        sb.AppendLine(string.Join(" | ", meta));
+
+        if (spec.Tags.Count > 0)
+            sb.AppendLine($"tags: {string.Join(", ", spec.Tags)}");
+
+        // 설명
+        if (!string.IsNullOrWhiteSpace(spec.Description))
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Description");
+            sb.AppendLine(spec.Description);
+        }
+
+        // 수락 조건
+        if (spec.Conditions.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## Conditions ({spec.Conditions.Count})");
+            foreach (var c in spec.Conditions)
+            {
+                var codeInfo = c.CodeRefs.Count > 0 ? $" [refs:{c.CodeRefs.Count}]" : "";
+                var evidenceInfo = c.Evidence.Count > 0 ? $" [ev:{c.Evidence.Count}]" : "";
+                sb.AppendLine($"  {c.Id} [{c.Status}]{codeInfo}{evidenceInfo}");
+                sb.AppendLine($"    {c.Description}");
+            }
+        }
+
+        // 코드 참조
+        if (spec.CodeRefs.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Code Refs");
+            foreach (var r in spec.CodeRefs)
+                sb.AppendLine($"  {r}");
+        }
+
+        // 증거
+        if (spec.Evidence.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Evidence");
+            foreach (var e in spec.Evidence)
+            {
+                var summary = e.Summary != null ? $": {e.Summary}" : "";
+                sb.AppendLine($"  [{e.Type}] {e.Path}{summary}");
+            }
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     // ─── flow spec list ───────────────────────────────────────────────
@@ -516,6 +593,37 @@ public partial class FlowApp
         catch (Exception ex)
         {
             JsonOutput.Write(JsonOutput.Error("spec-restore", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
+    // ─── flow spec-push ──────────────────────────────────────────────
+    [Command("spec-push", Description = "스펙 변경사항을 원격 저장소에 push합니다")]
+    public async Task SpecPushAsync(
+        [Option('m', Description = "커밋 메시지")] string? message = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var gitService = new SpecGitService();
+            var result = await gitService.PushAsync(SpecStore.SpecsDir, message);
+
+            if (result.AlreadyUpToDate)
+            {
+                JsonOutput.Write(JsonOutput.Success("spec-push",
+                    new { status = "up-to-date" },
+                    "Already up to date."), pretty);
+            }
+            else
+            {
+                JsonOutput.Write(JsonOutput.Success("spec-push",
+                    new { status = "pushed", commit = result.CommitHash, message = result.CommitMessage },
+                    $"push 완료: {result.CommitHash} \"{result.CommitMessage}\""), pretty);
+            }
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-push", ex.Message), pretty);
             Environment.ExitCode = 1;
         }
     }

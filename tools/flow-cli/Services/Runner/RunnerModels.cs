@@ -46,6 +46,29 @@ public class RunnerConfig
 
     /// <summary>스펙 저장소 브랜치 (기본: main)</summary>
     public string SpecBranch { get; set; } = "main";
+
+    // ── GitHub 이슈 연동 (F-070-C11~C15) ─────────────────
+
+    /// <summary>GitHub 이슈 폴링 주기 (분)</summary>
+    public int IssuePollIntervalMinutes { get; set; } = 10;
+
+    /// <summary>GitHub 저장소 (owner/repo 형식)</summary>
+    public string? GitHubRepo { get; set; }
+
+    /// <summary>GitHub PAT. 환경변수 GITHUB_TOKEN 우선.</summary>
+    public string? GitHubToken { get; set; }
+
+    /// <summary>스펙 연결 댓글 템플릿</summary>
+    public string SpecLinkCommentTemplate { get; set; } = "Linked spec: {specId}";
+
+    /// <summary>스펙 연결 라벨</summary>
+    public string SpecLinkLabel { get; set; } = "spec-linked";
+
+    /// <summary>자동 생성 스펙 라벨</summary>
+    public string AutoCreateSpecLabel { get; set; } = "spec-auto-created";
+
+    /// <summary>GitHub 이슈 연동 활성화</summary>
+    public bool GitHubIssuesEnabled { get; set; } = false;
 }
 
 /// <summary>
@@ -89,4 +112,31 @@ public class RunnerLogEntry
 
     public override string ToString()
         => $"[{Timestamp}] [{Level}] [{InstanceId}] {(SpecId != null ? $"[{SpecId}] " : "")}{Action}: {Message}";
+}
+
+/// <summary>
+/// GitHub 이슈 처리 결과 (F-070-C15)
+/// </summary>
+public class IssueProcessResult
+{
+    public int IssueNumber { get; set; }
+    public string IssueTitle { get; set; } = "";
+    public string Action { get; set; } = ""; // linked | created | skipped | error
+    public string? SpecId { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+/// <summary>
+/// GitHub 이슈 간소화 모델
+/// </summary>
+public class GitHubIssueInfo
+{
+    public int Number { get; set; }
+    public string Title { get; set; } = "";
+    public string Body { get; set; } = "";
+    public List<string> Labels { get; set; } = new();
+    public string State { get; set; } = "open";
+    public string CreatedAt { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
 }

@@ -69,6 +69,36 @@ public class FlowConfig
     [JsonPropertyName("mainBranch")]
     public string MainBranch { get; set; } = "main";
 
+    // ── GitHub 이슈 연동 설정 (F-070-C11~C15) ─────────────────────
+
+    /// <summary>GitHub 이슈 폴링 주기 (분)</summary>
+    [JsonPropertyName("issuePollIntervalMinutes")]
+    public int IssuePollIntervalMinutes { get; set; } = 10;
+
+    /// <summary>GitHub 저장소 (owner/repo 형식). 미설정 시 specRepository에서 추출.</summary>
+    [JsonPropertyName("githubRepo")]
+    public string? GitHubRepo { get; set; }
+
+    /// <summary>GitHub Personal Access Token (PAT). 환경변수 GITHUB_TOKEN 우선.</summary>
+    [JsonPropertyName("githubToken")]
+    public string? GitHubToken { get; set; }
+
+    /// <summary>스펙 연결 시 이슈에 추가하는 댓글 템플릿</summary>
+    [JsonPropertyName("specLinkCommentTemplate")]
+    public string SpecLinkCommentTemplate { get; set; } = "Linked spec: {specId}";
+
+    /// <summary>스펙 연결 시 이슈에 추가하는 라벨</summary>
+    [JsonPropertyName("specLinkLabel")]
+    public string SpecLinkLabel { get; set; } = "spec-linked";
+
+    /// <summary>자동 생성된 스펙에 추가하는 라벨</summary>
+    [JsonPropertyName("autoCreateSpecLabel")]
+    public string AutoCreateSpecLabel { get; set; } = "spec-auto-created";
+
+    /// <summary>GitHub 이슈 연동 활성화 여부</summary>
+    [JsonPropertyName("githubIssuesEnabled")]
+    public bool GitHubIssuesEnabled { get; set; } = false;
+
     // ── 로깅 설정 ────────────────────────────────────────────────
 
     /// <summary>로깅 설정</summary>

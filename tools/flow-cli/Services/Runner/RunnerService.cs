@@ -20,8 +20,10 @@ public class RunnerService
     private readonly GitWorktreeService _git;
     private readonly CopilotService _copilot;
     private readonly RunnerLogService _log;
+    private readonly GitHubIssueService? _githubIssue;
     private readonly string _instanceId;
     private readonly string _pidFilePath;
+    private DateTime _lastIssuePollAt = DateTime.MinValue;
 
     private CancellationTokenSource? _cts;
 
@@ -59,6 +61,21 @@ public class RunnerService
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
         _copilot = new CopilotService(_config, _log);
+
+        // GitHub 이슈 연동 (F-070-C11~C15)
+        if (_config.GitHubIssuesEnabled)
+        {
+            try
+            {
+                _githubIssue = new GitHubIssueService(_config, _specStore, _copilot, _log, _flowRoot);
+                _log.Info("init", "GitHub 이슈 연동 활성화");
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("init", $"GitHub 이슈 연동 초기화 실패: {ex.Message}");
+                _githubIssue = null;
+            }
+        }
     }
 
     public string InstanceId => _instanceId;
@@ -104,7 +121,48 @@ public class RunnerService
         }
 
         _log.Info("cycle", $"=== Runner 사이클 완료: {results.Count(r => r.Success)} 성공 / {results.Count(r => !r.Success)} 실패 ===");
+
+        // 4. GitHub 이슈 처리 (F-070-C11: issuePollIntervalMinutes 주기로 실행)
+        await ProcessGitHubIssuesIfDueAsync();
+
         return results;
+    }
+
+    /// <summary>
+    /// GitHub 이슈 폴링 주기가 도래하면 이슈를 처리한다.
+    /// </summary>
+    private async Task ProcessGitHubIssuesIfDueAsync()
+    {
+        if (_githubIssue == null) return;
+
+        var now = DateTime.UtcNow;
+        var elapsed = now - _lastIssuePollAt;
+        if (elapsed.TotalMinutes < _config.IssuePollIntervalMinutes) return;
+
+        try
+        {
+            _log.Info("github-issues", "GitHub 이슈 폴링 시작");
+            var issueResults = await _githubIssue.ProcessIssuesAsync();
+            _lastIssuePollAt = now;
+
+            if (issueResults.Count > 0)
+            {
+                _log.Info("github-issues",
+                    $"GitHub 이슈 처리: {issueResults.Count(r => r.Action == "linked")} 연결, " +
+                    $"{issueResults.Count(r => r.Action == "created")} 생성, " +
+                    $"{issueResults.Count(r => r.Action == "error")} 오류");
+
+                // 이슈 처리로 스펙이 변경되었으면 push
+                if (issueResults.Any(r => r.Success && r.Action is "linked" or "created") && _specRepo != null)
+                {
+                    await _specRepo.CommitAndPushAsync("[runner] Update specs from GitHub issues");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error("github-issues", $"GitHub 이슈 폴링 오류: {ex.Message}");
+        }
     }
 
     /// <summary>

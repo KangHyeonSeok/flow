@@ -271,6 +271,15 @@ public partial class FlowApp
             CopilotTimeoutMinutes = flowConfig.CopilotTimeoutMinutes,
             RemoteName            = flowConfig.RemoteName,
             MainBranch            = flowConfig.MainBranch,
+
+            // GitHub 이슈 연동 (F-070-C11~C15)
+            IssuePollIntervalMinutes = flowConfig.IssuePollIntervalMinutes,
+            GitHubRepo               = flowConfig.GitHubRepo,
+            GitHubToken              = flowConfig.GitHubToken,
+            SpecLinkCommentTemplate  = flowConfig.SpecLinkCommentTemplate,
+            SpecLinkLabel            = flowConfig.SpecLinkLabel,
+            AutoCreateSpecLabel      = flowConfig.AutoCreateSpecLabel,
+            GitHubIssuesEnabled      = flowConfig.GitHubIssuesEnabled,
         };
     }
 }
