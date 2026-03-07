@@ -10,7 +10,8 @@
 /tools/flow-cli/bin
 /tools/flow-cli/obj
 /testscript
-/tools/flow-cli.Tests
+/tools/flow-cli.Tests/bin
+/tools/flow-cli.Tests/obj
 /.flow/rag/bin/models
 examples/testimage/testimage.png
 /.github/skills/skill-creator
