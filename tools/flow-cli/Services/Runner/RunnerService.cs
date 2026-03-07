@@ -27,6 +27,7 @@ public class RunnerService
     private DateTime _lastIssuePollAt = DateTime.MinValue;
 
     private CancellationTokenSource? _cts;
+    private DateTime _lastIssueSyncAt = DateTime.MinValue;
 
     private static readonly JsonSerializerOptions SpecJsonOpts = new()
     {
@@ -114,6 +115,9 @@ public class RunnerService
         // 1.6. F-025-C3: 손상 스펙 fresh scan → 우선 복구 시도
         var brokenRepaired = await RepairBrokenSpecsAsync();
         results.AddRange(brokenRepaired);
+
+        // 1.7. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
+        await SyncIssueConnectionsForQueueAsync();
 
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
@@ -352,33 +356,161 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 구현 대상 스펙을 탐색한다.
-    /// target status에 해당하는 스펙을 반환한다.
+    /// 구현 대상 스펙을 탐색하고, readiness 그룹별로 이슈 연관도 점수 기반 재정렬을 수행한다 (F-015).
     /// 손상 스펙 복구는 RepairBrokenSpecsAsync()에서 별도로 최우선 처리한다 (F-025-C3).
     /// </summary>
     private List<SpecNode> FindTargetSpecs()
     {
         var allSpecs = _specStore.GetAll();
-        var targets = new List<SpecNode>();
+        var allSpecIds = allSpecs.Select(s => s.Id).ToHashSet();
 
-        foreach (var spec in allSpecs)
+        // 의존성이 충족된 상태(verified/done)에 있는 스펙 ID 집합
+        var completedIds = allSpecs
+            .Where(s => s.Status is "verified" or "done")
+            .Select(s => s.Id)
+            .ToHashSet();
+
+        var candidates = allSpecs
+            .Where(s => s.Status != "working" && _config.TargetStatuses.Contains(s.Status))
+            .ToList();
+
+        // F-015-C3: readiness 그룹 분리
+        var ready = new List<SpecNode>();
+        var notReady = new List<SpecNode>();
+
+        foreach (var spec in candidates)
         {
-            // working 상태는 AI가 구현 중이므로 스킵
-            if (spec.Status == "working") continue;
-
-            // 타겟 상태에 해당하는 스펙만 처리
-            if (_config.TargetStatuses.Contains(spec.Status))
+            // C3: requiresUserInput=true 스펙은 선행 처리 대상에서 제외
+            if (IsRequiresUserInput(spec))
             {
-                targets.Add(spec);
+                notReady.Add(spec);
+                continue;
             }
+
+            // C3: 의존성 미충족 스펙은 선행 처리 대상에서 제외
+            // (의존 대상이 그래프에 없는 경우는 satisfied로 간주)
+            var depsReady = spec.Dependencies
+                .All(dep => !allSpecIds.Contains(dep) || completedIds.Contains(dep));
+
+            if (depsReady)
+                ready.Add(spec);
+            else
+                notReady.Add(spec);
         }
 
-        // 의존성 순서로 정렬 (의존성이 적은 것 먼저)
-        return targets
+        // C3: ready 그룹 — issue priority score 내림차순, 동점 시 기존 fallback(의존성 수, 스펙 ID)
+        var sortedReady = ready
+            .OrderByDescending(s => GetIssuePriorityScore(s))
+            .ThenBy(s => s.Dependencies.Count)
+            .ThenBy(s => s.Id)
+            .ToList();
+
+        // C4: not-ready 그룹 — 기존 fallback 순서 유지 (starvation 없이 처리 가능)
+        var sortedNotReady = notReady
             .OrderBy(s => s.Dependencies.Count)
             .ThenBy(s => s.Id)
             .ToList();
+
+        var result = sortedReady.Concat(sortedNotReady).ToList();
+
+        // C6: 큐 정렬 결과 로깅 및 선택된 스펙 selectionReason 기록
+        LogQueueSelection(result);
+
+        return result;
     }
+
+    // ── F-015: 이슈 기반 큐 재정렬 헬퍼 ───────────────────────
+
+    /// <summary>
+    /// F-015-C1: queued 스펙에 대한 이슈 연결 상태를 동기화한다.
+    /// GitHub 이슈 연동이 활성화된 경우에만 실행.
+    /// </summary>
+    private async Task SyncIssueConnectionsForQueueAsync()
+    {
+        if (_githubIssue == null) return;
+
+        var queuedSpecs = _specStore.GetAll()
+            .Where(s => _config.TargetStatuses.Contains(s.Status))
+            .ToList();
+
+        if (queuedSpecs.Count == 0) return;
+
+        try
+        {
+            await _githubIssue.SyncQueuedSpecIssueConnectionsAsync(queuedSpecs);
+            _lastIssueSyncAt = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("queue-priority", $"이슈 연결 동기화 실패 (큐 정렬은 기존 fallback으로 진행): {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// F-015-C2: metadata에서 issuePriorityScore를 읽어 반환한다.
+    /// 연동 비활성화 또는 이슈 없는 경우 0.0 반환 (C4: starvation 없이 fallback 처리).
+    /// </summary>
+    private static double GetIssuePriorityScore(SpecNode spec)
+    {
+        if (spec.Metadata == null) return 0.0;
+        if (!spec.Metadata.TryGetValue("issuePriorityScore", out var val)) return 0.0;
+        if (val is System.Text.Json.JsonElement je && je.TryGetDouble(out var d)) return d;
+        if (val is double dbl) return dbl;
+        if (double.TryParse(val?.ToString(), out var dp)) return dp;
+        return 0.0;
+    }
+
+    /// <summary>
+    /// F-015-C3: metadata.requiresUserInput이 true인지 확인한다.
+    /// </summary>
+    private static bool IsRequiresUserInput(SpecNode spec)
+    {
+        if (spec.Metadata == null) return false;
+        if (!spec.Metadata.TryGetValue("requiresUserInput", out var val)) return false;
+        if (val is System.Text.Json.JsonElement je)
+            return je.ValueKind == System.Text.Json.JsonValueKind.True;
+        if (val is bool b) return b;
+        return bool.TryParse(val?.ToString(), out var bp) && bp;
+    }
+
+    /// <summary>
+    /// F-015-C6: 큐 정렬 결과를 로그에 기록하고, 선택된 스펙의 metadata.selectionReason을 갱신한다.
+    /// </summary>
+    private void LogQueueSelection(List<SpecNode> rankedSpecs)
+    {
+        if (rankedSpecs.Count == 0) return;
+
+        var topN = rankedSpecs.Take(Math.Min(5, rankedSpecs.Count)).ToList();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"큐 우선순위 재정렬 결과 (상위 {topN.Count}/{rankedSpecs.Count}개):");
+
+        for (int i = 0; i < topN.Count; i++)
+        {
+            var spec = topN[i];
+            var score = GetIssuePriorityScore(spec);
+            var isFallback = score == 0.0;
+            var label = isFallback ? "fallback(no-issue-signal)" : $"score={score:F1}";
+            sb.Append($" [{i + 1}]{spec.Id}({label})");
+        }
+
+        _log.Info("queue-priority", sb.ToString());
+
+        // C6: 선택 예정 스펙(1위)에만 selectionReason 기록
+        var selected = rankedSpecs[0];
+        var selScore = GetIssuePriorityScore(selected);
+        selected.Metadata ??= new Dictionary<string, object>();
+        selected.Metadata["selectionReason"] = new Dictionary<string, object>
+        {
+            ["selectedAt"] = DateTime.UtcNow.ToString("o"),
+            ["issuePriorityScore"] = selScore,
+            ["isFallback"] = selScore == 0.0,
+            ["rank"] = 1,
+            ["totalCandidates"] = rankedSpecs.Count
+        };
+        _specStore.Update(selected);
+    }
+
+    // ── 스펙 상태 변경 ─────────────────────────────────────────
 
     /// <summary>
     /// 스펙을 working 상태로 마킹한다.

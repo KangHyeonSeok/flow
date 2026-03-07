@@ -550,6 +550,218 @@ public class GitHubIssueService
         }
     }
 
+    // ── F-015: 큐 이슈 연결 동기화 및 우선순위 점수 ─────────────
+
+    /// <summary>
+    /// F-015-C1: queued 스펙 배치의 이슈 연결 상태를 동기화하고 우선순위 점수를 계산한다.
+    /// 현재 오픈 이슈 스냅샷을 획득한 뒤, 각 스펙의 githubIssues를 재검증(C5)하고
+    /// metadata.queuePriority / issuePriorityScore를 갱신한다(C2).
+    /// </summary>
+    public async Task SyncQueuedSpecIssueConnectionsAsync(List<SpecNode> queuedSpecs)
+    {
+        if (queuedSpecs.Count == 0) return;
+
+        _log.Info("queue-priority", $"queued 스펙 {queuedSpecs.Count}개 이슈 연결 동기화 시작 (F-015-C1)");
+
+        // C1: 현재 오픈 이슈 전체 스냅샷 획득
+        List<GitHubIssueInfo> openIssues;
+        try
+        {
+            openIssues = await FetchAllOpenIssuesAsync();
+            _log.Info("queue-priority", $"오픈 이슈 {openIssues.Count}개 스냅샷 획득 (lastRefreshedAt: {DateTime.UtcNow:o})");
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("queue-priority", $"이슈 스냅샷 획득 실패, 동기화 건너뜀: {ex.Message}");
+            return;
+        }
+
+        var openIssueSet = openIssues.ToDictionary(i => i.Number);
+
+        foreach (var spec in queuedSpecs)
+        {
+            spec.Metadata ??= new Dictionary<string, object>();
+
+            // C5: 기존 linkedIssues 재검증 — 닫히거나 연결이 끊긴 이슈 제거
+            var linkedNums = GetLinkedIssueNumbers(spec);
+            var validNums = linkedNums.Where(n => openIssueSet.ContainsKey(n)).ToList();
+            var staleNums = linkedNums.Except(validNums).ToList();
+
+            if (staleNums.Count > 0)
+            {
+                _log.Info("queue-priority",
+                    $"스펙 {spec.Id}: stale 이슈 제거 ({string.Join(", ", staleNums.Select(n => $"#{n}"))}) — closed/disconnected", spec.Id);
+            }
+
+            // C5: 새로 spec ID를 참조하는 오픈 이슈 스캔
+            foreach (var issue in openIssues)
+            {
+                if (validNums.Contains(issue.Number)) continue;
+                if (issue.Title.Contains(spec.Id) || issue.Body.Contains(spec.Id) ||
+                    issue.Labels.Any(l => l.Contains(spec.Id)))
+                {
+                    validNums.Add(issue.Number);
+                    _log.Info("queue-priority",
+                        $"스펙 {spec.Id}: 이슈 #{issue.Number} 신규 연결 발견", spec.Id);
+                }
+            }
+
+            // githubIssues 메타데이터 갱신
+            spec.Metadata["githubIssues"] = validNums.Cast<object>().ToList();
+
+            // C2: 우선순위 점수 계산 — 연결된 오픈 이슈 리스트 기반
+            var linkedOpenIssues = validNums
+                .Where(n => openIssueSet.ContainsKey(n))
+                .Select(n => openIssueSet[n])
+                .ToList();
+
+            var priority = CalculateIssuePriorityScore(spec, linkedOpenIssues);
+            spec.Metadata["issuePriorityScore"] = priority.Score;
+            spec.Metadata["queuePriority"] = priority;
+
+            _specStore.Update(spec);
+
+            if (priority.Score > 0)
+                _log.Info("queue-priority",
+                    $"스펙 {spec.Id} 우선순위 점수: {priority.Score:F1} [{string.Join("; ", priority.Reasons)}]", spec.Id);
+        }
+    }
+
+    /// <summary>
+    /// F-015-C2: 스펙과 연결된 오픈 이슈들을 기반으로 우선순위 점수를 계산한다.
+    /// 직접 참조 여부, 오픈 이슈 수, 최근성, 우선순위 라벨, 자동 생성 여부를 신호로 사용.
+    /// </summary>
+    public QueuePriorityInfo CalculateIssuePriorityScore(SpecNode spec, List<GitHubIssueInfo> linkedOpenIssues)
+    {
+        var reasons = new List<string>();
+        double score = 0;
+
+        // Signal 1: explicit-spec-reference — 이슈 본문/제목/라벨에 스펙 ID가 직접 언급됨
+        var hasExplicitRef = linkedOpenIssues.Any(i =>
+            i.Title.Contains(spec.Id, StringComparison.OrdinalIgnoreCase) ||
+            i.Body.Contains(spec.Id, StringComparison.OrdinalIgnoreCase) ||
+            i.Labels.Any(l => l.Contains(spec.Id, StringComparison.OrdinalIgnoreCase)));
+        if (hasExplicitRef)
+        {
+            score += 50;
+            reasons.Add("explicit-spec-reference(+50)");
+        }
+
+        // Signal 2: linked-open-issue-count — 연결된 오픈 이슈 수 (최대 +30)
+        var openCount = linkedOpenIssues.Count;
+        if (openCount > 0)
+        {
+            var countBonus = Math.Min(openCount * 10, 30);
+            score += countBonus;
+            reasons.Add($"linked-open-issues={openCount}(+{countBonus})");
+        }
+
+        // Signal 3: issue-recency — 가장 최근 이슈의 updatedAt 기준 최신성 보너스
+        if (linkedOpenIssues.Count > 0)
+        {
+            var mostRecentUpdated = linkedOpenIssues
+                .Where(i => DateTime.TryParse(i.UpdatedAt, out _))
+                .Select(i => DateTime.Parse(i.UpdatedAt).ToUniversalTime())
+                .OrderDescending()
+                .FirstOrDefault();
+
+            if (mostRecentUpdated != default)
+            {
+                var ageDays = (DateTime.UtcNow - mostRecentUpdated).TotalDays;
+                double recencyBonus = ageDays switch
+                {
+                    < 1 => 20,
+                    < 7 => 15,
+                    < 30 => 10,
+                    < 90 => 5,
+                    _ => 0
+                };
+                if (recencyBonus > 0)
+                {
+                    score += recencyBonus;
+                    reasons.Add($"issue-recency={ageDays:F0}d(+{recencyBonus})");
+                }
+            }
+        }
+
+        // Signal 4: priority-label — priority/bug/regression/hotfix/critical/urgent/p0/p1 계열 라벨
+        var priorityLabelKeywords = new[] { "priority", "bug", "regression", "hotfix", "critical", "urgent", "p0", "p1" };
+        var hasPriorityLabel = linkedOpenIssues.Any(i =>
+            i.Labels.Any(l => priorityLabelKeywords.Any(kw =>
+                l.ToLowerInvariant().Contains(kw))));
+        if (hasPriorityLabel)
+        {
+            score += 20;
+            reasons.Add("priority-label(+20)");
+        }
+
+        // Signal 5: auto-created-spec — 이슈에서 자동 생성된 스펙 (이슈 주도 스펙)
+        var isAutoCreated = spec.Tags.Contains("auto-created") ||
+            (spec.Metadata?.ContainsKey("createdByRunner") == true) ||
+            (spec.Metadata?.ContainsKey("sourceIssue") == true && openCount > 0);
+        if (isAutoCreated && openCount > 0)
+        {
+            score += 10;
+            reasons.Add("auto-created-spec(+10)");
+        }
+
+        return new QueuePriorityInfo
+        {
+            Score = score,
+            Reasons = reasons,
+            LastRefreshedAt = DateTime.UtcNow.ToString("o")
+        };
+    }
+
+    /// <summary>
+    /// 스펙 metadata에서 연결된 이슈 번호 목록을 추출한다 (githubIssues + sourceIssue).
+    /// </summary>
+    internal static List<int> GetLinkedIssueNumbers(SpecNode spec)
+    {
+        var result = new List<int>();
+        if (spec.Metadata == null) return result;
+
+        // metadata.githubIssues 배열에서 추출
+        if (spec.Metadata.TryGetValue("githubIssues", out var issuesVal))
+        {
+            if (issuesVal is System.Text.Json.JsonElement je &&
+                je.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var el in je.EnumerateArray())
+                {
+                    if (el.TryGetInt32(out var n)) result.Add(n);
+                }
+            }
+            else if (issuesVal is List<object> list)
+            {
+                foreach (var item in list)
+                {
+                    if (int.TryParse(item?.ToString(), out var n)) result.Add(n);
+                }
+            }
+        }
+
+        // metadata.sourceIssue (자동 생성 스펙)
+        if (spec.Metadata.TryGetValue("sourceIssue", out var srcVal))
+        {
+            int num = -1;
+            if (srcVal is System.Text.Json.JsonElement srcJe && srcJe.TryGetInt32(out var srcN))
+                num = srcN;
+            else
+                int.TryParse(srcVal?.ToString(), out num);
+
+            if (num > 0 && !result.Contains(num)) result.Add(num);
+        }
+
+        return result.Distinct().ToList();
+    }
+
+    /// <summary>
+    /// 모든 오픈 이슈를 조회한다 (since 필터 없이 전체 스냅샷).
+    /// </summary>
+    internal Task<List<GitHubIssueInfo>> FetchAllOpenIssuesAsync()
+        => FetchOpenIssuesAsync(DateTime.UtcNow.AddYears(-10));
+
     // ── 유틸리티 ───────────────────────────────────────────────
 
     /// <summary>텍스트에서 키워드를 추출한다 (공백/특수문자 분리, 2자 이상)</summary>

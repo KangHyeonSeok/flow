@@ -169,3 +169,19 @@ public class GitHubIssueInfo
     public string CreatedAt { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
 }
+
+/// <summary>
+/// 이슈 연관도 기반 큐 우선순위 정보 (F-015-C2).
+/// metadata.queuePriority에 저장된다.
+/// </summary>
+public class QueuePriorityInfo
+{
+    /// <summary>정규화된 우선순위 점수 (높을수록 우선 처리)</summary>
+    public double Score { get; set; }
+
+    /// <summary>점수 산출 근거 목록 (각 신호별 기여도 설명)</summary>
+    public List<string> Reasons { get; set; } = new();
+
+    /// <summary>마지막 점수 갱신 시각 (ISO 8601)</summary>
+    public string LastRefreshedAt { get; set; } = "";
+}
