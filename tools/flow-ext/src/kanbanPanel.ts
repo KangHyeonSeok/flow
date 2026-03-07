@@ -17,6 +17,7 @@ const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
     { status: 'needs-review',      label: 'Needs Review',      icon: '⚠' },
     { status: 'verified',          label: 'Verified',          icon: '✔' },
     { status: 'deprecated',        label: 'Deprecated',        icon: '✕' },
+    { status: 'done',              label: 'Done',              icon: '✔✔' },
 ];
 
 export class KanbanPanel {
@@ -154,6 +155,7 @@ export class KanbanPanel {
             'needs-review': [],
             'verified': [],
             'deprecated': [],
+            'done': [],
         };
 
         for (const spec of specs) {
