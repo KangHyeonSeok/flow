@@ -404,15 +404,15 @@ function spawnDaemonBackground(workspaceRoot: string, output: vscode.OutputChann
     let args: string[];
 
     if (process.platform === 'win32') {
-        const flowPs1 = path.join(workspaceRoot, 'flow.ps1');
-        if (fs.existsSync(flowPs1)) {
-            cmd = 'powershell.exe';
-            args = ['-ExecutionPolicy', 'Bypass', '-NonInteractive', '-File', flowPs1, 'runner-start', '--daemon'];
-        } else {
-            const flowExeBin = path.join(workspaceRoot, '.flow', 'bin', 'flow.exe');
-            if (!fs.existsSync(flowExeBin)) { return false; }
+        const flowExeBin = path.join(workspaceRoot, '.flow', 'bin', 'flow.exe');
+        if (fs.existsSync(flowExeBin)) {
             cmd = flowExeBin;
             args = ['runner-start', '--daemon'];
+        } else {
+            const flowPs1 = path.join(workspaceRoot, 'flow.ps1');
+            if (!fs.existsSync(flowPs1)) { return false; }
+            cmd = 'powershell.exe';
+            args = ['-ExecutionPolicy', 'Bypass', '-NonInteractive', '-File', flowPs1, 'runner-start', '--daemon'];
         }
     } else {
         const flowExe = resolveFlowExecutable(workspaceRoot);
@@ -442,13 +442,17 @@ function resolveFlowExecutable(workspaceRoot: string): string | null {
     const configPath = vscode.workspace.getConfiguration('flow').get<string>('executablePath', '');
     if (configPath && fs.existsSync(configPath)) { return configPath; }
 
-    // 2. 워크스페이스 루트의 flow.ps1 (Windows)
+    // 2. 워크스페이스 빌드 산출물 우선 사용
+    const flowExeBin = path.join(workspaceRoot, '.flow', 'bin', process.platform === 'win32' ? 'flow.exe' : process.platform === 'darwin' ? 'flow-osx-arm64' : 'flow-linux');
+    if (fs.existsSync(flowExeBin)) { return flowExeBin; }
+
+    // 3. 워크스페이스 루트의 flow.ps1 (Windows fallback)
     const flowPs1 = path.join(workspaceRoot, 'flow.ps1');
     if (process.platform === 'win32' && fs.existsSync(flowPs1)) {
         return `powershell -ExecutionPolicy Bypass -File "${flowPs1}"`;
     }
 
-    // 3. PATH에서 flow 탐색
+    // 4. PATH에서 flow 탐색
     try {
         const which = require('child_process').execSync(
             process.platform === 'win32' ? 'where flow' : 'which flow',
