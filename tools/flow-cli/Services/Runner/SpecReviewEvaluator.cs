@@ -285,6 +285,9 @@ internal static class SpecReviewEvaluator
             case JsonElement { ValueKind: JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False } element:
                 value = element.ToString();
                 return !string.IsNullOrWhiteSpace(value);
+            case JsonElement { ValueKind: JsonValueKind.Object or JsonValueKind.Array }:
+                value = "";
+                return false;
             default:
                 value = rawValue.ToString() ?? "";
                 return !string.IsNullOrWhiteSpace(value);
