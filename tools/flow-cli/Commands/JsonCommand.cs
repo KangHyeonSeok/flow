@@ -8,7 +8,7 @@ namespace FlowCLI;
 public partial class FlowApp
 {
     /// <summary>
-    /// F-002-C1: JSON 요청 계약으로 임의 명령을 실행한다.
+    /// F-003-C1/C2/C3: JSON 요청 envelope로 임의 명령을 실행한다.
     /// stdin, 파일, 또는 직접 문자열로 FlowRequest JSON을 입력받아 대상 명령 핸들러로 라우팅한다.
     /// </summary>
     [Command("invoke", Description = "Execute a command via JSON request contract (stdin, file, or direct string)")]
@@ -100,11 +100,12 @@ public partial class FlowApp
     }
 
     /// <summary>
-    /// FlowRequest를 파싱하여 기존 명령 핸들러로 라우팅한다. F-002-C1, C2.
+    /// FlowRequest를 파싱하여 기존 명령 핸들러로 라우팅한다. F-003-C2: command/subcommand 조합으로 핸들러와 payload 타입을 결정해 위임.
     /// </summary>
     private void RouteRequest(FlowRequest request, bool pretty, string inputSource)
     {
-        var opts = request.Options;
+        // payload가 JSON 객체면 options에 병합 (payload 필드가 options보다 낮은 우선순위)
+        var opts = MergePayloadIntoOptions(request.Options, request.Payload);
         var args = request.Arguments ?? [];
 
         // pretty 옵션은 요청 options에서도 읽을 수 있음
@@ -344,5 +345,29 @@ public partial class FlowApp
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// F-003-C2: payload JSON 객체의 필드를 options에 병합한다.
+    /// options에 이미 존재하는 키는 options 값이 우선순위를 가진다.
+    /// </summary>
+    private static Dictionary<string, JsonElement>? MergePayloadIntoOptions(
+        Dictionary<string, JsonElement>? options,
+        JsonElement? payload)
+    {
+        if (payload == null || payload.Value.ValueKind != JsonValueKind.Object)
+            return options;
+
+        var merged = options != null
+            ? new Dictionary<string, JsonElement>(options)
+            : new Dictionary<string, JsonElement>();
+
+        foreach (var prop in payload.Value.EnumerateObject())
+        {
+            if (!merged.ContainsKey(prop.Name))
+                merged[prop.Name] = prop.Value;
+        }
+
+        return merged;
     }
 }

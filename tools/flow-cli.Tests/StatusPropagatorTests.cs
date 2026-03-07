@@ -137,7 +137,6 @@ public class StatusPropagatorTests
         changes.Should().NotContain(c => c.Id == "F-002");
     }
 
-    [Fact]
     private static SpecNode Spec(string id, string status = "draft", string? parent = null, string[]? deps = null) => new()
     {
         Id = id,
