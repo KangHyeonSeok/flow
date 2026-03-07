@@ -380,28 +380,11 @@ export class KanbanPanel {
   .progress-fill {
     height: 100%;
   }
-  .card-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    margin-bottom: 5px;
-  }
-  .tag {
-    background: var(--tag-bg);
-    color: var(--tag-fg);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-size: 10px;
-  }
   .card-footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-top: 4px;
-  }
-  .card-date {
-    font-size: 10px;
-    opacity: 0.45;
   }
   .review-badge {
     display: inline-flex;
@@ -421,6 +404,7 @@ export class KanbanPanel {
     align-items: center;
     gap: 4px;
     margin-top: 8px;
+    margin-bottom: 6px;
     padding: 3px 7px;
     border-radius: 999px;
     font-size: 10px;
@@ -439,7 +423,8 @@ export class KanbanPanel {
     background: rgba(233, 30, 99, 0.15);
     color: #f48fb1;
     border: 1px solid rgba(233, 30, 99, 0.3);
-    margin-left: 4px;
+    margin-top: 8px;
+    margin-bottom: 6px;
   }
   .card.user-input-required {
     border-left-color: #e91e63 !important;
@@ -815,9 +800,9 @@ function filterCards(query) {
      tabindex="0"
      role="button">
   <div class="card-id">${this.esc(spec.id)}<span style="margin-left:6px;font-size:10px;opacity:0.45;">${date}</span></div>
-  <div class="card-title">${this.esc(title)}</div>
   ${userInputBadge}
   ${openQuestionInfo}
+  <div class="card-title">${this.esc(title)}</div>
   ${progressHtml}
   ${reviewBadge}
   ${reviewNote}
