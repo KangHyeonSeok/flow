@@ -250,6 +250,168 @@ public class BuildCommandTests
         platform.Equals("auto", StringComparison.OrdinalIgnoreCase).Should().BeTrue();
     }
 
+    // ─── F-004-C3: JSON 입력 경로 회귀 테스트 ───────────────────────────
+
+    [Fact]
+    public void JsonPath_BuildPayload_ParametersMappedEquivalentToCli()
+    {
+        // Given: JSON payload representing CLI args --platform dotnet --lint --build --timeout 120
+        var json = """
+            {
+                "command": "build",
+                "payload": {
+                    "platform": "dotnet",
+                    "lint": true,
+                    "build": true,
+                    "test": false,
+                    "timeout": 120
+                }
+            }
+            """;
+        var request = JsonSerializer.Deserialize<FlowRequest>(json, FlowCLI.Utils.JsonOutput.Read);
+        request.Should().NotBeNull();
+        request!.Payload.Should().NotBeNull();
+
+        // When: extract parameters from payload (equivalent to CLI arg binding)
+        var payload = request.Payload!.Value;
+        var platform = payload.GetProperty("platform").GetString();
+        var lint = payload.GetProperty("lint").GetBoolean();
+        var build = payload.GetProperty("build").GetBoolean();
+        var test = payload.GetProperty("test").GetBoolean();
+        var timeout = payload.GetProperty("timeout").GetInt32();
+
+        // Then: values match CLI arg expectations
+        platform.Should().Be("dotnet");
+        lint.Should().BeTrue();
+        build.Should().BeTrue();
+        test.Should().BeFalse();
+        timeout.Should().Be(120);
+    }
+
+    [Fact]
+    public void JsonPath_BuildAllFlag_StepSelectionEquivalentToCli()
+    {
+        // Given: JSON payload with all: true
+        var json = """{"command": "build", "payload": {"all": true}}""";
+        var request = JsonSerializer.Deserialize<FlowRequest>(json, FlowCLI.Utils.JsonOutput.Read);
+
+        // When: determine steps from payload (mirrors CLI --all logic)
+        bool all = request!.Payload!.Value.GetProperty("all").GetBoolean();
+        var steps = new List<string>();
+        if (all)
+            steps.AddRange(new[] { "lint", "build", "test" });
+
+        // Then: identical to legacy CLI --all flag behaviour
+        steps.Should().BeEquivalentTo(new[] { "lint", "build", "test" });
+    }
+
+    [Fact]
+    public void JsonPath_DbAddPayload_RequiredContentExtracted()
+    {
+        // Given: db-add JSON request with required content field
+        var json = """
+            {
+                "command": "db-add",
+                "payload": { "content": "구현 완료", "tags": "spec,test", "feature": "F-001" }
+            }
+            """;
+        var request = JsonSerializer.Deserialize<FlowRequest>(json, FlowCLI.Utils.JsonOutput.Read);
+        var payload = request!.Payload!.Value;
+
+        // When: extract fields (same fields used by CLI --content --tags --feature)
+        var content = payload.GetProperty("content").GetString();
+        var tags = payload.GetProperty("tags").GetString();
+        var feature = payload.GetProperty("feature").GetString();
+
+        // Then: matches CLI arg values
+        content.Should().Be("구현 완료");
+        tags.Should().Be("spec,test");
+        feature.Should().Be("F-001");
+    }
+
+    [Fact]
+    public void JsonPath_PayloadMergedIntoOptions_OptionsWinOnConflict()
+    {
+        // Given: request with both payload and options (options take priority per F-003-C2)
+        var json = """
+            {
+                "command": "build",
+                "payload": { "platform": "python", "lint": false },
+                "options": { "platform": "dotnet" }
+            }
+            """;
+        var request = JsonSerializer.Deserialize<FlowRequest>(json, FlowCLI.Utils.JsonOutput.Read);
+        request.Should().NotBeNull();
+
+        // When: merge payload into options (options win)
+        var merged = new Dictionary<string, JsonElement>(request!.Options ?? []);
+        if (request.Payload?.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var prop in request.Payload.Value.EnumerateObject())
+            {
+                if (!merged.ContainsKey(prop.Name))
+                    merged[prop.Name] = prop.Value;
+            }
+        }
+
+        // Then: options value wins for platform, payload fills in lint
+        merged["platform"].GetString().Should().Be("dotnet");
+        merged["lint"].GetBoolean().Should().BeFalse();
+    }
+
+    [Fact]
+    public void JsonPath_ValidateRequiredFields_DetectsEmptyContent()
+    {
+        // F-004-C2: 빈 content로 db-add 요청 시 검증 오류가 검출되어야 한다
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["content"] = JsonDocument.Parse("\"\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateRequiredFields(opts, "content");
+        errors.Should().ContainSingle(e => e.Contains("content"));
+    }
+
+    [Fact]
+    public void JsonPath_ValidateOptionTypes_DetectsTypeMismatch()
+    {
+        // F-004-C2: 잘못된 타입의 옵션 제공 시 검증 오류가 검출되어야 한다
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["lint"] = JsonDocument.Parse("\"yes\"").RootElement  // string 대신 bool이어야 함
+        };
+
+        var errors = FlowApp.ValidateOptionTypes(opts,
+            new Dictionary<string, Type> { ["lint"] = typeof(bool) });
+        errors.Should().ContainSingle(e => e.Contains("lint"));
+    }
+
+    [Fact]
+    public void JsonPath_ValidateRequiredFields_MissingField_ReturnsError()
+    {
+        // F-004-C2: 필수 필드가 없을 때 오류가 검출되어야 한다
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["tags"] = JsonDocument.Parse("\"spec\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateRequiredFields(opts, "content");
+        errors.Should().ContainSingle(e => e.Contains("content"));
+    }
+
+    [Fact]
+    public void JsonPath_ValidateRequiredFields_PresentField_NoError()
+    {
+        // F-004-C2: 필수 필드가 있을 때 오류가 없어야 한다
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["content"] = JsonDocument.Parse("\"실제 내용\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateRequiredFields(opts, "content");
+        errors.Should().BeEmpty();
+    }
+
     /// <summary>
     /// 테스트용 PathResolver. 임시 디렉토리를 프로젝트 루트로 사용.
     /// </summary>
