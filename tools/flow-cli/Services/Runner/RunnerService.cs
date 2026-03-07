@@ -116,7 +116,13 @@ public class RunnerService
         var brokenRepaired = await RepairBrokenSpecsAsync();
         results.AddRange(brokenRepaired);
 
-        // 1.7. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
+        // 1.7. F-016: 후보 선택 전 이슈 스냅샷 선반영
+        // - GitHub 연동 활성화 + 폴링 주기 도달: 전체 이슈 처리를 먼저 수행해 같은 사이클 후보에 신규 연결 반영
+        // - GitHub 연동 활성화 + 폴링 주기 미도달: 이전 스냅샷 시각 복원으로 fallback 판단
+        // - GitHub 연동 비활성화: 이전 스냅샷 시각 복원으로 fallback 판단
+        await ProcessGitHubIssuesIfDueAsync();
+
+        // 1.8. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
         await SyncIssueConnectionsForQueueAsync();
 
         // 2. 구현 대상 스펙 탐색
@@ -139,9 +145,6 @@ public class RunnerService
 
         _log.Info("cycle", $"=== Runner 사이클 완료: {results.Count(r => r.Success)} 성공 / {results.Count(r => !r.Success)} 실패 ===");
 
-        // 4. GitHub 이슈 처리 (F-070-C11: issuePollIntervalMinutes 주기로 실행)
-        await ProcessGitHubIssuesIfDueAsync();
-
         return results;
     }
 
@@ -154,7 +157,14 @@ public class RunnerService
 
         var now = DateTime.UtcNow;
         var elapsed = now - _lastIssuePollAt;
-        if (elapsed.TotalMinutes < _config.IssuePollIntervalMinutes) return;
+        if (elapsed.TotalMinutes < _config.IssuePollIntervalMinutes)
+        {
+            // F-016: 폴링 주기 미도달 — 이전 스냅샷의 신뢰 가능 시각 복원으로 fallback 판단
+            var snapshotAt = ReadIssueSnapshotTimestamp();
+            if (snapshotAt.HasValue)
+                _log.Info("github-issues", $"이슈 폴링 주기 미도달 (경과: {elapsed.TotalMinutes:F1}분 / 주기: {_config.IssuePollIntervalMinutes}분), 이전 스냅샷 복원: {snapshotAt.Value:o}");
+            return;
+        }
 
         try
         {
@@ -423,11 +433,18 @@ public class RunnerService
 
     /// <summary>
     /// F-015-C1: queued 스펙에 대한 이슈 연결 상태를 동기화한다.
-    /// GitHub 이슈 연동이 활성화된 경우에만 실행.
+    /// F-016: GitHub 연동 비활성화 시 이전 스냅샷 시각을 복원해 fallback 판단 근거를 제공한다.
     /// </summary>
     private async Task SyncIssueConnectionsForQueueAsync()
     {
-        if (_githubIssue == null) return;
+        if (_githubIssue == null)
+        {
+            // F-016: GitHub 연동 비활성 — 이전 스냅샷의 신뢰 가능 시각 복원으로 fallback 판단
+            var snapshotAt = ReadIssueSnapshotTimestamp();
+            if (snapshotAt.HasValue)
+                _log.Info("queue-priority", $"GitHub 연동 비활성, 이전 이슈 스냅샷 복원: {snapshotAt.Value:o} (fallback)");
+            return;
+        }
 
         var queuedSpecs = _specStore.GetAll()
             .Where(s => _config.TargetStatuses.Contains(s.Status))
@@ -444,6 +461,26 @@ public class RunnerService
         {
             _log.Warn("queue-priority", $"이슈 연결 동기화 실패 (큐 정렬은 기존 fallback으로 진행): {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// F-016: 이슈 체크 상태 파일에서 마지막 스냅샷 시각을 읽는다.
+    /// GitHub 연동 비활성화 또는 폴링 주기 미도달 시 fallback 판단에 사용.
+    /// </summary>
+    private DateTime? ReadIssueSnapshotTimestamp()
+    {
+        var stateFilePath = Path.Combine(_flowRoot, "issue-check-state.json");
+        try
+        {
+            if (!File.Exists(stateFilePath)) return null;
+            var json = File.ReadAllText(stateFilePath);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("lastCheckedAt", out var prop) &&
+                DateTime.TryParse(prop.GetString(), out var dt))
+                return dt;
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>
