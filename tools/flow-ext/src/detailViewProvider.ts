@@ -148,7 +148,54 @@ body {
             </div>`;
         }
 
-        let conditionsHtml = '';
+        // C3: 자동 승격 이력 패널 - promotion.source, reason, confidence, promotedAt, plannerState
+        let promotionHtml = '';
+        if (spec?.metadata) {
+            const meta = spec.metadata;
+            const promotion = meta['promotion'] as Record<string, unknown> | undefined;
+            const plannerState = typeof meta['plannerState'] === 'string' ? meta['plannerState'] : null;
+
+            if (promotion && typeof promotion === 'object') {
+                const src = typeof promotion['source'] === 'string' ? promotion['source'] : '';
+                const reason = typeof promotion['reason'] === 'string' ? promotion['reason'] : '';
+                const promotedAt = typeof promotion['promotedAt'] === 'string' ? promotion['promotedAt'] : '';
+                const confidence = typeof promotion['confidence'] === 'number' ? promotion['confidence'] : null;
+                const revertedAt = typeof promotion['revertedAt'] === 'string' ? promotion['revertedAt'] : null;
+                const revertReason = typeof promotion['revertReason'] === 'string' ? promotion['revertReason'] : null;
+
+                const isReverted = !!revertedAt;
+                const panelClass = isReverted ? 'promotion-panel reverted' : 'promotion-panel';
+                const icon = isReverted ? '↩' : '⬆';
+                const titleText = isReverted ? '자동 승격 (복원됨)' : '자동 승격 이력';
+
+                const confidenceBar = confidence !== null
+                    ? `<div class="promo-confidence-row">
+                        <span class="promo-label">신뢰도</span>
+                        <div class="promo-conf-track"><div class="promo-conf-fill" style="width:${Math.round(confidence * 100)}%"></div></div>
+                        <span class="promo-conf-val">${Math.round(confidence * 100)}%</span>
+                       </div>`
+                    : '';
+                const revertRow = isReverted
+                    ? `<div class="promo-revert-row">↩ ${this.escapeHtml(revertedAt!)}${revertReason ? ` — ${this.escapeHtml(revertReason)}` : ''}</div>`
+                    : '';
+
+                promotionHtml = `<div class="${panelClass}">
+                    <div class="promo-title">${icon} ${titleText}</div>
+                    ${src ? `<div class="promo-row"><span class="promo-label">출처</span><span class="promo-val">${this.escapeHtml(src)}</span></div>` : ''}
+                    ${promotedAt ? `<div class="promo-row"><span class="promo-label">승격 시각</span><span class="promo-val">${this.escapeHtml(promotedAt)}</span></div>` : ''}
+                    ${reason ? `<div class="promo-row"><span class="promo-label">근거</span><span class="promo-val">${this.escapeHtml(reason)}</span></div>` : ''}
+                    ${confidenceBar}
+                    ${plannerState && !isReverted ? `<div class="promo-row"><span class="promo-label">plannerState</span><span class="promo-val">${this.escapeHtml(plannerState)}</span></div>` : ''}
+                    ${revertRow}
+                </div>`;
+            } else if (plannerState === 'waiting-user-input') {
+                promotionHtml = `<div class="promotion-panel waiting">
+                    <div class="promo-title">⏳ 자동 승격 대기</div>
+                    <div class="promo-row"><span class="promo-label">plannerState</span><span class="promo-val">${this.escapeHtml(plannerState)}</span></div>
+                </div>`;
+            }
+        }
+
         if (spec && spec.conditions) {
             conditionsHtml = spec.conditions.map((c) => {
                 const cColor = STATUS_COLORS[c.status as SpecStatus] || '#888';
@@ -370,6 +417,79 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     font-size: 11px;
     color: var(--vscode-descriptionForeground);
 }
+.promotion-panel {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(156, 39, 176, 0.4);
+    background: rgba(156, 39, 176, 0.07);
+}
+.promotion-panel.reverted {
+    border-color: rgba(120, 120, 120, 0.4);
+    background: rgba(120, 120, 120, 0.07);
+}
+.promotion-panel.waiting {
+    border-color: rgba(255, 193, 7, 0.4);
+    background: rgba(255, 193, 7, 0.07);
+}
+.promo-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #ce93d8;
+    margin-bottom: 6px;
+}
+.promotion-panel.reverted .promo-title { color: var(--vscode-descriptionForeground); }
+.promotion-panel.waiting .promo-title { color: #ffd54f; }
+.promo-row {
+    display: flex;
+    gap: 6px;
+    font-size: 11px;
+    margin-bottom: 3px;
+    align-items: baseline;
+}
+.promo-label {
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+    min-width: 60px;
+    flex-shrink: 0;
+}
+.promo-val {
+    color: var(--vscode-foreground);
+    word-break: break-all;
+}
+.promo-confidence-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    margin-bottom: 3px;
+}
+.promo-conf-track {
+    flex: 1;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--vscode-widget-border);
+    overflow: hidden;
+}
+.promo-conf-fill {
+    height: 100%;
+    background: #ab47bc;
+    border-radius: 999px;
+}
+.promo-conf-val {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    min-width: 28px;
+    text-align: right;
+}
+.promo-revert-row {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    margin-top: 4px;
+    word-break: break-all;
+}
 </style></head><body>
 <h2>${this.escapeHtml(node.id)}${isFeature ? ': ' + this.escapeHtml(node.label) : ''}</h2>
 <span class="badge" style="background:${color}">${node.status}</span>
@@ -378,6 +498,7 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
 <div class="desc">${this.escapeHtml(node.description)}</div>
 
 ${feedbackHtml}
+${promotionHtml}
 ${reviewHtml}
 
 ${tagsHtml ? '<h3>Tags</h3>' + tagsHtml : ''}

@@ -264,6 +264,39 @@ public class SpecValidator
         }
     }
 
+    /// <summary>
+    /// Planner 자동 queued 승격 가능 여부를 검증한다 (F-019-C5).
+    /// supersedes 또는 mutates 관계가 있지만 changeLog에 기록되지 않은 경우 오류를 반환한다.
+    /// </summary>
+    public ValidationResult ValidateAutoQueueEligibility(SpecNode spec)
+    {
+        var result = new ValidationResult();
+
+        // C5: supersedes가 있으면 changeLog에 supersede 항목 필요
+        if (spec.Supersedes.Count > 0)
+        {
+            bool hasLog = spec.ChangeLog.Any(e =>
+                string.Equals(e.Type, "supersede", StringComparison.OrdinalIgnoreCase));
+            if (!hasLog)
+                result.Errors.Add(Error(spec.Id, "supersedes",
+                    "supersedes 관계가 changeLog에 기록되지 않았습니다. " +
+                    "자동 승격 전에 changeLog에 type='supersede' 항목을 추가하세요."));
+        }
+
+        // C5: mutates가 있으면 changeLog에 mutate 항목 필요
+        if (spec.Mutates.Count > 0)
+        {
+            bool hasLog = spec.ChangeLog.Any(e =>
+                string.Equals(e.Type, "mutate", StringComparison.OrdinalIgnoreCase));
+            if (!hasLog)
+                result.Errors.Add(Error(spec.Id, "mutates",
+                    "mutates 관계가 changeLog에 기록되지 않았습니다. " +
+                    "자동 승격 전에 changeLog에 type='mutate' 항목을 추가하세요."));
+        }
+
+        return result;
+    }
+
     private static ValidationError Error(string specId, string field, string message)
         => new() { SpecId = specId, Field = field, Message = message };
 

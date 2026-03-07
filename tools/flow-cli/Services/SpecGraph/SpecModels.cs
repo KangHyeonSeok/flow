@@ -345,3 +345,31 @@ public class DependencyViolation
     public string DependsOn { get; set; } = "";
     public string Message { get; set; } = "";
 }
+
+/// <summary>
+/// Planner 자동 queued 승격 평가 결과 (F-019).
+/// EvaluateEligibility 호출 결과로 반환된다.
+/// </summary>
+public class PlannerAutoQueueEligibility
+{
+    /// <summary>자동 승격 가능 여부</summary>
+    public bool IsEligible { get; set; }
+
+    /// <summary>승격 불가 사유. IsEligible=false일 때 설명.</summary>
+    public string? BlockReason { get; set; }
+
+    /// <summary>
+    /// 승격 신뢰도 (0.0 ~ 1.0).
+    /// description 길이, conditions 수, dependencies, codeRefs 충족 여부를 기반으로 계산.
+    /// </summary>
+    public double Confidence { get; set; }
+
+    /// <summary>미해결 질문 수. 0이어야 승격 가능.</summary>
+    public int UnresolvedQuestions { get; set; }
+
+    /// <summary>
+    /// 승격 후 plannerState 값.
+    /// 승격 가능: "standby", 대기: "waiting-user-input"
+    /// </summary>
+    public string PlannerState { get; set; } = "";
+}
