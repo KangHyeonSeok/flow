@@ -90,6 +90,36 @@ public class SpecCondition
 }
 
 /// <summary>
+/// SpecChangeLogEntry — 스펙 변경 이력 항목.
+/// changeLog는 스펙의 주요 변경 사항을 시계열로 기록한다.
+/// </summary>
+public class SpecChangeLogEntry
+{
+    /// <summary>변경 유형. create | mutate | supersede | deprecate | restore 중 하나.</summary>
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "mutate";
+
+    /// <summary>변경 시각 (ISO 8601). 필수.</summary>
+    [JsonPropertyName("at")]
+    public string At { get; set; } = "";
+
+    /// <summary>변경 주체 (사람 또는 runner ID). 필수.</summary>
+    [JsonPropertyName("author")]
+    public string Author { get; set; } = "";
+
+    /// <summary>변경 요약 (한 줄). 필수.</summary>
+    [JsonPropertyName("summary")]
+    public string Summary { get; set; } = "";
+
+    /// <summary>
+    /// 관련 스펙 ID 목록.
+    /// supersede 타입이면 대체된 스펙 ID, mutate 타입이면 대상 스펙 ID.
+    /// </summary>
+    [JsonPropertyName("relatedIds")]
+    public List<string> RelatedIds { get; set; } = new();
+}
+
+/// <summary>
 /// SpecNode — 기능 스펙의 최상위 모델. JSON 스키마 v2.
 /// </summary>
 public class SpecNode
@@ -136,6 +166,48 @@ public class SpecNode
 
     [JsonPropertyName("tags")]
     public List<string> Tags { get; set; } = new();
+
+    // ── 관계 메타데이터 (F-022) ──────────────────────────────────────────
+
+    /// <summary>
+    /// 이 스펙이 실질적으로 대체하는 이전 스펙 ID 목록.
+    /// 대상 스펙의 책임 경계·아키텍처가 변경되어 신규 스펙으로 분리할 때 사용.
+    /// 대상 스펙에는 supersededBy에 이 스펙 ID가 기록되어야 한다 (양방향 연결).
+    /// 허용 값: F-NNN 또는 F-NNN-NN 형식의 스펙 ID 목록.
+    /// </summary>
+    [JsonPropertyName("supersedes")]
+    public List<string> Supersedes { get; set; } = new();
+
+    /// <summary>
+    /// 이 스펙을 대체한 신규 스펙 ID 목록.
+    /// supersedes의 역방향 포인터. 이 스펙이 deprecated/done 처리될 때 함께 기록.
+    /// </summary>
+    [JsonPropertyName("supersededBy")]
+    public List<string> SupersededBy { get; set; } = new();
+
+    /// <summary>
+    /// 이 스펙(task)이 in-place로 수정하는 대상 스펙 ID 목록.
+    /// 대상 스펙의 정체성(title/conditions 과반)은 그대로이고 구현 세부사항만 바꿀 때 사용.
+    /// 대상 스펙에는 mutatedBy에 이 스펙 ID가 기록되어야 한다 (양방향 연결).
+    /// </summary>
+    [JsonPropertyName("mutates")]
+    public List<string> Mutates { get; set; } = new();
+
+    /// <summary>
+    /// 이 스펙을 in-place 수정한 task 스펙 ID 목록.
+    /// mutates의 역방향 포인터.
+    /// </summary>
+    [JsonPropertyName("mutatedBy")]
+    public List<string> MutatedBy { get; set; } = new();
+
+    /// <summary>
+    /// 스펙 변경 이력. 최소 기록 항목: type, at, author, summary.
+    /// create(최초 생성), mutate(in-place 수정), supersede(대체), deprecate(폐기), restore(복구).
+    /// </summary>
+    [JsonPropertyName("changeLog")]
+    public List<SpecChangeLogEntry> ChangeLog { get; set; } = new();
+
+    // ─────────────────────────────────────────────────────────────────────
 
     [JsonPropertyName("metadata")]
     public Dictionary<string, object>? Metadata { get; set; }

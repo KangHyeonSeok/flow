@@ -19,6 +19,12 @@ public class SpecValidator
         "screenshot", "log", "metric", "test-result"
     };
 
+    /// <summary>changeLog.type 허용 값</summary>
+    private static readonly HashSet<string> ValidChangeLogTypes = new()
+    {
+        "create", "mutate", "supersede", "deprecate", "restore"
+    };
+
     /// <summary>
     /// 단일 스펙의 유효성을 검사합니다.
     /// </summary>
@@ -92,7 +98,51 @@ public class SpecValidator
             }
         }
 
+        // 10. 관계 메타데이터 검사 (F-022)
+        ValidateRelationFields(spec, result);
+
         return result;
+    }
+
+    /// <summary>
+    /// 단일 스펙의 관계 필드(supersedes/supersededBy/mutates/mutatedBy/changeLog)를 검사합니다.
+    /// </summary>
+    private void ValidateRelationFields(SpecNode spec, ValidationResult result)
+    {
+        // 자기 참조 금지
+        if (spec.Supersedes.Contains(spec.Id))
+            result.Errors.Add(Error(spec.Id, "supersedes", "자기 자신을 supersedes로 설정할 수 없습니다."));
+        if (spec.SupersededBy.Contains(spec.Id))
+            result.Errors.Add(Error(spec.Id, "supersededBy", "자기 자신을 supersededBy로 설정할 수 없습니다."));
+        if (spec.Mutates.Contains(spec.Id))
+            result.Errors.Add(Error(spec.Id, "mutates", "자기 자신을 mutates로 설정할 수 없습니다."));
+        if (spec.MutatedBy.Contains(spec.Id))
+            result.Errors.Add(Error(spec.Id, "mutatedBy", "자기 자신을 mutatedBy로 설정할 수 없습니다."));
+
+        // supersedes와 mutates는 동일 대상에 동시 적용 불가 (의미 충돌)
+        var overlap = spec.Supersedes.Intersect(spec.Mutates).ToList();
+        if (overlap.Count > 0)
+            result.Errors.Add(Error(spec.Id, "supersedes/mutates",
+                $"동일 스펙을 supersedes와 mutates에 동시에 지정할 수 없습니다: {string.Join(", ", overlap)}"));
+
+        // changeLog 항목 필수 필드 검사
+        for (int i = 0; i < spec.ChangeLog.Count; i++)
+        {
+            var entry = spec.ChangeLog[i];
+
+            if (!ValidChangeLogTypes.Contains(entry.Type))
+                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].type",
+                    $"유효하지 않은 changeLog 타입: '{entry.Type}'. 허용: {string.Join(", ", ValidChangeLogTypes)}"));
+
+            if (string.IsNullOrWhiteSpace(entry.At))
+                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].at", "changeLog.at(변경 시각)은 필수입니다."));
+
+            if (string.IsNullOrWhiteSpace(entry.Author))
+                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].author", "changeLog.author(변경 주체)는 필수입니다."));
+
+            if (string.IsNullOrWhiteSpace(entry.Summary))
+                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].summary", "changeLog.summary(변경 요약)는 필수입니다."));
+        }
     }
 
     /// <summary>
@@ -132,9 +182,86 @@ public class SpecValidator
             var idCount = specs.Count(s => s.Id == spec.Id);
             if (idCount > 1)
                 result.Errors.Add(Error(spec.Id, "id", "중복된 ID가 존재합니다."));
+
+            // 관계 필드 참조 무결성 (F-022)
+            ValidateCrossSpecRelations(spec, idSet, result);
         }
 
+        // 양방향 연결 일관성 검사 (F-022)
+        ValidateBidirectionalLinks(specs, result);
+
         return result;
+    }
+
+    /// <summary>
+    /// 관계 필드에서 참조하는 ID가 실제 존재하는지 검사합니다.
+    /// </summary>
+    private void ValidateCrossSpecRelations(SpecNode spec, HashSet<string> idSet, ValidationResult result)
+    {
+        foreach (var id in spec.Supersedes)
+        {
+            if (!idSet.Contains(id))
+                result.Errors.Add(Error(spec.Id, "supersedes", $"존재하지 않는 스펙 참조: {id}"));
+        }
+        foreach (var id in spec.SupersededBy)
+        {
+            if (!idSet.Contains(id))
+                result.Errors.Add(Error(spec.Id, "supersededBy", $"존재하지 않는 스펙 참조: {id}"));
+        }
+        foreach (var id in spec.Mutates)
+        {
+            if (!idSet.Contains(id))
+                result.Errors.Add(Error(spec.Id, "mutates", $"존재하지 않는 스펙 참조: {id}"));
+        }
+        foreach (var id in spec.MutatedBy)
+        {
+            if (!idSet.Contains(id))
+                result.Errors.Add(Error(spec.Id, "mutatedBy", $"존재하지 않는 스펙 참조: {id}"));
+        }
+    }
+
+    /// <summary>
+    /// supersedes↔supersededBy, mutates↔mutatedBy 양방향 연결 일관성을 검사합니다.
+    /// A.supersedes에 B가 있으면 B.supersededBy에 A가 있어야 하고, 역방향도 마찬가지.
+    /// </summary>
+    private void ValidateBidirectionalLinks(List<SpecNode> specs, ValidationResult result)
+    {
+        var nodeMap = specs.ToDictionary(s => s.Id);
+
+        foreach (var spec in specs)
+        {
+            // A.supersedes → B 이면 B.supersededBy ∋ A
+            foreach (var targetId in spec.Supersedes)
+            {
+                if (nodeMap.TryGetValue(targetId, out var target) && !target.SupersededBy.Contains(spec.Id))
+                    result.Warnings.Add(Warning(spec.Id,
+                        $"양방향 연결 불일치: {spec.Id}.supersedes에 {targetId}가 있지만 {targetId}.supersededBy에 {spec.Id}가 없습니다."));
+            }
+
+            // A.supersededBy → B 이면 B.supersedes ∋ A
+            foreach (var sourceId in spec.SupersededBy)
+            {
+                if (nodeMap.TryGetValue(sourceId, out var source) && !source.Supersedes.Contains(spec.Id))
+                    result.Warnings.Add(Warning(spec.Id,
+                        $"양방향 연결 불일치: {spec.Id}.supersededBy에 {sourceId}가 있지만 {sourceId}.supersedes에 {spec.Id}가 없습니다."));
+            }
+
+            // A.mutates → B 이면 B.mutatedBy ∋ A
+            foreach (var targetId in spec.Mutates)
+            {
+                if (nodeMap.TryGetValue(targetId, out var target) && !target.MutatedBy.Contains(spec.Id))
+                    result.Warnings.Add(Warning(spec.Id,
+                        $"양방향 연결 불일치: {spec.Id}.mutates에 {targetId}가 있지만 {targetId}.mutatedBy에 {spec.Id}가 없습니다."));
+            }
+
+            // A.mutatedBy → B 이면 B.mutates ∋ A
+            foreach (var sourceId in spec.MutatedBy)
+            {
+                if (nodeMap.TryGetValue(sourceId, out var source) && !source.Mutates.Contains(spec.Id))
+                    result.Warnings.Add(Warning(spec.Id,
+                        $"양방향 연결 불일치: {spec.Id}.mutatedBy에 {sourceId}가 있지만 {sourceId}.mutates에 {spec.Id}가 없습니다."));
+            }
+        }
     }
 
     private static ValidationError Error(string specId, string field, string message)
