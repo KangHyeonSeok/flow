@@ -12,6 +12,7 @@ from .schema import (
 )
 from .parser import parse_scenario, parse_scenario_data
 from .validator import validate_scenario
+from .discovery import DiscoveredScenario, ScenarioDiscovery, discover_scenarios
 
 __all__ = [
     "Assertion",
@@ -25,4 +26,7 @@ __all__ = [
     "parse_scenario",
     "parse_scenario_data",
     "validate_scenario",
+    "DiscoveredScenario",
+    "ScenarioDiscovery",
+    "discover_scenarios",
 ]

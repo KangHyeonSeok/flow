@@ -49,13 +49,14 @@ class JsonReporter:
                 "total": assertion_report.total_count,
                 "passed": assertion_report.passed_count,
                 "failed": assertion_report.failed_count,
+                "skipped": assertion_report.skipped_count,
                 "duration_ms": duration_ms,
             },
             "assertions": [
                 {
                     "name": r.assertion.name,
                     "type": r.assertion.type,
-                    "status": "pass" if r.passed else "fail",
+                    "status": "skip" if r.skipped else ("pass" if r.passed else "fail"),
                     "confidence": r.vlm_result.confidence if r.vlm_result else None,
                     "reason": r.details,
                     "warning": r.vlm_result.warning if r.vlm_result else None,
@@ -131,6 +132,7 @@ class JsonReporter:
             "total_tests": summary["total"],
             "passed": summary["passed"],
             "failed": summary["failed"],
+            "skipped": summary.get("skipped", 0),
             "duration_ms": summary["duration_ms"],
         }
 

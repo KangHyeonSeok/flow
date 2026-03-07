@@ -1,7 +1,7 @@
 """CLI entry point for E2E test tool.
 
 Invoked by flow-cli's PythonBridge:
-    python -m e2e_test.cli <scenario_file> [options]
+    python -m e2e_test.cli <scenario_file_or_dir> [options]
 """
 
 import json
@@ -24,14 +24,22 @@ def main():
 
     scenario_path = args.get("scenario")
     if not scenario_path:
-        output_error("Scenario file path is required.")
+        output_error("Scenario file path or directory is required.")
         sys.exit(1)
 
-    scenario_file = Path(scenario_path)
-    if not scenario_file.exists():
-        output_error(f"Scenario file not found: {scenario_path}")
+    target = Path(scenario_path)
+    if not target.exists():
+        output_error(f"Scenario path not found: {scenario_path}")
         sys.exit(1)
 
+    if target.is_dir():
+        _run_directory(target, args)
+    else:
+        _run_single_file(target, args)
+
+
+def _run_single_file(scenario_file: Path, args: dict) -> None:
+    """Run a single YAML scenario file."""
     # Parse and validate scenario
     try:
         from .scenario.parser import parse_scenario
@@ -80,6 +88,12 @@ def main():
         if args.get("platform"):
             scenario.meta.platform = args["platform"]
 
+        # Load platform adapter
+        from .adapters import get_adapter
+        adapter = get_adapter(scenario.meta.platform)
+        if adapter:
+            adapter.on_test_start(scenario.meta.app)
+
         # Execute
         executor = TestExecutor(
             scenario=scenario,
@@ -88,6 +102,9 @@ def main():
         )
 
         result = executor.execute()
+
+        if adapter:
+            adapter.on_test_end(scenario.meta.app, result.all_passed)
 
         # Output as flow-compatible JSON
         flow_output = result.to_flow_json()
@@ -104,6 +121,148 @@ def main():
     except Exception as e:
         duration_ms = int((time.time() - start_time) * 1000)
         output_error(f"Test execution failed: {e}", duration_ms=duration_ms)
+        sys.exit(1)
+
+
+def _run_directory(scenario_dir: Path, args: dict) -> None:
+    """Discover and run all YAML scenarios in a directory."""
+    start_time = time.time()
+
+    try:
+        from .scenario.discovery import discover_scenarios
+
+        discovered = discover_scenarios(scenario_dir, recursive=True)
+    except Exception as e:
+        output_error(f"Scenario discovery failed: {e}")
+        sys.exit(1)
+
+    if not discovered:
+        output_error(f"No YAML scenario files found in: {scenario_dir}")
+        sys.exit(1)
+
+    # Separate valid scenarios from parse errors
+    valid = [d for d in discovered if d.is_valid]
+    invalid = [d for d in discovered if not d.is_valid]
+
+    print(f"Discovered {len(discovered)} scenario(s): {len(valid)} valid, {len(invalid)} invalid")
+
+    if not valid:
+        errors = [f"{d.path.name}: {d.error}" for d in invalid]
+        output_error(f"No valid scenarios found. Errors: {'; '.join(errors)}")
+        sys.exit(1)
+
+    # Platform filter
+    platform_filter = args.get("platform")
+    if platform_filter:
+        valid = [d for d in valid if d.scenario and d.scenario.meta.platform == platform_filter]
+        print(f"After platform filter '{platform_filter}': {len(valid)} scenario(s)")
+
+    if not valid:
+        output_error(f"No scenarios match platform filter '{platform_filter}'")
+        sys.exit(1)
+
+    # Execute each scenario and aggregate results
+    total_passed = 0
+    total_failed = 0
+    total_skipped = 0
+    scenario_results = []
+    all_success = True
+
+    try:
+        from .runner.executor import ExecutionConfig, TestExecutor
+        from .validators.gemini_vlm import GeminiValidator, load_api_key
+        from .adapters import get_adapter
+
+        gemini_validator = None
+        try:
+            api_key = load_api_key()
+            gemini_validator = GeminiValidator(api_key=api_key)
+        except (FileNotFoundError, ValueError):
+            pass
+
+        for ds in valid:
+            scenario = ds.scenario
+            print(f"\nRunning: {ds.path.name} ({scenario.meta.app})")
+
+            config = ExecutionConfig(
+                discovery_timeout=args.get("timeout", 300) / 10,
+                test_timeout=args.get("timeout", 300),
+                save_report=args.get("save_report", False),
+            )
+            if args.get("report_dir"):
+                config.report_dir = Path(args["report_dir"])
+
+            adapter = get_adapter(scenario.meta.platform)
+            if adapter:
+                adapter.on_test_start(scenario.meta.app)
+
+            executor = TestExecutor(
+                scenario=scenario,
+                config=config,
+                gemini_validator=gemini_validator,
+            )
+
+            result = executor.execute()
+            flow_output = result.to_flow_json()
+
+            if adapter:
+                adapter.on_test_end(scenario.meta.app, result.all_passed)
+
+            data = flow_output.get("data", {})
+            total_passed += data.get("passed", 0)
+            total_failed += data.get("failed", 0)
+            total_skipped += data.get("skipped", 0)
+
+            scenario_results.append({
+                "scenario": scenario.meta.app,
+                "file": str(ds.path),
+                "success": flow_output.get("success", False),
+                "message": flow_output.get("message", ""),
+                "passed": data.get("passed", 0),
+                "failed": data.get("failed", 0),
+                "skipped": data.get("skipped", 0),
+                "duration_ms": data.get("duration_ms", 0),
+            })
+
+            if not flow_output.get("success", False):
+                all_success = False
+
+    except KeyboardInterrupt:
+        output_error("Test run interrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        output_error(f"Test run failed: {e}")
+        sys.exit(1)
+
+    duration_ms = int((time.time() - start_time) * 1000)
+    total = total_passed + total_failed + total_skipped
+
+    if all_success:
+        message = f"All {len(valid)} scenario(s) passed"
+    else:
+        failed_scenarios = sum(1 for r in scenario_results if not r["success"])
+        message = f"{failed_scenarios}/{len(valid)} scenario(s) failed"
+
+    output = {
+        "success": all_success,
+        "command": "test",
+        "data": {
+            "directory": str(scenario_dir),
+            "scenarios_total": len(valid),
+            "scenarios_passed": sum(1 for r in scenario_results if r["success"]),
+            "scenarios_failed": sum(1 for r in scenario_results if not r["success"]),
+            "total_tests": total,
+            "passed": total_passed,
+            "failed": total_failed,
+            "skipped": total_skipped,
+            "duration_ms": duration_ms,
+            "results": scenario_results,
+        },
+        "message": message,
+    }
+    print(json.dumps(output, ensure_ascii=False))
+
+    if not all_success:
         sys.exit(1)
 
 
@@ -158,12 +317,16 @@ def print_help():
     print("""E2E Test Tool - Flow Project
 
 Usage:
-    python -m e2e_test.cli <scenario.yaml> [options]
+    python -m e2e_test.cli <scenario.yaml|directory> [options]
+
+Arguments:
+    scenario.yaml   Path to a YAML scenario file, or
+    directory       Path to a directory containing YAML scenario files
 
 Options:
-    --timeout <sec>     Test timeout (default: 300)
+    --timeout <sec>     Test timeout per scenario in seconds (default: 300)
     --retry <count>     Retry count (default: 3)
-    --platform <name>   Target platform (flutter|unity)
+    --platform <name>   Target platform filter (flutter|unity)
     --save-report       Save report to file
     --report-dir <dir>  Directory for saved reports
     --pretty            Pretty print output

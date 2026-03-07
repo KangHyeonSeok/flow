@@ -16,6 +16,7 @@ class AssertionResult:
     assertion: Assertion
     passed: bool
     details: str
+    skipped: bool = False
     vlm_result: Optional[VLMValidationResult] = None
 
 
@@ -26,15 +27,19 @@ class AssertionReport:
 
     @property
     def all_passed(self) -> bool:
-        return all(r.passed for r in self.results)
+        return all(r.passed or r.skipped for r in self.results)
 
     @property
     def passed_count(self) -> int:
-        return sum(1 for r in self.results if r.passed)
+        return sum(1 for r in self.results if r.passed and not r.skipped)
 
     @property
     def failed_count(self) -> int:
-        return sum(1 for r in self.results if not r.passed)
+        return sum(1 for r in self.results if not r.passed and not r.skipped)
+
+    @property
+    def skipped_count(self) -> int:
+        return sum(1 for r in self.results if r.skipped)
 
     @property
     def total_count(self) -> int:
@@ -110,7 +115,8 @@ class AssertionEngine:
             return AssertionResult(
                 assertion=assertion,
                 passed=False,
-                details="No VLM validator configured. Cannot validate screenshots.",
+                skipped=True,
+                details="No VLM validator configured. Screenshot assertion skipped.",
             )
 
         expected = assertion.description or assertion.name

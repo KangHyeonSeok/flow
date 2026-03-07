@@ -40,12 +40,12 @@ public partial class FlowApp
                 return;
             }
 
-            // Resolve scenario path
+            // Resolve scenario path (file or directory)
             var scenarioPath = Path.GetFullPath(target);
-            if (!File.Exists(scenarioPath))
+            if (!File.Exists(scenarioPath) && !Directory.Exists(scenarioPath))
             {
                 JsonOutput.Write(JsonOutput.Error("test",
-                    $"Scenario file not found: {target}",
+                    $"Scenario file or directory not found: {target}",
                     new { path = scenarioPath }), pretty);
                 Environment.ExitCode = 1;
                 return;
