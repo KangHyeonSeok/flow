@@ -110,6 +110,11 @@ export class KanbanPanel {
                 await this.changeSpecStatus(specId, newStatus);
                 break;
             }
+            case 'changePriority': {
+                const { specId, newPriority } = msg as { type: string; specId: string; newPriority: string };
+                await this.changeSpecPriority(specId, newPriority);
+                break;
+            }
         }
     }
 
@@ -147,6 +152,48 @@ export class KanbanPanel {
             newStatus,
           });
             vscode.window.showErrorMessage(`상태 변경 실패: ${String(err)}`);
+        }
+    }
+
+    /** 스펙 우선순위 힌트 변경 — metadata.userPriorityHint 저장 */
+    private async changeSpecPriority(specId: string, newPriority: string): Promise<void> {
+        const VALID_PRIORITIES = ['', 'high', 'medium', 'low'];
+        if (!VALID_PRIORITIES.includes(newPriority)) {
+            vscode.window.showErrorMessage(
+                `유효하지 않은 우선순위 값: '${newPriority}'.`
+            );
+            return;
+        }
+
+        const path = require('path') as typeof import('path');
+        const fs = require('fs') as typeof import('fs');
+        const filePath = path.join(this.loader.specsDirectory, `${specId}.json`);
+
+        try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            const obj = JSON.parse(raw);
+            if (!obj.metadata || typeof obj.metadata !== 'object') {
+                obj.metadata = {};
+            }
+            if (newPriority === '') {
+                delete obj.metadata.userPriorityHint;
+            } else {
+                obj.metadata.userPriorityHint = newPriority;
+            }
+            obj.updatedAt = new Date().toISOString();
+            fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), 'utf-8');
+            await this.loader.reload();
+            await this.panel.webview.postMessage({
+                type: 'priorityChanged',
+                specId,
+                newPriority,
+            });
+        } catch (err) {
+            await this.panel.webview.postMessage({
+                type: 'priorityChangeFailed',
+                specId,
+            });
+            vscode.window.showErrorMessage(`우선순위 변경 실패: ${String(err)}`);
         }
     }
 
@@ -464,6 +511,17 @@ export class KanbanPanel {
     cursor: pointer;
     outline: none;
   }
+  /* ── 우선순위 드롭다운 ── */
+  .priority-select {
+    background: var(--input-bg);
+    color: var(--input-fg);
+    border: 1px solid var(--input-border);
+    border-radius: 3px;
+    font-size: 10px;
+    padding: 2px 4px;
+    cursor: pointer;
+    outline: none;
+  }
   /* ── 컨텍스트 메뉴 ── */
   .ctx-menu {
     position: fixed;
@@ -534,6 +592,10 @@ window.addEventListener('message', (event) => {
   if (message.type === 'statusChangeFailed') {
     resetCardStatusSelect(message.specId);
   }
+
+  if (message.type === 'priorityChangeFailed') {
+    resetCardPrioritySelect(message.specId);
+  }
 });
 
 function setSelectedCard(card) {
@@ -546,7 +608,7 @@ document.getElementById('board').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
   if (!card) { return; }
   // status-select나 컨텍스트 메뉴 컨트롤 클릭이면 무시
-  if (e.target.closest('.action-btn') || e.target.closest('.status-select')) { return; }
+  if (e.target.closest('.action-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select')) { return; }
   setSelectedCard(card);
   vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
 });
@@ -619,6 +681,17 @@ document.getElementById('board').addEventListener('change', (e) => {
   e.stopPropagation();
 });
 
+// ── 우선순위 변경 select
+document.getElementById('board').addEventListener('change', (e) => {
+  const sel = e.target.closest('.priority-select');
+  if (!sel) { return; }
+  const card = sel.closest('.card');
+  if (!card) { return; }
+  card.dataset.pendingPriority = sel.value;
+  vscode.postMessage({ type: 'changePriority', specId: card.dataset.id, newPriority: sel.value });
+  e.stopPropagation();
+});
+
 function moveCardToStatus(specId, newStatus) {
   const card = document.querySelector('.card[data-id="' + cssEscape(specId) + '"]');
   if (!card) { return; }
@@ -661,6 +734,18 @@ function resetCardStatusSelect(specId) {
   }
 
   delete card.dataset.pendingStatus;
+}
+
+function resetCardPrioritySelect(specId) {
+  const card = document.querySelector('.card[data-id="' + cssEscape(specId) + '"]');
+  if (!card) { return; }
+
+  const select = card.querySelector('.priority-select');
+  if (select && card.dataset.pendingPriority !== undefined) {
+    select.value = card.dataset.pendingPriority || '';
+  }
+
+  delete card.dataset.pendingPriority;
 }
 
 function syncEmptyState(columnBody) {
@@ -786,6 +871,16 @@ function filterCards(query) {
             `<option value="${c.status}"${c.status === spec.status ? ' selected' : ''}>${c.label}</option>`
         ).join('');
 
+        const currentPriority = (spec.metadata?.userPriorityHint as string) || '';
+        const priorityOptions = [
+            { value: '', label: '우선순위' },
+            { value: 'high', label: '🔴 높음' },
+            { value: 'medium', label: '🟡 보통' },
+            { value: 'low', label: '🟢 낮음' },
+        ].map(p =>
+            `<option value="${p.value}"${p.value === currentPriority ? ' selected' : ''}>${p.label}</option>`
+        ).join('');
+
         // C5: 날짜를 카드 헤더(ID 옆 같은 줄)에 배치, 하단 중복 날짜 제거
         // user-input-required 클래스로 카드 테두리 색 차별화
         const userInputClass = feedback.requiresUserInput ? ' user-input-required' : '';
@@ -811,9 +906,12 @@ function filterCards(query) {
       <button class="action-btn" data-action="open" title="파일 열기">↗</button>
     </div>
   </div>
-  <div style="margin-top:6px;">
+  <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
     <select class="status-select" title="상태 변경">
       ${statusOptions}
+    </select>
+    <select class="priority-select" title="우선순위 설정">
+      ${priorityOptions}
     </select>
   </div>
 </div>`;
