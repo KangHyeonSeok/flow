@@ -338,6 +338,14 @@ export class KanbanPanel {
     border-color: var(--btn-bg);
     transform: translateY(-1px);
   }
+  .card:focus {
+    outline: 2px solid var(--btn-bg);
+    outline-offset: 1px;
+  }
+  .card.selected {
+    border-color: var(--btn-bg);
+    box-shadow: 0 0 0 2px var(--btn-bg);
+  }
   .card-id {
     font-size: 10px;
     opacity: 0.55;
@@ -543,12 +551,28 @@ window.addEventListener('message', (event) => {
   }
 });
 
+function setSelectedCard(card) {
+  document.querySelectorAll('.card.selected').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+}
+
 // ── 카드 클릭 → 상세 보기
 document.getElementById('board').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
   if (!card) { return; }
-  // 버튼 클릭이면 무시 (버튼은 자체 handler)
+  // status-select나 컨텍스트 메뉴 컨트롤 클릭이면 무시
   if (e.target.closest('.action-btn') || e.target.closest('.status-select')) { return; }
+  setSelectedCard(card);
+  vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
+});
+
+// ── 카드 키보드 탐색 → Enter/Space로 상세 보기 (F-093-C3)
+document.getElementById('board').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') { return; }
+  const card = e.target.closest('.card');
+  if (!card) { return; }
+  e.preventDefault();
+  setSelectedCard(card);
   vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
 });
 
@@ -595,8 +619,6 @@ document.getElementById('board').addEventListener('click', (e) => {
   const action = btn.dataset.action;
   if (action === 'open') {
     vscode.postMessage({ type: 'openSpec', specId: card.dataset.id });
-  } else if (action === 'detail') {
-    vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
   }
   e.stopPropagation();
 });
@@ -789,7 +811,9 @@ function filterCards(query) {
      data-id="${this.esc(spec.id)}"
      data-title="${this.esc(title)}"
      data-tags="${this.esc((spec.tags || []).join(' '))}"
-     style="border-left: 3px solid ${borderColor};">
+     style="border-left: 3px solid ${borderColor};"
+     tabindex="0"
+     role="button">
   <div class="card-id">${this.esc(spec.id)}<span style="margin-left:6px;font-size:10px;opacity:0.45;">${date}</span></div>
   <div class="card-title">${this.esc(title)}</div>
   ${userInputBadge}
@@ -800,7 +824,6 @@ function filterCards(query) {
   <div class="card-footer">
     <div class="card-actions">
       <button class="action-btn" data-action="open" title="파일 열기">↗</button>
-      <button class="action-btn" data-action="detail" title="상세 보기">☰</button>
     </div>
   </div>
   <div style="margin-top:6px;">
