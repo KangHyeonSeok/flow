@@ -219,6 +219,7 @@ export class SpecLoader {
                 tags: spec.tags,
                 codeRefs: spec.codeRefs,
                 evidence: spec.evidence,
+                metadata: spec.metadata,
                 githubRefs: spec.githubRefs,
                 docLinks: spec.docLinks,
             });
@@ -253,6 +254,7 @@ export class SpecLoader {
                     tags: [],
                     codeRefs: cond.codeRefs,
                     evidence: cond.evidence,
+                    metadata: cond.metadata,
                     githubRefs: cond.githubRefs,
                     docLinks: cond.docLinks,
                     featureId: spec.id,

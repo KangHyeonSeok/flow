@@ -31,7 +31,21 @@ $ExtDir = Join-Path $ProjectRoot "tools" "flow-ext"
 
 Write-Host "=== Flow Extension Build ===" -ForegroundColor Cyan
 
+function Get-CurrentVSCodeCliCandidate {
+    $currentExe = $env:VSCODE_GIT_ASKPASS_NODE
+    if (-not [string]::IsNullOrWhiteSpace($currentExe) -and (Test-Path $currentExe)) {
+        return $currentExe
+    }
+
+    return $null
+}
+
 function Resolve-VSCodeCli {
+    $currentVsCodeCli = Get-CurrentVSCodeCliCandidate
+    if ($currentVsCodeCli) {
+        return $currentVsCodeCli
+    }
+
     $codeCmd = Get-Command code -ErrorAction SilentlyContinue
     if ($codeCmd) {
         return $codeCmd.Source
@@ -173,6 +187,7 @@ try {
         }
 
         Write-Host "[5/5] VS Code 확장 강제 설치..." -ForegroundColor White
+        Write-Host "[INFO] VS Code CLI: $vsCodeCli" -ForegroundColor Gray
         & $vsCodeCli --install-extension $destPath --force
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERROR] VS Code 확장 설치 실패" -ForegroundColor Red

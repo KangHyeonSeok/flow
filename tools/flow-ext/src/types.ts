@@ -53,10 +53,13 @@ export interface Condition {
     description: string;
     status: SpecStatus;
     codeRefs: string[];
-    evidence: Evidence[];    /** v4: GitHub 이슈/PR/Discussion 연결 */
+    evidence: Evidence[];
+    metadata?: Record<string, unknown>;
+    /** v4: GitHub 이슈/PR/Discussion 연결 */
     githubRefs?: GitHubRef[];
     /** v4: 관련 문서·참고자료 링크 */
-    docLinks?: DocLink[];}
+    docLinks?: DocLink[];
+}
 
 /** 스펙 (Feature/Task) - 그래프의 주 노드 */
 export interface Spec {
@@ -92,6 +95,7 @@ export interface GraphNode {
     tags: string[];
     codeRefs: string[];
     evidence: Evidence[];
+    metadata?: Record<string, unknown>;
     /** v4: GitHub 이슈/PR/Discussion 연결 */
     githubRefs?: GitHubRef[];
     /** v4: 관련 문서·참고자료 링크 */

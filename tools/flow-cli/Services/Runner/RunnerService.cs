@@ -102,6 +102,10 @@ public class RunnerService
             return results;
         }
 
+        // 1.5. 검토 대기 스펙 자동 검증
+        var autoVerified = await AutoVerifyReviewedSpecsAsync();
+        results.AddRange(autoVerified);
+
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
         if (targets.Count == 0)
@@ -318,7 +322,7 @@ public class RunnerService
             // 8. 스펙 저장소 변경사항 push (별도 저장소인 경우)
             if (_specRepo != null)
             {
-                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to working");
+                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to {spec.Status}");
             }
 
             result.Success = true;
@@ -405,14 +409,98 @@ public class RunnerService
     /// </summary>
     private void MarkSpecCompleted(SpecNode spec)
     {
+        var prevStatus = spec.Status;
+        var review = SpecReviewEvaluator.Evaluate(spec);
+
         spec.Status = "needs-review";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastCompletedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastCompletedBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+
+        if (review.CanAutoVerify)
+        {
+            spec.Status = "verified";
+            spec.Metadata["lastVerifiedAt"] = DateTime.UtcNow.ToString("o");
+            spec.Metadata["lastVerifiedBy"] = _instanceId;
+            spec.Metadata["verificationSource"] = "runner-completion";
+            _specStore.Update(spec);
+            _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
+            return;
+        }
+
+        spec.Metadata.Remove("lastVerifiedAt");
+        spec.Metadata.Remove("lastVerifiedBy");
+        spec.Metadata.Remove("verificationSource");
         _specStore.Update(spec);
-        _log.Info("status", $"스펙 상태 변경: working → needs-review (구현 완료, 검토 대기)", spec.Id);
+
+        if (review.RequiresManualVerification)
+        {
+            _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 수동 검증 필요)", spec.Id);
+            return;
+        }
+
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 검토 대기)", spec.Id);
+    }
+
+    private void MarkSpecVerified(SpecNode spec, string verificationSource)
+    {
+        var prevStatus = spec.Status;
+        spec.Status = "verified";
+        spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata["lastVerifiedAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata["lastVerifiedBy"] = _instanceId;
+        spec.Metadata["verificationSource"] = verificationSource;
+        spec.Metadata.Remove("lastError");
+        spec.Metadata.Remove("lastErrorAt");
+        _specStore.Update(spec);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
+    }
+
+    private async Task<List<SpecWorkResult>> AutoVerifyReviewedSpecsAsync()
+    {
+        var results = new List<SpecWorkResult>();
+        var reviewedSpecs = _specStore.GetAll()
+            .Where(spec => spec.Status == "needs-review")
+            .OrderBy(spec => spec.Id)
+            .ToList();
+
+        if (reviewedSpecs.Count == 0)
+        {
+            return results;
+        }
+
+        foreach (var spec in reviewedSpecs)
+        {
+            var evaluation = SpecReviewEvaluator.Evaluate(spec);
+            if (!evaluation.CanAutoVerify)
+            {
+                continue;
+            }
+
+            var timestamp = DateTime.UtcNow.ToString("o");
+            MarkSpecVerified(spec, "runner-review-pass");
+
+            results.Add(new SpecWorkResult
+            {
+                SpecId = spec.Id,
+                Success = true,
+                Action = "auto-verify",
+                StartedAt = timestamp,
+                CompletedAt = timestamp
+            });
+        }
+
+        if (results.Count > 0 && _specRepo != null)
+        {
+            var summary = results.Count <= 3
+                ? string.Join(", ", results.Select(result => result.SpecId))
+                : $"{results.Count} specs";
+            await _specRepo.CommitAndPushAsync($"[runner] Auto-verify {summary}");
+        }
+
+        return results;
     }
 
     /// <summary>

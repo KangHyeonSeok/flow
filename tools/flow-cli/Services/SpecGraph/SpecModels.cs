@@ -46,6 +46,9 @@ public class SpecCondition
 
     [JsonPropertyName("evidence")]
     public List<SpecEvidence> Evidence { get; set; } = new();
+
+    [JsonPropertyName("metadata")]
+    public Dictionary<string, object>? Metadata { get; set; }
 }
 
 /// <summary>

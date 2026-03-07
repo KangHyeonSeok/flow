@@ -5,7 +5,8 @@
  */
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
-import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink } from './types';
+import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink, Condition, Spec } from './types';
+import { getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState } from './reviewState';
 
 export class DetailViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'specDetail';
@@ -67,7 +68,8 @@ export class DetailViewProvider implements vscode.WebviewViewProvider {
         }
 
         const spec = graph.specs.find(s => s.id === nodeId);
-        this.view.webview.html = this.getDetailHtml(node, spec);
+        const conditionRef = this.loader.findCondition(nodeId);
+        this.view.webview.html = this.getDetailHtml(node, spec ?? conditionRef?.spec, conditionRef?.condition);
     }
 
     private getEmptyHtml(): string {
@@ -85,21 +87,52 @@ body {
 </body></html>`;
     }
 
-    private getDetailHtml(node: GraphNode, spec?: { conditions: any[]; [key: string]: any }): string {
+    private getDetailHtml(node: GraphNode, spec?: Spec, condition?: Condition): string {
         const color = STATUS_COLORS[node.status] || '#888';
         const isFeature = node.nodeType === 'feature' || node.nodeType === 'task';
+        const review = isFeature && spec ? getSpecReviewState(spec) : null;
+        const nodeManualItems = condition
+            ? getConditionManualVerificationItems(condition)
+            : getNodeManualVerificationItems(node);
+
+        let reviewHtml = '';
+        if (review) {
+            const statusText = review.requiresManualVerification
+                ? `수동 검증 ${review.manualVerificationItems.length}건 필요`
+                : review.autoVerifyEligible
+                    ? '모든 조건 충족, Runner 자동 검증 대상'
+                    : review.totalConditions > 0
+                        ? `조건 ${review.verifiedConditions}/${review.totalConditions} 충족`
+                        : '조건 없음';
+            reviewHtml = `<div class="review-panel ${review.requiresManualVerification ? 'manual' : review.autoVerifyEligible ? 'eligible' : ''}">
+                <div class="review-title">검증 상태</div>
+                <div class="review-badge-row">
+                    <span class="review-pill">${statusText}</span>
+                    ${review.totalConditions > 0 ? `<span class="review-progress">${review.progressPercent}%</span>` : ''}
+                </div>
+                ${review.totalConditions > 0 ? `<div class="progress-track"><div class="progress-fill" style="width:${review.progressPercent}%;background:${review.progressPercent === 100 ? '#4caf50' : '#2196f3'}"></div></div>` : ''}
+                ${review.requiresManualVerification ? `<ul class="review-items">${review.manualVerificationItems.map((item) => `<li><strong>${this.escapeHtml(item.label)}</strong>${item.reason ? ` - ${this.escapeHtml(item.reason)}` : ''}</li>`).join('')}</ul>` : ''}
+            </div>`;
+        } else if (nodeManualItems.length > 0) {
+            reviewHtml = `<div class="review-panel manual">
+                <div class="review-title">수동 검증 필요</div>
+                <ul class="review-items">${nodeManualItems.map((item) => `<li><strong>${this.escapeHtml(item.label)}</strong>${item.reason ? ` - ${this.escapeHtml(item.reason)}` : ''}</li>`).join('')}</ul>
+            </div>`;
+        }
 
         let conditionsHtml = '';
         if (spec && spec.conditions) {
-            conditionsHtml = spec.conditions.map((c: any) => {
+            conditionsHtml = spec.conditions.map((c) => {
                 const cColor = STATUS_COLORS[c.status as SpecStatus] || '#888';
                 const refsHtml = (c.codeRefs || []).map((r: string) =>
                     `<a class="code-ref" data-ref="${this.escapeAttr(r)}">${this.escapeHtml(r)}</a>`
                 ).join('');
+                const manualItems = getConditionManualVerificationItems(c);
                 return `<div class="condition">
                     <span class="cond-status" style="color:${cColor}">●</span>
                     <strong>${this.escapeHtml(c.id)}</strong> [${c.status}]<br>
                     <span class="cond-desc">${this.escapeHtml(c.description)}</span>
+                    ${manualItems.length > 0 ? `<div class="cond-review">⚠ 수동 검증${manualItems[0]?.reason ? ` - ${this.escapeHtml(manualItems[0].reason)}` : ''}</div>` : ''}
                     ${refsHtml}
                 </div>`;
             }).join('');
@@ -162,6 +195,69 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     background: var(--vscode-editor-background); font-size: 12px;
 }
 .cond-desc { font-size: 11px; color: var(--vscode-descriptionForeground); }
+.cond-review {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #ffb74d;
+}
+.review-panel {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--vscode-widget-border);
+    background: color-mix(in srgb, var(--vscode-editor-background) 82%, #1f3b4d 18%);
+}
+.review-panel.manual {
+    border-color: rgba(255, 152, 0, 0.45);
+    background: rgba(255, 152, 0, 0.09);
+}
+.review-panel.eligible {
+    border-color: rgba(76, 175, 80, 0.4);
+    background: rgba(76, 175, 80, 0.08);
+}
+.review-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 6px;
+}
+.review-badge-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.review-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+}
+.review-progress {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+.progress-track {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--vscode-widget-border);
+}
+.progress-fill {
+    height: 100%;
+}
+.review-items {
+    margin: 8px 0 0 16px;
+    font-size: 11px;
+}
 .btn-open {
     display: inline-block; margin-top: 8px; padding: 3px 10px;
     background: var(--vscode-button-secondaryBackground);
@@ -187,6 +283,8 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
 <span style="font-size:11px;color:var(--vscode-descriptionForeground)">${node.nodeType}</span>
 
 <div class="desc">${this.escapeHtml(node.description)}</div>
+
+${reviewHtml}
 
 ${tagsHtml ? '<h3>Tags</h3>' + tagsHtml : ''}
 ${refsHtml ? '<h3>Code References</h3>' + refsHtml : ''}

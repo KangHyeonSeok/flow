@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_COLORS, GitHubRef, DocLink } from './types';
+import { getConditionManualVerificationItems, getSpecReviewState } from './reviewState';
 
 export class SpecViewProvider {
     public static currentPanel: SpecViewProvider | undefined;
@@ -451,6 +452,38 @@ export class SpecViewProvider {
         .condition-refs a:hover {
             text-decoration: underline;
         }
+        .review-callout {
+            margin: 14px 0 16px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+        .review-callout.manual {
+            border-color: rgba(255, 152, 0, 0.45);
+            background: rgba(255, 152, 0, 0.08);
+        }
+        .review-callout.eligible {
+            border-color: rgba(76, 175, 80, 0.35);
+            background: rgba(76, 175, 80, 0.08);
+        }
+        .review-callout-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--fg-secondary);
+            margin-bottom: 6px;
+        }
+        .review-callout-items {
+            margin: 8px 0 0 18px;
+            font-size: 12px;
+        }
+        .condition-manual {
+            margin-top: 4px;
+            font-size: 11px;
+            color: #ffb74d;
+        }
 
         /* 코드 참조 */
         .code-refs {
@@ -678,18 +711,17 @@ export class SpecViewProvider {
                 <tbody>
                     ${specs.map(s => {
                         const color = STATUS_COLORS[s.status] || '#888';
-                        const totalCond = s.conditions.length;
-                        const verifiedCond = s.conditions.filter(c => c.status === 'verified').length;
-                        const pct = totalCond > 0 ? Math.round((verifiedCond / totalCond) * 100) : 0;
+                        const review = getSpecReviewState(s);
                         const tags = s.tags.map(t => `<span class="tag">${esc(t)}</span>`).join(' ');
                         return `<tr>
                             <td><a class="spec-link" href="#spec-${esc(s.id)}">${esc(s.id)}</a></td>
                             <td>${esc(s.title)}</td>
                             <td><span class="status-badge" style="background:${color};font-size:10px">${s.status}</span></td>
                             <td>
-                                ${totalCond > 0
-                                    ? `<div class="progress-bar-container"><div class="progress-bar" style="width:${pct}%;background:${pct === 100 ? '#4caf50' : '#2196f3'}"></div></div>
-                                       <span class="progress-text">${verifiedCond}/${totalCond} (${pct}%)</span>`
+                                ${review.totalConditions > 0
+                                    ? `<div class="progress-bar-container"><div class="progress-bar" style="width:${review.progressPercent}%;background:${review.progressPercent === 100 ? '#4caf50' : '#2196f3'}"></div></div>
+                                       <span class="progress-text">${review.verifiedConditions}/${review.totalConditions} (${review.progressPercent}%)</span>
+                                       ${review.requiresManualVerification ? '<br><span class="progress-text" style="color:#ffb74d">수동 검증 필요</span>' : ''}`
                                     : '<span class="progress-text">조건 없음</span>'
                                 }
                             </td>
@@ -706,11 +738,12 @@ export class SpecViewProvider {
         const color = STATUS_COLORS[spec.status] || '#888';
         const headingTag = depth === 0 ? 'h2' : depth === 1 ? 'h3' : 'h4';
         const focusedClass = isFocused ? ' focused' : '';
+        const review = getSpecReviewState(spec);
 
         // 조건 달성률
-        const totalCond = spec.conditions.length;
-        const verifiedCond = spec.conditions.filter(c => c.status === 'verified').length;
-        const pct = totalCond > 0 ? Math.round((verifiedCond / totalCond) * 100) : 0;
+        const totalCond = review.totalConditions;
+        const verifiedCond = review.verifiedConditions;
+        const pct = review.progressPercent;
 
         // 날짜 포맷
         const updatedAt = spec.updatedAt ? formatDate(spec.updatedAt) : '';
@@ -748,6 +781,16 @@ export class SpecViewProvider {
             <ul class="conditions-list">
                 ${spec.conditions.map(c => this.renderCondition(c)).join('')}
             </ul>`;
+        }
+
+        let reviewHtml = '';
+        if (review.requiresManualVerification || review.autoVerifyEligible) {
+            reviewHtml = `
+            <div class="review-callout ${review.requiresManualVerification ? 'manual' : 'eligible'}">
+                <div class="review-callout-title">검증 상태</div>
+                <div>${review.requiresManualVerification ? `수동 검증 ${review.manualVerificationItems.length}건 필요` : '모든 조건 충족, Runner 자동 검증 대상'}</div>
+                ${review.requiresManualVerification ? `<ul class="review-callout-items">${review.manualVerificationItems.map((item) => `<li><strong>${esc(item.label)}</strong>${item.reason ? ` - ${esc(item.reason)}` : ''}</li>`).join('')}</ul>` : ''}
+            </div>`;
         }
 
         // 코드 참조
@@ -813,6 +856,7 @@ export class SpecViewProvider {
                 ${updatedAt ? `<span class="meta-date">업데이트: ${updatedAt}</span>` : ''}
             </div>
             <div class="spec-description">${esc(spec.description)}</div>
+            ${reviewHtml}
             ${conditionsHtml}
             ${codeRefsHtml}
             ${githubRefsHtml}
@@ -824,7 +868,7 @@ export class SpecViewProvider {
     /** 조건 항목 렌더링 */
     private renderCondition(cond: Condition): string {
         const color = STATUS_COLORS[cond.status] || '#888';
-        const statusIcon = cond.status === 'verified' ? '✓' : cond.status === 'working' ? '◉' : '○';
+        const manualVerificationItems = getConditionManualVerificationItems(cond);
 
         let refsHtml = '';
         if (cond.codeRefs.length > 0) {
@@ -841,6 +885,7 @@ export class SpecViewProvider {
             <div class="condition-body">
                 <span class="condition-id">${esc(cond.id)}</span>
                 <span class="condition-desc">${esc(cond.description)}</span>
+                ${manualVerificationItems.length > 0 ? `<div class="condition-manual">⚠ 수동 검증${manualVerificationItems[0]?.reason ? ` - ${esc(manualVerificationItems[0].reason)}` : ''}</div>` : ''}
                 ${refsHtml}
             </div>
         </li>`;

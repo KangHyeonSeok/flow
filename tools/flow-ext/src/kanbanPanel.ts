@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from './types';
+import { getSpecReviewState } from './reviewState';
 
 const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
     { status: 'draft',             label: '초안',              icon: '○' },
@@ -350,6 +351,27 @@ export class KanbanPanel {
     margin-bottom: 5px;
     word-break: break-word;
   }
+  .card-progress {
+    margin-top: 8px;
+  }
+  .card-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 10px;
+    opacity: 0.72;
+  }
+  .progress-track {
+    width: 100%;
+    height: 5px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--border);
+  }
+  .progress-fill {
+    height: 100%;
+  }
   .card-tags {
     display: flex;
     flex-wrap: wrap;
@@ -372,6 +394,25 @@ export class KanbanPanel {
   .card-date {
     font-size: 10px;
     opacity: 0.45;
+  }
+  .review-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid rgba(255, 152, 0, 0.45);
+    background: rgba(255, 152, 0, 0.14);
+    color: #ffb74d;
+  }
+  .review-note {
+    margin-top: 6px;
+    font-size: 10px;
+    line-height: 1.45;
+    opacity: 0.8;
   }
   .card-actions {
     display: flex;
@@ -674,11 +715,27 @@ function filterCards(query) {
 
     private renderCard(spec: Spec): string {
         const color = STATUS_COLORS[spec.status];
+      const review = getSpecReviewState(spec);
         const tagsHtml = spec.tags && spec.tags.length > 0
             ? `<div class="card-tags">${spec.tags.map(t => `<span class="tag">${this.esc(t)}</span>`).join('')}</div>`
             : '';
         const date = spec.updatedAt ? spec.updatedAt.slice(0, 10) : '';
         const title = spec.title || spec.id;
+      const progressHtml = review.totalConditions > 0
+        ? `<div class="card-progress">
+    <div class="card-progress-meta">
+      <span>조건 ${review.verifiedConditions}/${review.totalConditions}</span>
+      <span>${review.progressPercent}%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" style="width:${review.progressPercent}%;background:${review.progressPercent === 100 ? '#4caf50' : '#2196f3'}"></div></div>
+    </div>`
+        : '';
+      const reviewBadge = review.requiresManualVerification && spec.status !== 'verified'
+        ? `<div class="review-badge">⚠ 수동 검증 ${review.manualVerificationItems.length}건</div>`
+        : '';
+      const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
+        ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
+        : '';
 
         const statusOptions = COLUMNS.map(c =>
             `<option value="${c.status}"${c.status === spec.status ? ' selected' : ''}>${c.label}</option>`
@@ -693,6 +750,9 @@ function filterCards(query) {
   <div class="card-id">${this.esc(spec.id)}</div>
   <div class="card-title">${this.esc(title)}</div>
   ${tagsHtml}
+  ${progressHtml}
+  ${reviewBadge}
+  ${reviewNote}
   <div class="card-footer">
     <span class="card-date">${date}</span>
     <div class="card-actions">

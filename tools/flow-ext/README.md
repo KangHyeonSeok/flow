@@ -24,6 +24,7 @@
 ### 📋 상세 패널 (Sidebar Webview)
 - 선택된 노드의 상세 정보 표시
 - 상태 배지, 태그, 설명
+- 조건 달성률과 수동 검증 필요 항목 표시
 - Code References: 클릭 시 에디터에서 해당 파일·라인으로 이동
 - Conditions 목록 (Feature 선택 시)
 - 스펙 JSON 파일 열기 버튼
@@ -72,13 +73,33 @@ npm run watch    # TypeScript 파일 변경 감시
       "description": "Given ... When ... Then ...",
       "status": "verified",
       "codeRefs": ["tools/flow-cli/Services/Foo.cs#L20-L30"],
-      "evidence": []
+      "evidence": [],
+      "metadata": {
+        "requiresManualVerification": true,
+        "manualVerificationReason": "실제 UI 렌더링은 육안 검토 필요",
+        "manualVerificationItems": [
+          "로그인 화면 레이아웃 확인"
+        ]
+      }
     }
   ],
   "codeRefs": ["tools/flow-cli/Commands/SpecCommand.cs"],
-  "tags": ["spec", "graph"]
+  "tags": ["spec", "graph"],
+  "metadata": {
+    "requiresManualVerification": true,
+    "manualVerificationItems": [
+      {
+        "label": "실제 장비 동작 확인",
+        "reason": "자동 테스트로 대체 불가"
+      }
+    ]
+  }
 }
 ```
+
+- `requiresManualVerification`: `true`이면 Runner 자동 검증 대상에서 제외됩니다.
+- `manualVerificationReason`: 수동 검증이 필요한 이유를 요약합니다.
+- `manualVerificationItems`: 칸반 보드와 상세 패널에 노출할 검증 항목 목록입니다.
 
 ## 아키텍처
 

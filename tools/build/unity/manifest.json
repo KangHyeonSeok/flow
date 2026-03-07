@@ -1,6 +1,6 @@
 {
   "name": "unity",
-  "version": "0.1.58",
+  "version": "0.1.60",
   "description": "Unity 프로젝트 빌드/테스트/린트/실행 모듈",
   "detect": {
     "files": [

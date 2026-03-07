@@ -6,7 +6,8 @@
             "type": "extensionHost",
             "request": "launch",
             "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}/tools/flow-ext"
+                "--extensionDevelopmentPath=${workspaceFolder}/tools/flow-ext",
+                "${workspaceFolder}"
             ],
             "outFiles": [
                 "${workspaceFolder}/tools/flow-ext/dist/**/*.js"
