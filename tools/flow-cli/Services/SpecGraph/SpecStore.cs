@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FlowCLI.Services.Runner;
 
 namespace FlowCLI.Services.SpecGraph;
 
@@ -13,6 +14,7 @@ public class SpecStore
     private readonly string _backupDir;
     private readonly string _evidenceDir;
     private readonly string _schemaVersionPath;
+    private BrokenSpecDiagService? _diagService;
 
     private static readonly JsonSerializerOptions WriteOptions = new()
     {
@@ -29,6 +31,15 @@ public class SpecStore
 
     public string SpecsDir => _specsDir;
     public string EvidenceDir => _evidenceDir;
+
+    /// <summary>
+    /// 손상 스펙 진단 서비스를 설정한다 (F-025-C1).
+    /// 설정하면 GetAll()에서 파싱 실패 시 진단 레코드를 기록한다.
+    /// </summary>
+    public void SetDiagService(BrokenSpecDiagService diagService)
+    {
+        _diagService = diagService;
+    }
 
     public SpecStore(string projectRoot)
     {
@@ -103,11 +114,16 @@ public class SpecStore
                 var json = File.ReadAllText(file);
                 var spec = JsonSerializer.Deserialize<SpecNode>(json, ReadOptions);
                 if (spec != null)
+                {
+                    // F-025-C5: 이전에 broken으로 기록된 파일이 정상 복구된 경우 resolved 처리
+                    _diagService?.MarkResolved(file);
                     specs.Add(spec);
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // JSON 파싱 실패한 파일은 skip (에러 핸들링 정책)
+                // F-025-C1: JSON 파싱 실패한 파일은 skip + 진단 캐시에 기록
+                _diagService?.RecordBroken(file, ex);
             }
         }
         return specs;

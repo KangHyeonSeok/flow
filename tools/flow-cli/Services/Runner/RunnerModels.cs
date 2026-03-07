@@ -115,6 +115,35 @@ public class RunnerLogEntry
 }
 
 /// <summary>
+/// 손상 스펙 JSON 진단 레코드 (F-025)
+/// </summary>
+public class BrokenSpecDiagRecord
+{
+    public string SpecId { get; set; } = "";
+    public string FilePath { get; set; } = "";
+    public string ErrorMessage { get; set; } = "";
+    public int? Line { get; set; }
+    public int? Column { get; set; }
+    public string DetectedAt { get; set; } = "";
+    public string? FileMtime { get; set; }
+    /// <summary>unresolved | resolved | escalated</summary>
+    public string Status { get; set; } = "unresolved";
+    public string? ResolvedAt { get; set; }
+    public string? LastCheckedAt { get; set; }
+    public string? FailReason { get; set; }
+    public int RepairAttempts { get; set; }
+}
+
+/// <summary>
+/// 손상 스펙 진단 캐시 (.flow/spec-cache/broken-spec-diag.json) (F-025)
+/// </summary>
+public class BrokenSpecDiagCache
+{
+    public int Version { get; set; } = 1;
+    public List<BrokenSpecDiagRecord> Records { get; set; } = new();
+}
+
+/// <summary>
 /// GitHub 이슈 처리 결과 (F-070-C15)
 /// </summary>
 public class IssueProcessResult

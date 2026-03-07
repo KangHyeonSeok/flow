@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Spec, Condition, GraphNode, GraphEdge, SpecGraph, SpecStatus, isValidStatus } from './types';
+import { recordBrokenSpec, markSpecResolved, getUnresolvedRecords, BrokenSpecDiagRecord } from './brokenSpecDiag';
 
 export class SpecLoader {
     private specsDir: string;
@@ -108,8 +109,9 @@ export class SpecLoader {
         const files = await this.findSpecFiles();
 
         for (const file of files) {
+            let content: string | undefined;
             try {
-                const content = fs.readFileSync(file, 'utf-8');
+                content = fs.readFileSync(file, 'utf-8');
                 const spec = JSON.parse(content) as Spec;
                 if (spec.id && spec.nodeType === 'feature') {
                     // F-090-C1: 유효하지 않은 status 값 검사
@@ -119,12 +121,20 @@ export class SpecLoader {
                         );
                         continue;
                     }
+                    // F-025-C5: 이전에 broken으로 기록된 파일이 정상 복구된 경우 resolved로 마킹
+                    markSpecResolved(this.workspaceRoot, file);
                     this.specs.push(spec);
                 }
             } catch (e) {
-                // JSON 파싱 실패 시 skip + warning
+                // F-025-C1: JSON 파싱 실패 시 구조화된 진단 레코드 기록
+                recordBrokenSpec(this.workspaceRoot, file, e, content);
+                const specId = path.basename(file, '.json');
+                const diagMsg = e instanceof SyntaxError
+                    ? `${specId}: JSON SyntaxError — ${e.message}`
+                    : `${specId}: 파싱 실패 — ${String(e)}`;
+                // F-025-C2: 단순 toast 대신 진단 정보를 포함한 메시지 (전체 트리 로딩은 계속)
                 vscode.window.showWarningMessage(
-                    `스펙 파일 파싱 실패: ${path.basename(file)} - ${e}`
+                    `[손상 스펙 감지] ${diagMsg}. 진단 캐시: .flow/spec-cache/broken-spec-diag.json`
                 );
             }
         }
@@ -323,6 +333,11 @@ export class SpecLoader {
                 `순환 참조 감지: ${cycleNodes.join(', ')}`
             );
         }
+    }
+
+    /** 손상 스펙 진단 레코드 반환 (F-025-C2) */
+    getBrokenSpecs(): BrokenSpecDiagRecord[] {
+        return getUnresolvedRecords(this.workspaceRoot);
     }
 
     dispose(): void {

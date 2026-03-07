@@ -46,6 +46,14 @@ public class CopilotService
         return await RunCopilotAsync(prompt, worktreePath, specId, "error-fix");
     }
 
+    /// <summary>
+    /// Copilot CLI를 호출하여 손상 스펙 JSON을 복구한다 (F-025-C4).
+    /// </summary>
+    public async Task<CopilotResult> RepairSpecAsync(string specId, string repairPrompt, string workDir)
+    {
+        return await RunCopilotAsync(repairPrompt, workDir, specId, "repair-spec");
+    }
+
     private async Task<CopilotResult> RunCopilotAsync(string prompt, string workDir, string specId, string action)
     {
         _log.Info($"copilot-{action}", $"Copilot 호출 시작 (model: {_config.CopilotModel})", specId);

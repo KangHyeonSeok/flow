@@ -21,6 +21,7 @@ public class RunnerService
     private readonly CopilotService _copilot;
     private readonly RunnerLogService _log;
     private readonly GitHubIssueService? _githubIssue;
+    private readonly BrokenSpecDiagService _diagService;
     private readonly string _instanceId;
     private readonly string _pidFilePath;
     private DateTime _lastIssuePollAt = DateTime.MinValue;
@@ -58,6 +59,10 @@ public class RunnerService
         _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, specCacheDir, _log);
         _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
         _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {specCacheDir}");
+
+        // F-025: 손상 스펙 진단 서비스 초기화
+        _diagService = new BrokenSpecDiagService(specCacheDir, _log);
+        _specStore.SetDiagService(_diagService);
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
         _copilot = new CopilotService(_config, _log);
@@ -105,6 +110,10 @@ public class RunnerService
         // 1.5. 검토 대기 스펙 자동 검증
         var autoVerified = await AutoVerifyReviewedSpecsAsync();
         results.AddRange(autoVerified);
+
+        // 1.6. F-025-C3: 손상 스펙 fresh scan → 우선 복구 시도
+        var brokenRepaired = await RepairBrokenSpecsAsync();
+        results.AddRange(brokenRepaired);
 
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
@@ -345,6 +354,7 @@ public class RunnerService
     /// <summary>
     /// 구현 대상 스펙을 탐색한다.
     /// target status에 해당하는 스펙을 반환한다.
+    /// 손상 스펙 복구는 RepairBrokenSpecsAsync()에서 별도로 최우선 처리한다 (F-025-C3).
     /// </summary>
     private List<SpecNode> FindTargetSpecs()
     {
@@ -504,8 +514,238 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 비정상 종료 복구: working 상태의 스펙을 needs-review로 전환한다.
+    /// F-025-C3/C4: 손상 스펙 JSON을 최우선으로 복구 시도한다.
+    /// 진단 캐시와 fresh scan 결과를 합쳐 미해결 항목을 처리하며,
+    /// 복구 성공 시 resolved, 실패 시 escalated로 마킹한다.
     /// </summary>
+    private async Task<List<SpecWorkResult>> RepairBrokenSpecsAsync()
+    {
+        var results = new List<SpecWorkResult>();
+
+        // Fresh scan: specsDir에서 파싱 불가 파일을 직접 탐색 (F-025-C3)
+        var freshBroken = _diagService.ScanAndUpdate(_specStore.SpecsDir);
+
+        // 진단 캐시의 미해결 항목과 합산
+        var unresolved = _diagService.GetUnresolved();
+
+        if (unresolved.Count == 0)
+            return results;
+
+        _log.Info("repair", $"손상 스펙 {unresolved.Count}개 발견 — 일반 queued 스펙보다 최우선 처리 (F-025-C3)");
+
+        foreach (var record in unresolved)
+        {
+            // 무한 재투입 방지 (F-025-C4): 복구 시도 횟수 초과 시 escalated로 승격
+            const int maxRepairAttempts = 3;
+            if (record.RepairAttempts >= maxRepairAttempts)
+            {
+                var escalateReason = $"복구 시도 {record.RepairAttempts}회 초과 — 수동 검토 필요";
+                _diagService.MarkEscalated(record.SpecId, escalateReason);
+                _log.Warn("repair", $"손상 스펙 수동 검토 승격: {record.SpecId} ({escalateReason})", record.SpecId);
+                results.Add(new SpecWorkResult
+                {
+                    SpecId = record.SpecId,
+                    Success = false,
+                    Action = "repair-escalated",
+                    ErrorMessage = escalateReason,
+                    StartedAt = DateTime.UtcNow.ToString("o"),
+                    CompletedAt = DateTime.UtcNow.ToString("o"),
+                });
+                continue;
+            }
+
+            var repairResult = await AttemptRepairAsync(record);
+            results.Add(repairResult);
+        }
+
+        // 복구로 인한 스펙 저장소 변경 push
+        if (results.Any(r => r.Success && r.Action == "repair") && _specRepo != null)
+        {
+            await _specRepo.CommitAndPushAsync("[runner] Repair broken spec JSON files");
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// F-025-C4: 단일 손상 스펙 JSON 복구를 시도한다.
+    /// 최근 정상 백업, 캐시 진단, 기존 파일 내용을 근거로 최소 수정 원칙 적용.
+    /// 복구 후 spec-validate 수준 재검증을 수행한다.
+    /// </summary>
+    private async Task<SpecWorkResult> AttemptRepairAsync(BrokenSpecDiagRecord record)
+    {
+        var result = new SpecWorkResult
+        {
+            SpecId = record.SpecId,
+            Action = "repair",
+            StartedAt = DateTime.UtcNow.ToString("o"),
+        };
+
+        _log.Info("repair", $"손상 스펙 복구 시도 #{record.RepairAttempts + 1}: {record.SpecId} (오류: {record.ErrorMessage})", record.SpecId);
+
+        // 복구 시도 횟수 증가 (캐시 갱신은 선택 근거와 함께 기록)
+        UpdateRepairAttemptCount(record);
+
+        try
+        {
+            // F-025-C4: 최근 정상 백업 확인 (SpecStore.Backup 경로)
+            var backupDir = Path.Combine(Path.GetDirectoryName(record.FilePath)!, ".backup");
+            string? backupContent = FindLatestBackup(backupDir, record.SpecId);
+
+            // 기존 손상 파일 내용 읽기 (복구 프롬프트에 포함)
+            string? damagedContent = null;
+            try { damagedContent = File.ReadAllText(record.FilePath); } catch { /* ignore */ }
+
+            // Copilot에 복구 요청 (최소 수정 원칙)
+            var repairPrompt = BuildRepairPrompt(record, damagedContent, backupContent);
+            var copilotResult = await _copilot.RepairSpecAsync(
+                record.SpecId, repairPrompt, _specStore.SpecsDir
+            );
+
+            if (!copilotResult.Success)
+            {
+                result.Success = false;
+                result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 복구 실패";
+                _log.Error("repair", $"복구 실패: {record.SpecId} — {result.ErrorMessage}", record.SpecId);
+                return FinalizeResult(result);
+            }
+
+            // F-025-C4: 복구 후 spec-validate 수준 재검증
+            var validator = new SpecValidator();
+            SpecNode? repaired = null;
+            try
+            {
+                var repairedJson = File.ReadAllText(record.FilePath);
+                repaired = JsonSerializer.Deserialize<SpecNode>(repairedJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                // 복구 후에도 파싱 실패 → 무한 재투입 방지 (F-025-C4)
+                var failReason = $"복구 후 재검증 파싱 실패: {ex.Message}";
+                _diagService.RecordBroken(record.FilePath, ex);
+                result.Success = false;
+                result.ErrorMessage = failReason;
+                _log.Error("repair", $"{record.SpecId}: {failReason}", record.SpecId);
+                return FinalizeResult(result);
+            }
+
+            if (repaired != null)
+            {
+                var validation = validator.ValidateSpec(repaired);
+                if (!validation.IsValid)
+                {
+                    var failReason = $"복구 후 재검증 실패: {string.Join("; ", validation.Errors.Select(e => e.Message))}";
+                    result.Success = false;
+                    result.ErrorMessage = failReason;
+                    _log.Warn("repair", $"{record.SpecId}: {failReason}", record.SpecId);
+                    return FinalizeResult(result);
+                }
+            }
+
+            // F-025-C5: 복구 성공 → resolved로 마킹
+            _diagService.MarkResolved(record.FilePath);
+            result.Success = true;
+            _log.Info("repair", $"손상 스펙 복구 성공: {record.SpecId}", record.SpecId);
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            _log.Error("repair", $"복구 예외: {record.SpecId} — {ex.Message}", record.SpecId);
+        }
+
+        return FinalizeResult(result);
+    }
+
+    /// <summary>진단 캐시에서 복구 시도 횟수를 증가시키고 selectionReason을 기록한다 (F-025-C3).</summary>
+    private void UpdateRepairAttemptCount(BrokenSpecDiagRecord record)
+    {
+        // 진단 캐시를 직접 수정 (BrokenSpecDiagService 재활용)
+        try
+        {
+            if (!File.Exists(_diagService.DiagCachePath)) return;
+            var json = File.ReadAllText(_diagService.DiagCachePath);
+            var cache = JsonSerializer.Deserialize<BrokenSpecDiagCache>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (cache == null) return;
+
+            var r = cache.Records.Find(rec => rec.SpecId == record.SpecId && rec.Status == "unresolved");
+            if (r != null)
+            {
+                r.RepairAttempts++;
+                r.LastCheckedAt = DateTime.UtcNow.ToString("o");
+                File.WriteAllText(_diagService.DiagCachePath,
+                    JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            record.RepairAttempts = r?.RepairAttempts ?? record.RepairAttempts + 1;
+        }
+        catch { /* ignore */ }
+    }
+
+    /// <summary>백업 디렉토리에서 가장 최근 정상 백업 내용을 반환한다.</summary>
+    private static string? FindLatestBackup(string backupDir, string specId)
+    {
+        if (!Directory.Exists(backupDir)) return null;
+        var backups = Directory.GetDirectories(backupDir)
+            .OrderDescending()
+            .ToList();
+        foreach (var dir in backups)
+        {
+            var file = Path.Combine(dir, $"{specId}.json");
+            if (File.Exists(file))
+            {
+                try
+                {
+                    var content = File.ReadAllText(file);
+                    // 정상적으로 파싱되는지 확인
+                    JsonSerializer.Deserialize<object>(content);
+                    return content;
+                }
+                catch { /* 백업도 손상된 경우 다음 백업 시도 */ }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Copilot에 전달할 복구 프롬프트를 구성한다 (최소 수정 원칙, F-025-C4).</summary>
+    private static string BuildRepairPrompt(
+        BrokenSpecDiagRecord record, string? damagedContent, string? backupContent)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"스펙 파일 '{record.SpecId}.json'이 JSON 파싱 오류로 손상되었습니다.");
+        sb.AppendLine($"오류: {record.ErrorMessage}");
+        if (record.Line.HasValue)
+            sb.AppendLine($"위치: line {record.Line}, column {record.Column}");
+        sb.AppendLine();
+        sb.AppendLine("다음 원칙으로 최소한의 수정만 적용하여 파일을 복구하세요:");
+        sb.AppendLine("- JSON 구문 오류만 수정 (콘텐츠 변경 금지)");
+        sb.AppendLine("- 최근 백업이 있으면 백업을 기준으로 복구");
+        sb.AppendLine("- 복구 불가한 경우 유효한 최소 스펙 JSON 구조로 대체");
+        sb.AppendLine();
+
+        if (damagedContent != null)
+        {
+            sb.AppendLine("=== 현재 손상된 파일 내용 ===");
+            sb.AppendLine(damagedContent.Length > 2000
+                ? damagedContent[..2000] + "\n... (truncated)"
+                : damagedContent);
+            sb.AppendLine();
+        }
+
+        if (backupContent != null)
+        {
+            sb.AppendLine("=== 최근 정상 백업 내용 ===");
+            sb.AppendLine(backupContent.Length > 2000
+                ? backupContent[..2000] + "\n... (truncated)"
+                : backupContent);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 비정상 종료 복구: working 상태의 스펙을 needs-review로 전환한다.</summary>
     private void RecoverFromCrash()
     {
         var allSpecs = _specStore.GetAll();

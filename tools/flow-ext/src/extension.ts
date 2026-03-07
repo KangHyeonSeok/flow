@@ -122,15 +122,27 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.debugInfo', async () => {
             const graph = await specLoader.getGraph();
+            const brokenSpecs = specLoader.getBrokenSpecs();
             const msg = [
                 `[debug] specsDirectory=${specLoader.specsDirectory}`,
                 `[debug] specs=${graph.specs.length}`,
                 `[debug] nodes=${graph.nodes.length}`,
                 `[debug] edges=${graph.edges.length}`,
+                ...(brokenSpecs.length > 0 ? [
+                    `[debug] 손상 스펙 ${brokenSpecs.length}개:`,
+                    ...brokenSpecs.map(r =>
+                        `  - ${r.specId}: ${r.errorMessage.slice(0, 80)}${r.line != null ? ` (line ${r.line}${r.column != null ? `:${r.column}` : ''})` : ''}`
+                    ),
+                ] : [`[debug] 손상 스펙 없음`]),
             ].join('\n');
             output.appendLine(msg);
             output.show(true);
-            vscode.window.showInformationMessage(`Spec Graph: specs=${graph.specs.length}, nodes=${graph.nodes.length}, edges=${graph.edges.length}`);
+            const brokenInfo = brokenSpecs.length > 0
+                ? ` | 손상 스펙 ${brokenSpecs.length}개 (Output 패널 참조)`
+                : '';
+            vscode.window.showInformationMessage(
+                `Spec Graph: specs=${graph.specs.length}, nodes=${graph.nodes.length}, edges=${graph.edges.length}${brokenInfo}`
+            );
         }),
     );
 
@@ -140,7 +152,20 @@ export function activate(context: vscode.ExtensionContext): void {
             await specLoader.reload();
             const gitRoot = findGitRoot(specLoader.specsDirectory);
             if (gitRoot) { await updatePendingPushContext(gitRoot); }
-            vscode.window.showInformationMessage('Spec Graph 새로고침 완료');
+            const brokenSpecs = specLoader.getBrokenSpecs();
+            if (brokenSpecs.length > 0) {
+                // F-025-C2: 손상 스펙이 있으면 전체 트리/그래프가 빈 화면이 되지 않도록 경고 노출
+                vscode.window.showWarningMessage(
+                    `Spec Graph 새로고침 완료. 손상 스펙 ${brokenSpecs.length}개 감지됨: ${brokenSpecs.map(r => r.specId).join(', ')}`,
+                    '진단 정보 보기'
+                ).then(choice => {
+                    if (choice === '진단 정보 보기') {
+                        vscode.commands.executeCommand('specGraph.debugInfo');
+                    }
+                });
+            } else {
+                vscode.window.showInformationMessage('Spec Graph 새로고침 완료');
+            }
         }),
     );
 
