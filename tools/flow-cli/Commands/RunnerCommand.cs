@@ -62,6 +62,10 @@ public partial class FlowApp
                     cts.Cancel();
                 };
 
+                // Windows ConPTY 콘솔 그룹에서 분리하여 CTRL_C_EVENT 브로드캐스트 간섭 방지 (F-080-C6)
+                // extension의 runner-status 호출이 CTRL_C_EVENT를 broadcast해 데몬이 즉시 종료되는 문제 수정
+                ConsoleHelper.DetachConsoleForDaemon();
+
                 runner.RunDaemonAsync(cts.Token).GetAwaiter().GetResult();
 
                 JsonOutput.Write(JsonOutput.Success("runner-start", new

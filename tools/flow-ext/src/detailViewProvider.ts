@@ -87,7 +87,7 @@ body {
 
     private getDetailHtml(node: GraphNode, spec?: { conditions: any[]; [key: string]: any }): string {
         const color = STATUS_COLORS[node.status] || '#888';
-        const isFeature = node.nodeType === 'feature';
+        const isFeature = node.nodeType === 'feature' || node.nodeType === 'task';
 
         let conditionsHtml = '';
         if (spec && spec.conditions) {

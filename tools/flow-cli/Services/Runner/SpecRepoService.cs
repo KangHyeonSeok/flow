@@ -14,7 +14,7 @@ public class SpecRepoService
     private readonly string _specBranch;
     private readonly string _repoName;
     private readonly string _localPath;
-    private readonly string _specsDir;
+    private string _specsDir;
 
     /// <summary>
     /// 스펙 저장소 서비스 생성.
@@ -35,8 +35,8 @@ public class SpecRepoService
         // 로컬 캐시 경로 (.flow/spec-cache/)
         _localPath = localCachePath;
 
-        // 스펙 JSON이 있는 하위 디렉토리 (docs/specs/ 구조)
-        _specsDir = Path.Combine(_localPath, "docs", "specs");
+        // 스펙 JSON 디렉토리: 저장소 루트의 specs/ 또는 docs/specs/ 구조를 런타임에 감지
+        _specsDir = ResolveSpecsDir(_localPath);
     }
 
     /// <summary>
@@ -57,8 +57,8 @@ public class SpecRepoService
         var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _localPath = Path.Combine(userHome, ".flow", "specs", _repoName);
 
-        // 스펙 JSON이 있는 하위 디렉토리
-        _specsDir = Path.Combine(_localPath, "docs", "specs");
+        // 스펙 JSON 디렉토리: 저장소 루트의 specs/ 또는 docs/specs/ 구조를 런타임에 감지
+        _specsDir = ResolveSpecsDir(_localPath);
     }
 
     /// <summary>로컬 체크아웃 경로 (예: ~/.flow/specs/flow-spec/)</summary>
@@ -71,23 +71,52 @@ public class SpecRepoService
     public string RepoName => _repoName;
 
     /// <summary>
+    /// 저장소 루트에서 스펙 JSON 디렉토리를 결정한다.
+    /// specs/ → docs/specs/ 순으로 탐색하여 존재하는 경로를 반환.
+    /// 초기 clone 전에는 specs/ 경로를 기본값으로 반환.
+    /// </summary>
+    private static string ResolveSpecsDir(string localPath)
+    {
+        // 1. 저장소 루트의 specs/ (현재 flow-spec 저장소 구조)
+        var rootSpecs = Path.Combine(localPath, "specs");
+        if (Directory.Exists(rootSpecs) && Directory.GetFiles(rootSpecs, "*.json").Length > 0)
+            return rootSpecs;
+
+        // 2. docs/specs/ 구조 (레거시 또는 다른 저장소 구조)
+        var docsSpecs = Path.Combine(localPath, "docs", "specs");
+        if (Directory.Exists(docsSpecs) && Directory.GetFiles(docsSpecs, "*.json").Length > 0)
+            return docsSpecs;
+
+        // 3. clone 전이거나 아직 비어 있으면 specs/ 기본값 반환
+        return rootSpecs;
+    }
+
+    /// <summary>
     /// 스펙 저장소를 동기화한다.
     /// 최초: git clone, 이후: git pull.
     /// 실패 시 기존 캐시로 폴백.
+    /// sync 완료 후 스펙 디렉토리 경로를 재확인한다 (첫 clone 이후 구조 반영).
     /// </summary>
     /// <returns>성공 여부</returns>
     public async Task<bool> SyncAsync()
     {
         try
         {
+            bool success;
             if (IsCloned())
             {
-                return await PullAsync();
+                success = await PullAsync();
             }
             else
             {
-                return await CloneAsync();
+                success = await CloneAsync();
             }
+
+            // clone/pull 완료 후 specs 디렉토리 경로 재확인 (첫 clone 이후 구조가 달라질 수 있음)
+            if (success)
+                _specsDir = ResolveSpecsDir(_localPath);
+
+            return success;
         }
         catch (Exception ex)
         {

@@ -81,10 +81,10 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
 {
   "schemaVersion": 2,
   "id": "F-010",
-  "nodeType": "feature",
+  "nodeType": "feature",        // feature | task
   "title": "스펙 그래프 관리",
   "description": "설명",
-  "status": "active",          // draft|active|needs-review|verified|deprecated
+  "status": "active",          // draft|active|needs-review|verified|deprecated|done
   "parent": "F-001",           // 상위 스펙 ID (트리 구조)
   "dependencies": ["F-010"],   // 의존 스펙 (DAG 구조)
   "conditions": [
@@ -100,6 +100,24 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
   "codeRefs": ["tools/flow-cli/Commands/SpecCommand.cs"],
   "tags": ["spec", "graph"]
 }
+```
+
+## nodeType 구분
+
+| nodeType | 설명 | 최종 상태 |
+|----------|------|----------|
+| `feature` | 지속적으로 유지되는 기능 스펙. 수락 조건(conditions) 필요. | `verified` |
+| `task` | 일회성 처리 스펙. 보안 검토, 데이터 이전 등 한 번 수행하고 끝나는 작업. 수락 조건 불필요. | `done` |
+| `condition` | feature/task의 하위 수락 조건 노드. | `verified` |
+
+### task 타입 예시
+
+```bash
+# 보안 검토 task 생성
+./flow.ps1 spec-create --id F-099 --title "현시스템 OWASP Top10 보안 취약점 검토" --status draft
+# F-099.json의 nodeType을 "task"로 수동 수정
+# 검토 완료 후 새 스펙 F-100 생성, F-099는 done으로 종료
+./flow.ps1 spec-update F-099 --status done
 ```
 
 ## 스펙 파일 위치

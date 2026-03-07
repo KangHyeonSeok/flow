@@ -4,10 +4,10 @@
  */
 
 /** 스펙 상태 */
-export type SpecStatus = 'draft' | 'requested' | 'context-gathering' | 'plan' | 'active' | 'needs-review' | 'verified' | 'deprecated';
+export type SpecStatus = 'draft' | 'requested' | 'context-gathering' | 'plan' | 'active' | 'needs-review' | 'verified' | 'deprecated' | 'done';
 
 /** 노드 타입 */
-export type NodeType = 'feature' | 'condition';
+export type NodeType = 'feature' | 'condition' | 'task';
 
 /** 증거 타입 */
 export type EvidenceType = 'screenshot' | 'log' | 'metric' | 'test-result';
@@ -58,11 +58,11 @@ export interface Condition {
     /** v4: 관련 문서·참고자료 링크 */
     docLinks?: DocLink[];}
 
-/** 스펙 (Feature) - 그래프의 주 노드 */
+/** 스펙 (Feature/Task) - 그래프의 주 노드 */
 export interface Spec {
     schemaVersion: number;
     id: string;
-    nodeType: 'feature';
+    nodeType: 'feature' | 'task';
     title: string;
     description: string;
     status: SpecStatus;
@@ -124,6 +124,7 @@ export const STATUS_COLORS: Record<SpecStatus, string> = {
     'needs-review': '#ff9800',
     'verified': '#4caf50',
     'deprecated': '#f44336',
+    'done': '#795548',
 };
 
 /** 상태별 아이콘 ID (codicon) */
@@ -136,4 +137,5 @@ export const STATUS_ICONS: Record<SpecStatus, string> = {
     'needs-review': 'warning',
     'verified': 'check',
     'deprecated': 'close',
+    'done': 'check-all',
 };

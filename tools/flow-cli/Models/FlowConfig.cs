@@ -49,9 +49,9 @@ public class FlowConfig
     [JsonPropertyName("copilotCliPath")]
     public string? CopilotCliPath { get; set; }
 
-    /// <summary>구현 대상 스펙 상태 목록</summary>
+    /// <summary>구현 대상 스펙 상태 목록. 칸반 "개발 요청" 컬럼의 "requested" 포함</summary>
     [JsonPropertyName("targetStatuses")]
-    public string[] TargetStatuses { get; set; } = ["draft", "needs-review"];
+    public string[] TargetStatuses { get; set; } = ["requested", "needs-review"];
 
     /// <summary>Worktree 기본 디렉토리 (.flow 기준 상대 경로)</summary>
     [JsonPropertyName("worktreeDir")]

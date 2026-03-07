@@ -4,11 +4,11 @@ namespace FlowCLI.Services.SpecGraph;
 /// 상태 전파기. 특정 스펙의 상태 변경 시 관련 스펙의 상태를 자동으로 갱신합니다.
 /// 
 /// 규칙:
-/// - 스펙 변경됨 → 의존하는 스펙 상태 = needs-review
+/// - 스펙 변경됨 → 의존하는 스펙 상태 = needs-review (단, done/deprecated 상태인 스펙은 제외)
 /// - 상위 스펙의 상태는 하위 스펙의 상태를 집계:
-///   - 모든 하위가 verified → parent = verified
-///   - 일부 verified → parent = active  
-///   - verified 없음 → parent = draft
+///   - 모든 하위가 verified 또는 done → parent = verified
+///   - 일부 verified/done → parent = active  
+///   - verified/done 없음 → parent = draft
 ///   - 하나라도 needs-review → parent = needs-review
 ///   - 모두 deprecated → parent = deprecated
 /// </summary>
@@ -33,7 +33,7 @@ public class StatusPropagator
             {
                 if (graph.Nodes.TryGetValue(depId, out var depNode))
                 {
-                    if (depNode.Status != "needs-review" && depNode.Status != "deprecated")
+                    if (depNode.Status != "needs-review" && depNode.Status != "deprecated" && depNode.Status != "done")
                     {
                         changes.Add((depId, depNode.Status, "needs-review"));
                     }
@@ -83,11 +83,11 @@ public class StatusPropagator
         string newParentStatus;
         if (childStatuses.Any(s => s == "needs-review"))
             newParentStatus = "needs-review";
-        else if (childStatuses.All(s => s == "verified"))
+        else if (childStatuses.All(s => s == "verified" || s == "done"))
             newParentStatus = "verified";
         else if (childStatuses.All(s => s == "deprecated"))
             newParentStatus = "deprecated";
-        else if (childStatuses.Any(s => s == "verified" || s == "active"))
+        else if (childStatuses.Any(s => s == "verified" || s == "done" || s == "active"))
             newParentStatus = "active";
         else
             newParentStatus = "draft";

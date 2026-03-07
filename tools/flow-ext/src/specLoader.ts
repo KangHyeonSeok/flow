@@ -22,7 +22,7 @@ export class SpecLoader {
     }
 
     /**
-     * specRepository 설정이 있으면 ~/.flow/specs/{repoName}/ 하위에서 스펙 디렉토리를 찾아 반환한다.
+     * specRepository 설정이 있으면 .flow/spec-cache/specs/ (runner와 동일 경로)를 우선 반환한다.
      * 설정은 .flow/config.json 에서 읽는다. (runner-config.json은 config.json으로 통합됨)
      * 로컬 docs/specs/에 파일이 있으면 그것을 우선 사용한다.
      */
@@ -36,9 +36,16 @@ export class SpecLoader {
             }
         }
 
-        // 2. .flow/config.json 에서 specRepository 탐색
+        // 2. specRepository가 설정된 경우, runner와 동일한 .flow/spec-cache/specs/ 경로 확인
+        // runner가 git pull로 동기화하는 위치와 같은 경로를 사용해야 칸반 변경사항이 runner에 반영됨
         const specRepository = this.readSpecRepository(workspaceRoot);
         if (specRepository) {
+            const specCacheSpecsDir = path.join(workspaceRoot, '.flow', 'spec-cache', 'specs');
+            if (fs.existsSync(specCacheSpecsDir)) {
+                return specCacheSpecsDir;
+            }
+
+            // 3. 폴백: 사용자 홈의 .flow/specs/{repoName}/
             const repoName = this.extractRepoName(specRepository);
             const userHome = process.env.HOME
                 || process.env.USERPROFILE

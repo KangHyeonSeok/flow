@@ -11,9 +11,9 @@ public class SpecValidator
     private static readonly Regex ConditionIdPattern = new(@"^F-\d{3}(-\d{2})?-C\d+$", RegexOptions.Compiled);
     private static readonly HashSet<string> ValidStatuses = new()
     {
-        "draft", "active", "needs-review", "verified", "deprecated"
+        "draft", "active", "needs-review", "verified", "deprecated", "done"
     };
-    private static readonly HashSet<string> ValidNodeTypes = new() { "feature", "condition" };
+    private static readonly HashSet<string> ValidNodeTypes = new() { "feature", "condition", "task" };
     private static readonly HashSet<string> ValidEvidenceTypes = new()
     {
         "screenshot", "log", "metric", "test-result"
@@ -46,11 +46,17 @@ public class SpecValidator
 
         // 4. nodeType 유효성
         if (!ValidNodeTypes.Contains(spec.NodeType))
-            result.Errors.Add(Error(spec.Id, "nodeType", $"유효하지 않은 노드 타입: {spec.NodeType}. 허용: feature, condition"));
+            result.Errors.Add(Error(spec.Id, "nodeType", $"유효하지 않은 노드 타입: {spec.NodeType}. 허용: feature, condition, task"));
 
-        // 5. 수락 조건 검사
+        // 4a. task 타입은 done 상태만 최종 상태로 허용 (verified는 feature 전용)
+        if (spec.NodeType == "task" && spec.Status == "verified")
+            result.Warnings.Add(Warning(spec.Id, "task 타입의 최종 상태는 'verified' 대신 'done'을 사용하세요."));
+
+        // 5. 수락 조건 검사 (task 타입은 조건 불필요)
         if (strict && spec.NodeType == "feature" && spec.Conditions.Count < 3)
             result.Errors.Add(Error(spec.Id, "conditions", $"수락 조건이 최소 3개 필요합니다 (현재: {spec.Conditions.Count})."));
+        if (strict && spec.NodeType == "task" && spec.Conditions.Count > 0)
+            result.Warnings.Add(Warning(spec.Id, "task 타입은 일반적으로 수락 조건을 사용하지 않습니다."));
 
         // 6. 조건 ID 유효성
         foreach (var cond in spec.Conditions)

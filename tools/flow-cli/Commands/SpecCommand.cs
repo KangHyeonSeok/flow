@@ -13,7 +13,8 @@ public partial class FlowApp
     /// <summary>
     /// SpecStore를 생성한다.
     /// 1) 워크스페이스 내 docs/specs/ 에 스펙 파일이 있으면 그것을 사용.
-    /// 2) 없으면 .flow/config.json 의 specRepository URL에서 리포 이름을 추출하여
+    /// 2) specRepository가 설정된 경우, runner와 동일한 .flow/spec-cache/specs/ 를 사용.
+    /// 3) 없으면 .flow/config.json 의 specRepository URL에서 리포 이름을 추출하여
     ///    ~/.flow/specs/{repo-name}/ 경로를 사용.
     /// </summary>
     private SpecStore CreateSpecStore()
@@ -31,6 +32,15 @@ public partial class FlowApp
         var repoUrl = FlowConfigService.GetSpecRepository();
         if (!string.IsNullOrWhiteSpace(repoUrl))
         {
+            // runner와 동일한 .flow/spec-cache/specs/ 경로 우선 사용
+            var specCacheSpecsDir = Path.Combine(PathResolver.SpecCacheDir, "specs");
+            if (Directory.Exists(specCacheSpecsDir) &&
+                Directory.GetFiles(specCacheSpecsDir, "*.json").Length > 0)
+            {
+                return new SpecStore(specCacheSpecsDir, externalRepo: true);
+            }
+
+            // 폴백: ~/.flow/specs/{repo-name}/ 경로
             var repoName = ExtractRepoName(repoUrl);
             var homeRepoDir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -108,7 +118,7 @@ public partial class FlowApp
         [Option("title", Description = "제목")] string title = "",
         [Option("description", Description = "설명")] string? description = null,
         [Option("parent", Description = "상위 스펙 ID")] string? parent = null,
-        [Option("status", Description = "상태 (draft|active|needs-review|verified|deprecated)")] string status = "draft",
+        [Option("status", Description = "상태 (draft|active|needs-review|verified|deprecated|done)")] string status = "draft",
         [Option("tags", Description = "태그 (콤마 구분)")] string? tags = null,
         [Option("dependencies", Description = "의존 스펙 ID 목록 (콤마 구분)")] string? dependencies = null,
         [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
