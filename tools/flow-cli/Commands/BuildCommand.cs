@@ -30,7 +30,7 @@ public partial class FlowApp
             var projectPath = Path.GetFullPath(target ?? ".");
             if (!Directory.Exists(projectPath))
             {
-                JsonOutput.Write(JsonOutput.Error("build",
+                JsonOutput.Write(JsonOutput.ValidationError("build",
                     $"프로젝트 경로를 찾을 수 없습니다: {target}",
                     new { path = projectPath }), pretty);
                 Environment.ExitCode = 1;
@@ -44,7 +44,7 @@ public partial class FlowApp
                 detectedPlatform = BuildOrchestrator.DetectPlatform(projectPath);
                 if (detectedPlatform == "unknown")
                 {
-                    JsonOutput.Write(JsonOutput.Error("build",
+                    JsonOutput.Write(JsonOutput.ValidationError("build",
                         "프로젝트 타입을 감지할 수 없습니다. --platform 옵션을 명시해 주세요.",
                         new { path = projectPath, supported = new[] { "unity", "python", "node", "dotnet", "flutter" } }), pretty);
                     Environment.ExitCode = 1;

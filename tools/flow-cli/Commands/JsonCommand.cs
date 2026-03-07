@@ -69,7 +69,7 @@ public partial class FlowApp
                 {
                     Success = false,
                     Command = "invoke",
-                    Error = new ErrorInfo { Code = "SCHEMA_ERROR", Message = $"JSON 요청 스키마 오류: {ex.Message}" },
+                    Error = new ErrorInfo { Code = ErrorCodes.SchemaError, Message = $"JSON 요청 스키마 오류: {ex.Message}" },
                     ExitCode = 1
                 }, pretty);
                 Environment.ExitCode = 1;
@@ -82,7 +82,7 @@ public partial class FlowApp
                 {
                     Success = false,
                     Command = "invoke",
-                    Error = new ErrorInfo { Code = "SCHEMA_ERROR", Message = "'command' 필드는 필수입니다." },
+                    Error = new ErrorInfo { Code = ErrorCodes.SchemaError, Message = "'command' 필드는 필수입니다." },
                     ExitCode = 1
                 }, pretty);
                 Environment.ExitCode = 1;
@@ -303,7 +303,7 @@ public partial class FlowApp
                     Command = "invoke",
                     Error = new ErrorInfo
                     {
-                        Code = "UNKNOWN_COMMAND",
+                        Code = ErrorCodes.UnknownCommand,
                         Message = $"알 수 없는 명령: '{request.Command}'",
                         Details = new
                         {
@@ -421,7 +421,7 @@ public partial class FlowApp
             Command = command,
             Error = new ErrorInfo
             {
-                Code = "VALIDATION_ERROR",
+                Code = ErrorCodes.ValidationError,
                 Message = "요청 검증 실패: 명령 실행 전 오류가 검출되었습니다",
                 Details = new { errors = errorList }
             },

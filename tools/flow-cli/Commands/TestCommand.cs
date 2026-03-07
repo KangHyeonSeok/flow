@@ -25,7 +25,7 @@ public partial class FlowApp
             // Validate sub-command
             if (!subCommand.Equals("e2e", StringComparison.OrdinalIgnoreCase))
             {
-                JsonOutput.Write(JsonOutput.Error("test",
+                JsonOutput.Write(JsonOutput.ValidationError("test",
                     $"Unknown sub-command '{subCommand}'. Supported: e2e"), pretty);
                 Environment.ExitCode = 1;
                 return;
@@ -34,7 +34,7 @@ public partial class FlowApp
             // Validate scenario file
             if (string.IsNullOrEmpty(target))
             {
-                JsonOutput.Write(JsonOutput.Error("test",
+                JsonOutput.Write(JsonOutput.ValidationError("test",
                     "Scenario file path is required. Usage: flow test e2e <scenario.yaml>"), pretty);
                 Environment.ExitCode = 1;
                 return;
@@ -46,7 +46,7 @@ public partial class FlowApp
             {
                 JsonOutput.Write(JsonOutput.Error("test",
                     $"Scenario file or directory not found: {target}",
-                    new { path = scenarioPath }), pretty);
+                    new { path = scenarioPath }, ErrorCodes.NotFound), pretty);
                 Environment.ExitCode = 1;
                 return;
             }
@@ -55,7 +55,7 @@ public partial class FlowApp
             var pythonExe = PythonBridge.FindPython();
             if (pythonExe == null)
             {
-                JsonOutput.Write(JsonOutput.Error("test",
+                JsonOutput.Write(JsonOutput.ValidationError("test",
                     "Python 3.12 not found. Please install from https://www.python.org/downloads/"), pretty);
                 Environment.ExitCode = 1;
                 return;
@@ -64,7 +64,7 @@ public partial class FlowApp
             // Check e2e-test directory exists
             if (!Directory.Exists(PythonBridge.E2ETestDir))
             {
-                JsonOutput.Write(JsonOutput.Error("test",
+                JsonOutput.Write(JsonOutput.ValidationError("test",
                     $"E2E test tool not found at {PythonBridge.E2ETestDir}"), pretty);
                 Environment.ExitCode = 1;
                 return;
