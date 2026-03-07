@@ -41,6 +41,7 @@ public class SpecCondition
     public string Status { get; set; } = "draft";
 
     [JsonPropertyName("codeRefs")]
+    [JsonConverter(typeof(CodeRefsJsonConverter))]
     public List<string> CodeRefs { get; set; } = new();
 
     [JsonPropertyName("evidence")]
@@ -83,6 +84,7 @@ public class SpecNode
     public List<SpecCondition> Conditions { get; set; } = new();
 
     [JsonPropertyName("codeRefs")]
+    [JsonConverter(typeof(CodeRefsJsonConverter))]
     public List<string> CodeRefs { get; set; } = new();
 
     [JsonPropertyName("evidence")]

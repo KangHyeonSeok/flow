@@ -42,7 +42,7 @@ applyTo: ".github/agents/**"
 | `id` | ✓ | `F-010` |
 | `nodeType` | ✓ | `feature` \| `task` |
 | `title` | ✓ | `"로그인 기능"` |
-| `status` | ✓ | `draft` → `active` → `needs-review` → `verified` |
+| `status` | ✓ | `draft` → `active` → `in-progress` → `needs-review` → `verified` |
 | `parent` | 선택 | `"F-001"` |
 | `dependencies` | 선택 | `["F-005", "F-008"]` |
 | `conditions` | feature 필수 | Given-When-Then 형식 수락 조건 배열 |

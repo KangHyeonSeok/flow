@@ -118,7 +118,7 @@ public partial class FlowApp
         [Option("title", Description = "제목")] string title = "",
         [Option("description", Description = "설명")] string? description = null,
         [Option("parent", Description = "상위 스펙 ID")] string? parent = null,
-        [Option("status", Description = "상태 (draft|active|needs-review|verified|deprecated|done)")] string status = "draft",
+        [Option("status", Description = "상태 (draft|active|in-progress|needs-review|verified|deprecated|done)")] string status = "draft",
         [Option("tags", Description = "태그 (콤마 구분)")] string? tags = null,
         [Option("dependencies", Description = "의존 스펙 ID 목록 (콤마 구분)")] string? dependencies = null,
         [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)

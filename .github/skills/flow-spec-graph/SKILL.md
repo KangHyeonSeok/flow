@@ -84,7 +84,7 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
   "nodeType": "feature",        // feature | task
   "title": "스펙 그래프 관리",
   "description": "설명",
-  "status": "active",          // draft|active|needs-review|verified|deprecated|done
+  "status": "active",          // draft|active|in-progress|needs-review|verified|deprecated|done
   "parent": "F-001",           // 상위 스펙 ID (트리 구조)
   "dependencies": ["F-010"],   // 의존 스펙 (DAG 구조)
   "conditions": [
