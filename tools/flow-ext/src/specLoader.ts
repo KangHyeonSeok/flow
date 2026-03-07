@@ -11,6 +11,11 @@ export class SpecLoader {
     private specsDir: string;
     private specs: Spec[] = [];
     private graph: SpecGraph | null = null;
+    private currentLoad: Promise<SpecGraph> | null = null;
+    private reloadPromise: Promise<void> | null = null;
+    private reloadQueued = false;
+    private loadRevision = 0;
+    private appliedRevision = 0;
 
     private _onDidChange = new vscode.EventEmitter<void>();
     readonly onDidChange = this._onDidChange.event;
@@ -28,7 +33,6 @@ export class SpecLoader {
      * 로컬 docs/specs/에 파일이 있으면 그것을 우선 사용한다.
      */
     private resolveSpecsDir(workspaceRoot: string): string {
-        // 1. 로컬 docs/specs/ 에 스펙 파일이 있으면 그것을 우선 사용
         const localSpecsDir = path.join(workspaceRoot, 'docs', 'specs');
         if (fs.existsSync(localSpecsDir)) {
             const jsonFiles = fs.readdirSync(localSpecsDir).filter(f => f.endsWith('.json'));
@@ -37,8 +41,6 @@ export class SpecLoader {
             }
         }
 
-        // 2. specRepository가 설정된 경우, runner와 동일한 .flow/spec-cache/specs/ 경로 확인
-        // runner가 git pull로 동기화하는 위치와 같은 경로를 사용해야 칸반 변경사항이 runner에 반영됨
         const specRepository = this.readSpecRepository(workspaceRoot);
         if (specRepository) {
             const specCacheSpecsDir = path.join(workspaceRoot, '.flow', 'spec-cache', 'specs');
@@ -46,14 +48,12 @@ export class SpecLoader {
                 return specCacheSpecsDir;
             }
 
-            // 3. 폴백: 사용자 홈의 .flow/specs/{repoName}/
             const repoName = this.extractRepoName(specRepository);
             const userHome = process.env.HOME
                 || process.env.USERPROFILE
                 || require('os').homedir();
             const repoDir = path.join(userHome, '.flow', 'specs', repoName);
             if (fs.existsSync(repoDir)) {
-                // 리포 내 specs/ 서브디렉토리 우선, 없으면 리포 루트 사용
                 const subDir = path.join(repoDir, 'specs');
                 return fs.existsSync(subDir) ? subDir : repoDir;
             }
@@ -98,55 +98,30 @@ export class SpecLoader {
     private setupWatcher(): void {
         const pattern = new vscode.RelativePattern(this.specsDir, '*.json');
         this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
-        this.watcher.onDidChange(() => this.reload());
-        this.watcher.onDidCreate(() => this.reload());
-        this.watcher.onDidDelete(() => this.reload());
+        this.watcher.onDidChange(() => void this.reload());
+        this.watcher.onDidCreate(() => void this.reload());
+        this.watcher.onDidDelete(() => void this.reload());
     }
 
     /** 스펙 파일 로드 및 그래프 빌드 */
     async load(): Promise<SpecGraph> {
-        this.specs = [];
-        const files = await this.findSpecFiles();
+        const revision = ++this.loadRevision;
+        const loadPromise = this.loadSnapshot(revision);
+        this.currentLoad = loadPromise;
 
-        for (const file of files) {
-            let content: string | undefined;
-            try {
-                content = fs.readFileSync(file, 'utf-8');
-                const spec = JSON.parse(content) as Spec;
-                if (spec.id && spec.nodeType === 'feature') {
-                    // F-090-C1: 유효하지 않은 status 값 검사
-                    if (!isValidStatus(spec.status)) {
-                        vscode.window.showWarningMessage(
-                            `스펙 '${spec.id}'의 status '${spec.status}'는 유효하지 않습니다. 건너뜁니다.`
-                        );
-                        continue;
-                    }
-                    // F-025-C5: 이전에 broken으로 기록된 파일이 정상 복구된 경우 resolved로 마킹
-                    markSpecResolved(this.workspaceRoot, file);
-                    this.specs.push(spec);
-                }
-            } catch (e) {
-                // F-025-C1: JSON 파싱 실패 시 구조화된 진단 레코드 기록
-                recordBrokenSpec(this.workspaceRoot, file, e, content);
-                const specId = path.basename(file, '.json');
-                const diagMsg = e instanceof SyntaxError
-                    ? `${specId}: JSON SyntaxError — ${e.message}`
-                    : `${specId}: 파싱 실패 — ${String(e)}`;
-                // F-025-C2: 단순 toast 대신 진단 정보를 포함한 메시지 (전체 트리 로딩은 계속)
-                vscode.window.showWarningMessage(
-                    `[손상 스펙 감지] ${diagMsg}. 진단 캐시: .flow/spec-cache/broken-spec-diag.json`
-                );
+        try {
+            return await loadPromise;
+        } finally {
+            if (this.currentLoad === loadPromise) {
+                this.currentLoad = null;
             }
         }
-
-        this.graph = this.buildGraph();
-        return this.graph;
     }
 
     /** 캐시된 그래프 반환 또는 새로 로드 */
     async getGraph(): Promise<SpecGraph> {
         if (!this.graph) {
-            return this.load();
+            return this.currentLoad ?? this.load();
         }
         return this.graph;
     }
@@ -188,8 +163,8 @@ export class SpecLoader {
         const statuses = new Set<SpecStatus>();
         for (const spec of this.specs) {
             statuses.add(spec.status);
-            for (const c of spec.conditions) {
-                statuses.add(c.status);
+            for (const condition of spec.conditions) {
+                statuses.add(condition.status);
             }
         }
         return Array.from(statuses);
@@ -197,8 +172,24 @@ export class SpecLoader {
 
     /** 새로고침 */
     async reload(): Promise<void> {
-        await this.load();
-        this._onDidChange.fire();
+        if (this.reloadPromise) {
+            this.reloadQueued = true;
+            return this.reloadPromise;
+        }
+
+        this.reloadPromise = (async () => {
+            do {
+                this.reloadQueued = false;
+                await this.load();
+                this._onDidChange.fire();
+            } while (this.reloadQueued);
+        })();
+
+        try {
+            await this.reloadPromise;
+        } finally {
+            this.reloadPromise = null;
+        }
     }
 
     /** docs/specs/ 하위 JSON 파일 목록 */
@@ -206,22 +197,70 @@ export class SpecLoader {
         if (!fs.existsSync(this.specsDir)) {
             return [];
         }
-        const entries = fs.readdirSync(this.specsDir);
-        return entries
-            .filter(e => e.endsWith('.json') && !e.startsWith('.'))
-            .map(e => path.join(this.specsDir, e));
+
+        return fs.readdirSync(this.specsDir)
+            .filter(entry => entry.endsWith('.json') && !entry.startsWith('.'))
+            .map(entry => path.join(this.specsDir, entry));
+    }
+
+    /** 스펙 파일을 읽어 최신 스냅샷을 만든 뒤 최신 로드만 커밋 */
+    private async loadSnapshot(revision: number): Promise<SpecGraph> {
+        const files = await this.findSpecFiles();
+        const nextSpecs: Spec[] = [];
+        const seenSpecIds = new Set<string>();
+
+        for (const file of files) {
+            let content: string | undefined;
+            try {
+                content = fs.readFileSync(file, 'utf-8');
+                const spec = JSON.parse(content) as Spec;
+                if (spec.id && (spec.nodeType === 'feature' || spec.nodeType === 'task')) {
+                    if (!isValidStatus(spec.status)) {
+                        vscode.window.showWarningMessage(
+                            `스펙 '${spec.id}'의 status '${spec.status}'는 유효하지 않습니다. 건너뜁니다.`
+                        );
+                        continue;
+                    }
+
+                    if (seenSpecIds.has(spec.id)) {
+                        vscode.window.showWarningMessage(
+                            `중복 스펙 ID 감지: '${spec.id}'. 첫 번째 항목만 사용합니다.`
+                        );
+                        continue;
+                    }
+
+                    markSpecResolved(this.workspaceRoot, file);
+                    seenSpecIds.add(spec.id);
+                    nextSpecs.push(spec);
+                }
+            } catch (error) {
+                recordBrokenSpec(this.workspaceRoot, file, error, content);
+                vscode.window.showWarningMessage(
+                    `스펙 파일 파싱 실패: ${path.basename(file)} - ${error}`
+                );
+            }
+        }
+
+        const nextGraph = this.buildGraph(nextSpecs);
+        if (revision >= this.appliedRevision) {
+            this.specs = nextSpecs;
+            this.graph = nextGraph;
+            this.appliedRevision = revision;
+            return nextGraph;
+        }
+
+        return this.graph ?? nextGraph;
     }
 
     /** Spec 배열로부터 그래프 데이터 구성 */
-    private buildGraph(): SpecGraph {
+    private buildGraph(specs: Spec[]): SpecGraph {
         const nodes: GraphNode[] = [];
         const edges: GraphEdge[] = [];
 
-        for (const spec of this.specs) {
-            // Feature 노드
+        for (const spec of specs) {
             nodes.push({
                 id: spec.id,
-                nodeType: 'feature',
+                nodeType: spec.nodeType,
                 label: spec.title,
                 description: spec.description,
                 status: spec.status,
@@ -234,7 +273,6 @@ export class SpecLoader {
                 docLinks: spec.docLinks,
             });
 
-            // Parent 엣지
             if (spec.parent) {
                 edges.push({
                     source: spec.parent,
@@ -243,71 +281,70 @@ export class SpecLoader {
                 });
             }
 
-            // Dependency 엣지
-            for (const dep of spec.dependencies) {
+            for (const dependency of spec.dependencies) {
                 edges.push({
-                    source: dep,
+                    source: dependency,
                     target: spec.id,
                     type: 'dependency',
                 });
             }
 
-            // Condition 노드 + 엣지
-            for (const cond of spec.conditions) {
+            for (const condition of spec.conditions) {
                 nodes.push({
-                    id: cond.id,
+                    id: condition.id,
                     nodeType: 'condition',
-                    label: cond.id,
-                    description: cond.description,
-                    status: cond.status,
+                    label: condition.id,
+                    description: condition.description,
+                    status: condition.status,
                     parent: spec.id,
                     tags: [],
-                    codeRefs: cond.codeRefs,
-                    evidence: cond.evidence,
-                    metadata: cond.metadata,
-                    githubRefs: cond.githubRefs,
-                    docLinks: cond.docLinks,
+                    codeRefs: condition.codeRefs,
+                    evidence: condition.evidence,
+                    metadata: condition.metadata,
+                    githubRefs: condition.githubRefs,
+                    docLinks: condition.docLinks,
                     featureId: spec.id,
                 });
 
                 edges.push({
                     source: spec.id,
-                    target: cond.id,
+                    target: condition.id,
                     type: 'condition',
                 });
             }
         }
 
-        // 순환 참조 감지 (Kahn's algorithm)
         this.detectCycles(nodes, edges);
-
-        return { nodes, edges, specs: this.specs };
+        return { nodes, edges, specs };
     }
 
     /** Kahn 알고리즘으로 순환 참조 감지 */
     private detectCycles(nodes: GraphNode[], edges: GraphEdge[]): void {
-        // dependency 엣지만으로 순환 검사
-        const depEdges = edges.filter(e => e.type === 'dependency');
-        const featureIds = new Set(nodes.filter(n => n.nodeType === 'feature').map(n => n.id));
+        const depEdges = edges.filter(edge => edge.type === 'dependency');
+        const specNodeIds = new Set(
+            nodes
+                .filter(node => node.nodeType === 'feature' || node.nodeType === 'task')
+                .map(node => node.id)
+        );
 
         const inDegree = new Map<string, number>();
-        const adj = new Map<string, string[]>();
+        const adjacency = new Map<string, string[]>();
 
-        for (const id of featureIds) {
+        for (const id of specNodeIds) {
             inDegree.set(id, 0);
-            adj.set(id, []);
+            adjacency.set(id, []);
         }
 
         for (const edge of depEdges) {
-            if (featureIds.has(edge.source) && featureIds.has(edge.target)) {
-                adj.get(edge.source)!.push(edge.target);
+            if (specNodeIds.has(edge.source) && specNodeIds.has(edge.target)) {
+                adjacency.get(edge.source)!.push(edge.target);
                 inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
             }
         }
 
         const queue: string[] = [];
-        for (const [id, deg] of inDegree) {
-            if (deg === 0) {
+        for (const [id, degree] of inDegree) {
+            if (degree === 0) {
                 queue.push(id);
             }
         }
@@ -316,22 +353,20 @@ export class SpecLoader {
         while (queue.length > 0) {
             const node = queue.shift()!;
             processed++;
-            for (const neighbor of adj.get(node) || []) {
-                const newDeg = (inDegree.get(neighbor) || 1) - 1;
-                inDegree.set(neighbor, newDeg);
-                if (newDeg === 0) {
+            for (const neighbor of adjacency.get(node) || []) {
+                const newDegree = (inDegree.get(neighbor) || 1) - 1;
+                inDegree.set(neighbor, newDegree);
+                if (newDegree === 0) {
                     queue.push(neighbor);
                 }
             }
         }
 
-        if (processed < featureIds.size) {
+        if (processed < specNodeIds.size) {
             const cycleNodes = Array.from(inDegree.entries())
-                .filter(([, deg]) => deg > 0)
+                .filter(([, degree]) => degree > 0)
                 .map(([id]) => id);
-            vscode.window.showErrorMessage(
-                `순환 참조 감지: ${cycleNodes.join(', ')}`
-            );
+            vscode.window.showErrorMessage(`순환 참조 감지: ${cycleNodes.join(', ')}`);
         }
     }
 

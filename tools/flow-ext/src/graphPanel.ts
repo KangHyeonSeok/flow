@@ -608,9 +608,9 @@ export class GraphPanel {
             panel.classList.add('visible');
 
             const spec = graphData.specs.find(s => s.id === nodeId);
-            const isFeature = nodeData.nodeType === 'feature';
+            const isSpecNode = nodeData.nodeType === 'feature' || nodeData.nodeType === 'task';
 
-            let html = '<h2>' + escapeHtml(nodeData.id + (isFeature ? ': ' + nodeData.label : '')) + '</h2>';
+            let html = '<h2>' + escapeHtml(nodeData.id + (isSpecNode ? ': ' + nodeData.label : '')) + '</h2>';
 
             // 상태 배지
             const color = statusColors[nodeData.status] || '#888';
@@ -655,7 +655,7 @@ export class GraphPanel {
             }
 
             // 스펙 파일 열기 버튼
-            const fileId = isFeature ? nodeId : nodeData.featureId;
+            const fileId = isSpecNode ? nodeId : nodeData.featureId;
             if (fileId) {
                 html += '<button class="btn-open-file" data-spec-id="' + escapeAttr(fileId) + '">'
                       + '📄 ' + fileId + '.json 열기</button>';
@@ -902,17 +902,18 @@ export class GraphPanel {
 
         for (const node of graph.nodes) {
             const color = STATUS_COLORS[node.status] || '#888';
-            const borderColor = node.nodeType === 'feature' ? color : this.lighten(color, 0.3);
+            const isSpecNode = node.nodeType === 'feature' || node.nodeType === 'task';
+            const borderColor = isSpecNode ? color : this.lighten(color, 0.3);
 
             elements.push({
                 group: 'nodes',
                 data: {
                     id: node.id,
-                    label: node.nodeType === 'feature' ? `${node.id}\n${node.label}` : node.id,
+                    label: isSpecNode ? `${node.id}\n${node.label}` : node.id,
                     shortLabel: node.id.split('-').pop() || node.id,
                     nodeType: node.nodeType,
                     status: node.status,
-                    color: node.nodeType === 'feature' ? color : this.lighten(color, 0.5),
+                    color: isSpecNode ? color : this.lighten(color, 0.5),
                     borderColor: borderColor,
                     featureId: node.featureId || node.id,
                 },

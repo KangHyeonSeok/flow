@@ -45,9 +45,40 @@ argument-hint: "정의하거나 우선순위를 정할 기능이나 요구사항
 
 생성 후 JSON 파일을 열어 아래 항목을 채운다.
 - `description`: 기능 목적과 범위
-- `conditions`: Given-When-Then 형식 수락 조건 (feature인 경우)
+- `conditions`: feature인 경우 반드시 `id`, `nodeType="condition"`, `description`, `status`, `codeRefs`, `evidence`를 가진 객체 배열로 작성한다. 문자열 배열로 넣지 않는다.
 - `dependencies`: 선행 스펙 ID 목록
 - `codeRefs`: 관련 파일/클래스 경로 (이미 알고 있는 경우)
+
+feature 스펙의 `conditions` 예시는 아래 형식을 따른다.
+
+```json
+"conditions": [
+  {
+    "id": "F-123-C1",
+    "nodeType": "condition",
+    "description": "Given ... When ... Then ...",
+    "status": "draft",
+    "codeRefs": [],
+    "evidence": []
+  }
+]
+```
+
+task 스펙은 `conditions`를 비워 둘 수 있지만, 반드시 `nodeType`을 `task`로 수정했는지 확인한다.
+
+스펙 편집 직후에는 아래 검증을 반드시 수행한다.
+
+```bash
+# 생성/수정한 스펙이 실제로 로드되는지 확인
+./flow.ps1 spec-get <스펙ID>
+
+# 전체 그래프 무결성 확인
+./flow.ps1 spec-validate
+```
+
+- `spec-get`이 실패하면 JSON 구조를 먼저 고친 뒤 다음 스펙 생성이나 의존성 연결을 진행한다.
+- 새 스펙을 다른 스펙의 dependency로 참조하기 전에 `spec-list` 또는 `spec-get`으로 인식 여부를 확인한다.
+- `spec-create` 자동 채번이 기존 ID 충돌로 실패하면, 충돌한 스펙을 먼저 점검하고 필요 시 명시적 `--id`로 다음 번호를 지정한다.
 
 ### 4. 우선순위 결정
 아래 기준을 종합하여 우선순위를 판단하고 이유를 명시한다.
