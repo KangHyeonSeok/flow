@@ -52,6 +52,9 @@ Flow는 대체로 세 가지 흐름으로 사용됩니다.
 
 스펙은 로컬 `docs/specs` 또는 연결된 스펙 저장소를 기준으로 읽고, Runner는 `.flow/spec-cache`를 활용합니다.
 
+<img width="1667" height="1098" alt="image" src="https://github.com/user-attachments/assets/dae05560-7f32-46d7-93ff-287660cb24ee" />
+
+
 ## 주요 명령
 
 ### 스펙 관리
