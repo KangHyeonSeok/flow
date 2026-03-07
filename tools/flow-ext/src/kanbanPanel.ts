@@ -6,7 +6,7 @@
  */
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
-import { Spec, SpecStatus, STATUS_COLORS } from './types';
+import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from './types';
 
 const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
     { status: 'draft',             label: 'Draft',             icon: '○' },
@@ -107,15 +107,23 @@ export class KanbanPanel {
                 break;
             }
             case 'changeStatus': {
-                const { specId, newStatus } = msg as { type: string; specId: string; newStatus: SpecStatus };
+                const { specId, newStatus } = msg as { type: string; specId: string; newStatus: string };
                 await this.changeSpecStatus(specId, newStatus);
                 break;
             }
         }
     }
 
-    /** 스펙 상태 변경 */
-    private async changeSpecStatus(specId: string, newStatus: SpecStatus): Promise<void> {
+    /** 스펙 상태 변경 — F-090-C1: 유효하지 않은 상태값 거부 */
+    private async changeSpecStatus(specId: string, newStatus: string): Promise<void> {
+        // F-090-C1: 유효성 검사
+        if (!isValidStatus(newStatus)) {
+            vscode.window.showErrorMessage(
+                `유효하지 않은 상태값: '${newStatus}'. 허용 상태: ${VALID_STATUSES.join(', ')}`
+            );
+            return;
+        }
+
         const path = require('path') as typeof import('path');
         const fs = require('fs') as typeof import('fs');
         const filePath = path.join(this.loader.specsDirectory, `${specId}.json`);

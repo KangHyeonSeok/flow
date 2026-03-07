@@ -139,3 +139,14 @@ export const STATUS_ICONS: Record<SpecStatus, string> = {
     'deprecated': 'close',
     'done': 'check-all',
 };
+
+/** 유효한 상태값 목록 (런타임 유효성 검사용) — F-090-C1 */
+export const VALID_STATUSES: readonly SpecStatus[] = [
+    'draft', 'requested', 'context-gathering', 'plan',
+    'active', 'needs-review', 'verified', 'deprecated', 'done',
+] as const;
+
+/** 상태값 유효성 검사 — F-090-C1 */
+export function isValidStatus(s: string): s is SpecStatus {
+    return (VALID_STATUSES as readonly string[]).includes(s);
+}

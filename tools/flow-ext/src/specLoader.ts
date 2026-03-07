@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { Spec, Condition, GraphNode, GraphEdge, SpecGraph, SpecStatus } from './types';
+import { Spec, Condition, GraphNode, GraphEdge, SpecGraph, SpecStatus, isValidStatus } from './types';
 
 export class SpecLoader {
     private specsDir: string;
@@ -112,6 +112,13 @@ export class SpecLoader {
                 const content = fs.readFileSync(file, 'utf-8');
                 const spec = JSON.parse(content) as Spec;
                 if (spec.id && spec.nodeType === 'feature') {
+                    // F-090-C1: 유효하지 않은 status 값 검사
+                    if (!isValidStatus(spec.status)) {
+                        vscode.window.showWarningMessage(
+                            `스펙 '${spec.id}'의 status '${spec.status}'는 유효하지 않습니다. 건너뜁니다.`
+                        );
+                        continue;
+                    }
                     this.specs.push(spec);
                 }
             } catch (e) {

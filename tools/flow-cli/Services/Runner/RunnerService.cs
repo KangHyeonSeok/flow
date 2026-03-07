@@ -229,8 +229,8 @@ public class RunnerService
 
         try
         {
-            // 1. 스펙 상태를 in-progress로 변경
-            MarkSpecInProgress(spec);
+            // 1. 스펙 상태를 active로 변경 — F-090-C4/C5/C6: plan 기록 후 active 전환
+            MarkSpecActive(spec);
 
             // 2. worktree 생성
             var (wtSuccess, worktreePath, branchName) = await _git.CreateWorktreeAsync(spec.Id);
@@ -340,7 +340,7 @@ public class RunnerService
 
     /// <summary>
     /// 구현 대상 스펙을 탐색한다.
-    /// target status에 해당하거나, conditions에 실패가 있는 스펙.
+    /// target status에 해당하는 스펙을 반환한다.
     /// </summary>
     private List<SpecNode> FindTargetSpecs()
     {
@@ -349,19 +349,14 @@ public class RunnerService
 
         foreach (var spec in allSpecs)
         {
-            // in-progress 상태인 것은 이미 작업 중이므로 스킵
+            // F-090-C6: active 상태는 AI가 구현 중이므로 스킵
+            if (spec.Status == "active") continue;
+
+            // 이전 버전 호환: in-progress 상태도 스킵 (RecoverFromCrash 에서 처리)
             if (spec.Status == "in-progress") continue;
 
-            // 타겟 상태에 해당하는 스펙
+            // 타겟 상태에 해당하는 스펙 (F-090-C2: requested, F-090-C5: context-gathering)
             if (_config.TargetStatuses.Contains(spec.Status))
-            {
-                targets.Add(spec);
-                continue;
-            }
-
-            // active 상태이지만 conditions 중 실패가 있는 스펙
-            if (spec.Status == "active" && spec.Conditions.Any(c =>
-                c.Status is "draft" or "needs-review"))
             {
                 targets.Add(spec);
             }
@@ -375,16 +370,24 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 스펙을 in-progress 상태로 마킹
+    /// 스펙을 active 상태로 마킹 — F-090-C4/C5/C6: requested/context-gathering → plan → active 전환
     /// </summary>
-    private void MarkSpecInProgress(SpecNode spec)
+    private void MarkSpecActive(SpecNode spec)
     {
-        spec.Status = "in-progress";
+        var prevStatus = spec.Status;
+        spec.Status = "active";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["runnerInstanceId"] = _instanceId;
         spec.Metadata["runnerStartedAt"] = DateTime.UtcNow.ToString("o");
+        // F-090-C6: 구현 계획을 metadata에 기록
+        spec.Metadata["implementationPlan"] = new
+        {
+            triggeredFrom = prevStatus,
+            approach = $"AI Runner가 '{spec.Id}: {spec.Title}' 구현을 시작합니다.",
+            startedAt = DateTime.UtcNow.ToString("o"),
+        };
         _specStore.Update(spec);
-        _log.Info("status", $"스펙 상태 변경: in-progress", spec.Id);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → active", spec.Id);
     }
 
     /// <summary>
@@ -402,27 +405,28 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 스펙을 구현 완료로 마킹
+    /// 스펙을 구현 완료로 마킹 — F-090-C7: active → needs-review 전환
     /// </summary>
     private void MarkSpecCompleted(SpecNode spec)
     {
-        spec.Status = "active";
+        spec.Status = "needs-review";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastCompletedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastCompletedBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
         _specStore.Update(spec);
-        _log.Info("status", $"스펙 상태 변경: active (구현 완료)", spec.Id);
+        _log.Info("status", $"스펙 상태 변경: active → needs-review (구현 완료, 검토 대기)", spec.Id);
     }
 
     /// <summary>
-    /// 비정상 종료 복구: in-progress 상태의 스펙을 needs-review로 전환
+    /// 비정상 종료 복구: active 상태의 스펙을 needs-review로 전환 — F-090-C7
     /// </summary>
     private void RecoverFromCrash()
     {
         var allSpecs = _specStore.GetAll();
-        var staleSpecs = allSpecs.Where(s => s.Status == "in-progress").ToList();
+        // F-090: active 상태 복구. 이전 버전 호환: in-progress도 처리.
+        var staleSpecs = allSpecs.Where(s => s.Status is "active" or "in-progress").ToList();
 
         if (staleSpecs.Count == 0) return;
 

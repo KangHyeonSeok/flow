@@ -26,8 +26,8 @@ public class RunnerConfig
     /// <summary>Copilot CLI 절대 경로. 설정 시 CopilotCommand보다 우선 적용. .ps1 파일은 pwsh로 자동 실행.</summary>
     public string? CopilotCliPath { get; set; }
 
-    /// <summary>구현 대상 스펙 상태 목록</summary>
-    public string[] TargetStatuses { get; set; } = ["requested"];
+    /// <summary>구현 대상 스펙 상태 목록 — F-090-C2: requested, F-090-C5: context-gathering</summary>
+    public string[] TargetStatuses { get; set; } = ["requested", "context-gathering"];
 
     /// <summary>Worktree 기본 디렉토리 (.flow 기준 상대 경로)</summary>
     public string WorktreeDir { get; set; } = "worktrees";
