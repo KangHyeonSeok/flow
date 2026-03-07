@@ -21,7 +21,9 @@ import { SpecStatus } from './types';
 let specLoader: SpecLoader;
 let output: vscode.OutputChannel;
 let daemonStatusBarItem: vscode.StatusBarItem;
+let reloadStatusBarItem: vscode.StatusBarItem;
 let daemonPollTimer: NodeJS.Timeout | undefined;
+let reloadSignalWatcher: vscode.FileSystemWatcher | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
     output = vscode.window.createOutputChannel('Flow');
@@ -43,6 +45,25 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(daemonStatusBarItem);
     updateDaemonStatusBar(false);
     daemonStatusBarItem.show();
+
+    // 0-1. 간편 리로드 StatusBar 아이템
+    reloadStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 9);
+    reloadStatusBarItem.text = '$(debug-restart)';
+    reloadStatusBarItem.tooltip = 'Reload Flow: Flow 확장 변경 반영을 위해 확장 호스트를 다시 시작';
+    reloadStatusBarItem.command = 'flowExt.reloadWindow';
+    context.subscriptions.push(reloadStatusBarItem);
+    reloadStatusBarItem.show();
+
+    // 0-2. 빌드 스크립트가 남기는 자동 리로드 신호 감시
+    const reloadSignalPattern = new vscode.RelativePattern(workspaceRoot, '.flow/flow-ext.reload.signal');
+    reloadSignalWatcher = vscode.workspace.createFileSystemWatcher(reloadSignalPattern);
+    const handleReloadSignal = async () => {
+        output.appendLine('[reload] auto reload signal detected');
+        await vscode.commands.executeCommand('flowExt.reloadWindow', { source: 'signal' });
+    };
+    reloadSignalWatcher.onDidCreate(handleReloadSignal);
+    reloadSignalWatcher.onDidChange(handleReloadSignal);
+    context.subscriptions.push(reloadSignalWatcher);
 
     // 주기적 데몬 상태 폴링 (10초)
     daemonPollTimer = setInterval(async () => {
@@ -364,6 +385,35 @@ export function activate(context: vscode.ExtensionContext): void {
                 vscode.window.showInformationMessage('Flow Runner 데몬이 시작되었습니다.');
             } else {
                 vscode.window.showWarningMessage('Flow Runner 데몬 시작을 확인할 수 없습니다. 로그를 확인하세요.');
+            }
+        }),
+    );
+
+    // VS Code 창 리로드
+    context.subscriptions.push(
+        vscode.commands.registerCommand('flowExt.reloadWindow', async (options?: { source?: string }) => {
+            output.appendLine('[command] flowExt.reloadWindow');
+
+            const dirtyDocuments = vscode.workspace.textDocuments.filter((doc) => doc.isDirty);
+            if (dirtyDocuments.length > 0) {
+                const source = options?.source === 'signal' ? '자동 리로드 요청' : '리로드 요청';
+                const confirmed = await vscode.window.showWarningMessage(
+                    `${source}: 저장되지 않은 편집기 ${dirtyDocuments.length}개가 있습니다. 계속하면 변경 사항이 손실될 수 있습니다.`,
+                    { modal: true },
+                    '리로드',
+                    '취소',
+                );
+
+                if (confirmed !== '리로드') {
+                    output.appendLine('[command] flowExt.reloadWindow cancelled due to dirty editors');
+                    return;
+                }
+            }
+
+            try {
+                await vscode.commands.executeCommand('workbench.action.restartExtensionHost');
+            } catch {
+                await vscode.commands.executeCommand('workbench.action.reloadWindow');
             }
         }),
     );

@@ -133,8 +133,18 @@ export class KanbanPanel {
             obj.updatedAt = new Date().toISOString();
             fs.writeFileSync(filePath, JSON.stringify(obj, null, 2), 'utf-8');
             await this.loader.reload();
+          await this.panel.webview.postMessage({
+            type: 'statusChanged',
+            specId,
+            newStatus,
+          });
             vscode.window.showInformationMessage(`"${specId}" 상태를 "${newStatus}"으로 변경했습니다.`);
         } catch (err) {
+          await this.panel.webview.postMessage({
+            type: 'statusChangeFailed',
+            specId,
+            newStatus,
+          });
             vscode.window.showErrorMessage(`상태 변경 실패: ${String(err)}`);
         }
     }
@@ -441,6 +451,29 @@ export class KanbanPanel {
 const vscode = acquireVsCodeApi();
 let ctxSpecId = null;
 
+const STATUS_COLORS = {
+  'draft': '#9e9e9e',
+  'queued': '#9c27b0',
+  'working': '#2196f3',
+  'needs-review': '#ff9800',
+  'verified': '#4caf50',
+  'deprecated': '#f44336',
+  'done': '#795548'
+};
+
+window.addEventListener('message', (event) => {
+  const message = event.data;
+  if (!message || typeof message !== 'object') { return; }
+
+  if (message.type === 'statusChanged') {
+    moveCardToStatus(message.specId, message.newStatus);
+  }
+
+  if (message.type === 'statusChangeFailed') {
+    resetCardStatusSelect(message.specId);
+  }
+});
+
 // ── 카드 클릭 → 상세 보기
 document.getElementById('board').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
@@ -505,9 +538,95 @@ document.getElementById('board').addEventListener('change', (e) => {
   if (!sel) { return; }
   const card = sel.closest('.card');
   if (!card) { return; }
+  card.dataset.pendingStatus = sel.value;
   vscode.postMessage({ type: 'changeStatus', specId: card.dataset.id, newStatus: sel.value });
   e.stopPropagation();
 });
+
+function moveCardToStatus(specId, newStatus) {
+  const card = document.querySelector('.card[data-id="' + cssEscape(specId) + '"]');
+  if (!card) { return; }
+
+  const targetColumn = document.getElementById('col-' + newStatus);
+  if (!targetColumn) { return; }
+
+  const currentColumn = card.closest('.col-body');
+  const select = card.querySelector('.status-select');
+  if (select) {
+    select.value = newStatus;
+  }
+
+  delete card.dataset.pendingStatus;
+  card.style.borderLeftColor = STATUS_COLORS[newStatus] || '#888';
+
+  if (currentColumn !== targetColumn) {
+    const targetEmpty = targetColumn.querySelector('.empty-col');
+    if (targetEmpty) {
+      targetEmpty.remove();
+    }
+    targetColumn.prepend(card);
+    syncEmptyState(currentColumn);
+  }
+
+  syncEmptyState(targetColumn);
+  syncColumnCounts();
+}
+
+function resetCardStatusSelect(specId) {
+  const card = document.querySelector('.card[data-id="' + cssEscape(specId) + '"]');
+  if (!card) { return; }
+
+  const select = card.querySelector('.status-select');
+  if (select) {
+    const originalStatus = card.closest('.column')?.dataset.status;
+    if (originalStatus) {
+      select.value = originalStatus;
+    }
+  }
+
+  delete card.dataset.pendingStatus;
+}
+
+function syncEmptyState(columnBody) {
+  if (!columnBody) { return; }
+
+  const visibleCards = Array.from(columnBody.querySelectorAll('.card')).filter((card) => card.style.display !== 'none');
+  let empty = columnBody.querySelector('.empty-col');
+
+  if (visibleCards.length === 0) {
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'empty-col';
+      empty.textContent = '스펙 없음';
+      columnBody.appendChild(empty);
+    } else {
+      empty.style.display = '';
+      empty.textContent = '스펙 없음';
+    }
+    return;
+  }
+
+  if (empty) {
+    empty.remove();
+  }
+}
+
+function syncColumnCounts() {
+  document.querySelectorAll('.column').forEach((column) => {
+    const count = Array.from(column.querySelectorAll('.card')).filter((card) => card.style.display !== 'none').length;
+    const badge = column.querySelector('.col-count');
+    if (badge) {
+      badge.textContent = String(count);
+    }
+  });
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === 'function') {
+    return window.CSS.escape(value);
+  }
+  return String(value).replace(/(["\\#.;?+*~':!^$\[\]()=>|/@])/g, '\\$1');
+}
 
 // ── 검색 필터
 function filterCards(query) {

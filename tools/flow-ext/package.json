@@ -117,6 +117,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "flowExt.reloadWindow",
+        "title": "Flow: 확장 리로드",
+        "icon": "$(debug-restart)"
+      },
+      {
         "command": "flowExt.stopDaemon",
         "title": "Flow Runner 중지",
         "icon": "$(debug-stop)"
@@ -175,6 +180,11 @@
           "command": "specGraph.openKanban",
           "when": "view == specTree",
           "group": "navigation"
+        },
+        {
+          "command": "flowExt.reloadWindow",
+          "when": "view == specTree",
+          "group": "navigation@1"
         },
         {
           "command": "flowExt.startDaemon",
