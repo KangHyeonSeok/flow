@@ -22,7 +22,7 @@ public class SpecValidator
     /// <summary>
     /// 단일 스펙의 유효성을 검사합니다.
     /// </summary>
-    public ValidationResult ValidateSpec(SpecNode spec, bool strict = false)
+    public ValidationResult ValidateSpec(SpecNode spec, bool strict = false, bool checkTests = false)
     {
         var result = new ValidationResult();
 
@@ -81,13 +81,24 @@ public class SpecValidator
         if (spec.SchemaVersion < 1)
             result.Warnings.Add(Warning(spec.Id, "schemaVersion이 설정되지 않았습니다."));
 
+        // 9. --check-tests: 조건에 연결된 테스트 없으면 경고 (F-014-C5)
+        if (checkTests && spec.NodeType == "feature")
+        {
+            foreach (var cond in spec.Conditions)
+            {
+                if (cond.Tests.Count == 0)
+                    result.Errors.Add(Error(spec.Id, $"conditions[{cond.Id}].tests",
+                        $"조건 '{cond.Id}'에 연결된 테스트가 없습니다. spec-test-sync 로 테스트를 연결하세요."));
+            }
+        }
+
         return result;
     }
 
     /// <summary>
     /// 모든 스펙에 대한 참조 무결성을 검사합니다.
     /// </summary>
-    public ValidationResult ValidateAll(List<SpecNode> specs, bool strict = false)
+    public ValidationResult ValidateAll(List<SpecNode> specs, bool strict = false, bool checkTests = false)
     {
         var result = new ValidationResult();
         var idSet = specs.Select(s => s.Id).ToHashSet();
@@ -95,7 +106,7 @@ public class SpecValidator
         foreach (var spec in specs)
         {
             // 개별 스펙 유효성
-            var specResult = ValidateSpec(spec, strict);
+            var specResult = ValidateSpec(spec, strict, checkTests);
             result.Errors.AddRange(specResult.Errors);
             result.Warnings.AddRange(specResult.Warnings);
 

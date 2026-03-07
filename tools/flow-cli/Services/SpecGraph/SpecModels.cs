@@ -24,6 +24,40 @@ public class SpecEvidence
 }
 
 /// <summary>
+/// TestLink — 조건에 연결된 테스트 결과 (F-014).
+/// </summary>
+public class TestLink
+{
+    [JsonPropertyName("testId")]
+    public string TestId { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("suite")]
+    public string? Suite { get; set; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = ""; // passed | failed | skipped | flaky | quarantined
+
+    [JsonPropertyName("durationMs")]
+    public double? DurationMs { get; set; }
+
+    [JsonPropertyName("errorMessage")]
+    public string? ErrorMessage { get; set; }
+
+    [JsonPropertyName("runAt")]
+    public string? RunAt { get; set; }
+
+    [JsonPropertyName("quarantined")]
+    public bool Quarantined { get; set; }
+
+    /// <summary>연속 flaky 감지를 위한 최근 실행 이력 (최대 10개)</summary>
+    [JsonPropertyName("flakyHistory")]
+    public List<string> FlakyHistory { get; set; } = new();
+}
+
+/// <summary>
 /// Condition — 수락 조건. 그래프에서 하위 노드로 취급.
 /// </summary>
 public class SpecCondition
@@ -46,6 +80,10 @@ public class SpecCondition
 
     [JsonPropertyName("evidence")]
     public List<SpecEvidence> Evidence { get; set; } = new();
+
+    /// <summary>연결된 테스트 결과 목록 (F-014)</summary>
+    [JsonPropertyName("tests")]
+    public List<TestLink> Tests { get; set; } = new();
 
     [JsonPropertyName("metadata")]
     public Dictionary<string, object>? Metadata { get; set; }

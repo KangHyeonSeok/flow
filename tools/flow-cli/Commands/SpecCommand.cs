@@ -318,6 +318,7 @@ public partial class FlowApp
     public void SpecValidate(
         [Option("strict", Description = "엄격 모드 (수락 조건 3개+, cycle 시 exit 1)")] bool strict = false,
         [Option("id", Description = "특정 스펙만 검증")] string? id = null,
+        [Option("check-tests", Description = "조건에 연결된 테스트 없으면 경고 출력 및 exit 1 (F-014-C5)")] bool checkTests = false,
         [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
     {
         try
@@ -334,11 +335,11 @@ public partial class FlowApp
                     Environment.ExitCode = 1;
                     return;
                 }
-                result = SpecValidator.ValidateSpec(spec, strict);
+                result = SpecValidator.ValidateSpec(spec, strict, checkTests);
             }
             else
             {
-                result = SpecValidator.ValidateAll(specs, strict);
+                result = SpecValidator.ValidateAll(specs, strict, checkTests);
             }
 
             // 순환 참조 감지
@@ -380,7 +381,7 @@ public partial class FlowApp
             {
                 JsonOutput.Write(JsonOutput.Error("spec-validate",
                     $"{result.Errors.Count}개의 에러가 발견되었습니다.", data), pretty);
-                if (strict) Environment.ExitCode = 1;
+                if (strict || checkTests) Environment.ExitCode = 1;
             }
         }
         catch (Exception ex)
