@@ -4,7 +4,7 @@
  */
 
 /** 스펙 상태 */
-export type SpecStatus = 'draft' | 'requested' | 'context-gathering' | 'plan' | 'active' | 'needs-review' | 'verified' | 'deprecated' | 'done';
+export type SpecStatus = 'draft' | 'queued' | 'working' | 'needs-review' | 'verified' | 'deprecated' | 'done';
 
 /** 노드 타입 */
 export type NodeType = 'feature' | 'condition' | 'task';
@@ -117,10 +117,8 @@ export interface SpecGraph {
 /** 상태별 색상 매핑 */
 export const STATUS_COLORS: Record<SpecStatus, string> = {
     'draft': '#9e9e9e',
-    'requested': '#9c27b0',
-    'context-gathering': '#00bcd4',
-    'plan': '#3f51b5',
-    'active': '#2196f3',
+    'queued': '#9c27b0',
+    'working': '#2196f3',
     'needs-review': '#ff9800',
     'verified': '#4caf50',
     'deprecated': '#f44336',
@@ -130,10 +128,8 @@ export const STATUS_COLORS: Record<SpecStatus, string> = {
 /** 상태별 아이콘 ID (codicon) */
 export const STATUS_ICONS: Record<SpecStatus, string> = {
     'draft': 'circle-outline',
-    'requested': 'send',
-    'context-gathering': 'search',
-    'plan': 'list-tree',
-    'active': 'circle-filled',
+    'queued': 'send',
+    'working': 'circle-filled',
     'needs-review': 'warning',
     'verified': 'check',
     'deprecated': 'close',
@@ -142,8 +138,7 @@ export const STATUS_ICONS: Record<SpecStatus, string> = {
 
 /** 유효한 상태값 목록 (런타임 유효성 검사용) — F-090-C1 */
 export const VALID_STATUSES: readonly SpecStatus[] = [
-    'draft', 'requested', 'context-gathering', 'plan',
-    'active', 'needs-review', 'verified', 'deprecated', 'done',
+    'draft', 'queued', 'working', 'needs-review', 'verified', 'deprecated', 'done',
 ] as const;
 
 /** 상태값 유효성 검사 — F-090-C1 */

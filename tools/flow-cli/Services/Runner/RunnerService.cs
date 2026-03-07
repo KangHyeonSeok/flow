@@ -229,8 +229,8 @@ public class RunnerService
 
         try
         {
-            // 1. 스펙 상태를 active로 변경 — F-090-C4/C5/C6: plan 기록 후 active 전환
-            MarkSpecActive(spec);
+            // 1. 스펙 상태를 working으로 변경
+            MarkSpecWorking(spec);
 
             // 2. worktree 생성
             var (wtSuccess, worktreePath, branchName) = await _git.CreateWorktreeAsync(spec.Id);
@@ -318,7 +318,7 @@ public class RunnerService
             // 8. 스펙 저장소 변경사항 push (별도 저장소인 경우)
             if (_specRepo != null)
             {
-                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to active");
+                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to working");
             }
 
             result.Success = true;
@@ -349,13 +349,10 @@ public class RunnerService
 
         foreach (var spec in allSpecs)
         {
-            // F-090-C6: active 상태는 AI가 구현 중이므로 스킵
-            if (spec.Status == "active") continue;
+            // working 상태는 AI가 구현 중이므로 스킵
+            if (spec.Status == "working") continue;
 
-            // 이전 버전 호환: in-progress 상태도 스킵 (RecoverFromCrash 에서 처리)
-            if (spec.Status == "in-progress") continue;
-
-            // 타겟 상태에 해당하는 스펙 (F-090-C2: requested, F-090-C5: context-gathering)
+            // 타겟 상태에 해당하는 스펙만 처리
             if (_config.TargetStatuses.Contains(spec.Status))
             {
                 targets.Add(spec);
@@ -370,16 +367,15 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 스펙을 active 상태로 마킹 — F-090-C4/C5/C6: requested/context-gathering → plan → active 전환
+    /// 스펙을 working 상태로 마킹한다.
     /// </summary>
-    private void MarkSpecActive(SpecNode spec)
+    private void MarkSpecWorking(SpecNode spec)
     {
         var prevStatus = spec.Status;
-        spec.Status = "active";
+        spec.Status = "working";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["runnerInstanceId"] = _instanceId;
         spec.Metadata["runnerStartedAt"] = DateTime.UtcNow.ToString("o");
-        // F-090-C6: 구현 계획을 metadata에 기록
         spec.Metadata["implementationPlan"] = new
         {
             triggeredFrom = prevStatus,
@@ -387,7 +383,7 @@ public class RunnerService
             startedAt = DateTime.UtcNow.ToString("o"),
         };
         _specStore.Update(spec);
-        _log.Info("status", $"스펙 상태 변경: {prevStatus} → active", spec.Id);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → working", spec.Id);
     }
 
     /// <summary>
@@ -405,7 +401,7 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 스펙을 구현 완료로 마킹 — F-090-C7: active → needs-review 전환
+    /// 스펙을 구현 완료로 마킹한다.
     /// </summary>
     private void MarkSpecCompleted(SpecNode spec)
     {
@@ -416,17 +412,16 @@ public class RunnerService
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
         _specStore.Update(spec);
-        _log.Info("status", $"스펙 상태 변경: active → needs-review (구현 완료, 검토 대기)", spec.Id);
+        _log.Info("status", $"스펙 상태 변경: working → needs-review (구현 완료, 검토 대기)", spec.Id);
     }
 
     /// <summary>
-    /// 비정상 종료 복구: active 상태의 스펙을 needs-review로 전환 — F-090-C7
+    /// 비정상 종료 복구: working 상태의 스펙을 needs-review로 전환한다.
     /// </summary>
     private void RecoverFromCrash()
     {
         var allSpecs = _specStore.GetAll();
-        // F-090: active 상태 복구. 이전 버전 호환: in-progress도 처리.
-        var staleSpecs = allSpecs.Where(s => s.Status is "active" or "in-progress").ToList();
+        var staleSpecs = allSpecs.Where(s => s.Status == "working").ToList();
 
         if (staleSpecs.Count == 0) return;
 

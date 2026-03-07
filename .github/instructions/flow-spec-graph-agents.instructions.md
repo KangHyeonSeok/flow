@@ -15,7 +15,7 @@ applyTo: ".github/agents/**"
 
 # 스펙 조회
 ./flow.ps1 spec-get <ID>
-./flow.ps1 spec-list --status active
+./flow.ps1 spec-list --status working
 ./flow.ps1 spec-list --tag <태그>
 
 # 그래프 / 트리 출력
@@ -42,7 +42,7 @@ applyTo: ".github/agents/**"
 | `id` | ✓ | `F-010` |
 | `nodeType` | ✓ | `feature` \| `task` |
 | `title` | ✓ | `"로그인 기능"` |
-| `status` | ✓ | `draft` → `active` → `in-progress` → `needs-review` → `verified` |
+| `status` | ✓ | `draft` → `queued` → `working` → `needs-review` → `verified` |
 | `parent` | 선택 | `"F-001"` |
 | `dependencies` | 선택 | `["F-005", "F-008"]` |
 | `conditions` | feature 필수 | Given-When-Then 형식 수락 조건 배열 |

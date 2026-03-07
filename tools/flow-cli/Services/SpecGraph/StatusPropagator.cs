@@ -5,12 +5,7 @@ namespace FlowCLI.Services.SpecGraph;
 /// 
 /// 규칙:
 /// - 스펙 변경됨 → 의존하는 스펙 상태 = needs-review (단, done/deprecated 상태인 스펙은 제외)
-/// - 상위 스펙의 상태는 하위 스펙의 상태를 집계:
-///   - 모든 하위가 verified 또는 done → parent = verified
-///   - 일부 verified/done → parent = active  
-///   - verified/done 없음 → parent = draft
-///   - 하나라도 needs-review → parent = needs-review
-///   - 모두 deprecated → parent = deprecated
+/// - 상위 스펙 상태는 자동 집계하지 않는다. status는 각 스펙의 작업 상태만 표현한다.
 /// </summary>
 public class StatusPropagator
 {
@@ -38,69 +33,6 @@ public class StatusPropagator
                         changes.Add((depId, depNode.Status, "needs-review"));
                     }
                 }
-            }
-        }
-
-        // 2. 상위 노드 상태를 하위 노드 상태로 집계
-        var node = graph.Nodes[changedId];
-        if (!string.IsNullOrEmpty(node.Parent) && graph.Nodes.ContainsKey(node.Parent))
-        {
-            var parentChanges = AggregateParentStatus(graph, node.Parent, changedId, newStatus);
-            changes.AddRange(parentChanges);
-        }
-
-        return changes;
-    }
-
-    /// <summary>
-    /// 상위 스펙의 상태를 하위 스펙의 상태로 집계합니다.
-    /// </summary>
-    private List<(string Id, string OldStatus, string NewStatus)> AggregateParentStatus(
-        SpecGraph graph, string parentId, string changedChildId, string changedChildStatus)
-    {
-        var changes = new List<(string Id, string OldStatus, string NewStatus)>();
-
-        if (!graph.Nodes.TryGetValue(parentId, out var parent))
-            return changes;
-
-        // 하위 노드 상태 수집
-        var childStatuses = new List<string>();
-        if (graph.Tree.TryGetValue(parentId, out var childIds))
-        {
-            foreach (var childId in childIds)
-            {
-                if (childId == changedChildId)
-                    childStatuses.Add(changedChildStatus);
-                else if (graph.Nodes.TryGetValue(childId, out var child))
-                    childStatuses.Add(child.Status);
-            }
-        }
-
-        if (childStatuses.Count == 0)
-            return changes;
-
-        // 집계 로직
-        string newParentStatus;
-        if (childStatuses.Any(s => s == "needs-review"))
-            newParentStatus = "needs-review";
-        else if (childStatuses.All(s => s == "verified" || s == "done"))
-            newParentStatus = "verified";
-        else if (childStatuses.All(s => s == "deprecated"))
-            newParentStatus = "deprecated";
-        else if (childStatuses.Any(s => s == "verified" || s == "done" || s == "active"))
-            newParentStatus = "active";
-        else
-            newParentStatus = "draft";
-
-        if (parent.Status != newParentStatus)
-        {
-            changes.Add((parentId, parent.Status, newParentStatus));
-
-            // 재귀적으로 상위로 전파
-            if (!string.IsNullOrEmpty(parent.Parent))
-            {
-                var upperChanges = AggregateParentStatus(graph, parent.Parent, parentId, newParentStatus);
-                changes.AddRange(upperChanges);
             }
         }
 

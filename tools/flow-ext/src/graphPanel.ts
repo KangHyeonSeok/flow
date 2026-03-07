@@ -393,12 +393,14 @@ export class GraphPanel {
         <div class="separator"></div>
         <label for="selStatus">상태:</label>
         <select id="selStatus">
-            <option value="">All</option>
-            <option value="draft">Draft</option>
-            <option value="active">Active</option>
-            <option value="needs-review">Needs Review</option>
-            <option value="verified">Verified</option>
-            <option value="deprecated">Deprecated</option>
+            <option value="">전체</option>
+            <option value="draft">초안</option>
+            <option value="queued">대기중</option>
+            <option value="working">작업중</option>
+            <option value="needs-review">검토 대기</option>
+            <option value="verified">검증 완료</option>
+            <option value="deprecated">폐기</option>
+            <option value="done">완료</option>
         </select>
         <div class="separator"></div>
         <label>
@@ -409,11 +411,13 @@ export class GraphPanel {
         <span style="font-size:11px;color:var(--vscode-descriptionForeground,#888)">nodes: ${graph.nodes.length}, edges: ${graph.edges.length}</span>
         <div class="separator"></div>
         <div class="legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div> verified</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> active</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> needs-review</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#9e9e9e"></div> draft</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#f44336"></div> deprecated</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#9e9e9e"></div> 초안</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#9c27b0"></div> 대기중</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#2196f3"></div> 작업중</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#ff9800"></div> 검토 대기</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#4caf50"></div> 검증 완료</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#795548"></div> 완료</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f44336"></div> 폐기</div>
         </div>
     </div>
 

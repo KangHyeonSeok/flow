@@ -186,9 +186,19 @@ export function activate(context: vscode.ExtensionContext): void {
     // 상태별 필터
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.filterByStatus', async () => {
-            const statuses: (SpecStatus | 'all')[] = ['all', 'draft', 'requested', 'context-gathering', 'plan', 'active', 'needs-review', 'verified', 'deprecated'];
+            const statuses: (SpecStatus | 'all')[] = ['all', 'draft', 'queued', 'working', 'needs-review', 'verified', 'deprecated', 'done'];
+            const statusLabels: Record<SpecStatus | 'all', string> = {
+                all: '전체',
+                draft: '초안',
+                queued: '대기중',
+                working: '작업중',
+                'needs-review': '검토 대기',
+                verified: '검증 완료',
+                deprecated: '폐기',
+                done: '완료',
+            };
             const items = statuses.map(s => ({
-                label: s === 'all' ? '$(list-flat) 전체' : `$(${getStatusIcon(s as SpecStatus)}) ${s}`,
+                label: s === 'all' ? '$(list-flat) 전체' : `$(${getStatusIcon(s as SpecStatus)}) ${statusLabels[s]}`,
                 value: s,
             }));
 
@@ -506,13 +516,12 @@ function execCommandAsync(exe: string, args: string[], cwd: string): Promise<str
 function getStatusIcon(status: SpecStatus): string {
     const map: Record<SpecStatus, string> = {
         'draft': 'circle-outline',
-        'requested': 'send',
-        'context-gathering': 'search',
-        'plan': 'list-tree',
-        'active': 'circle-filled',
+        'queued': 'send',
+        'working': 'circle-filled',
         'needs-review': 'warning',
         'verified': 'check',
         'deprecated': 'close',
+        'done': 'check-all',
     };
     return map[status] || 'circle-outline';
 }

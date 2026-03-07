@@ -1,7 +1,7 @@
 /**
  * KanbanPanel - 스펙 상태별 칸반 보드 Webview 패널
  *
- * 스펙을 상태(draft / active / needs-review / verified / deprecated)에 따라
+ * 스펙을 작업 상태별로 칸반 컬럼에 표시한다.
  * 칸반 컬럼으로 구분하여 표시한다. 카드 클릭 시 상세 패널 열림.
  */
 import * as vscode from 'vscode';
@@ -9,15 +9,13 @@ import { SpecLoader } from './specLoader';
 import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from './types';
 
 const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
-    { status: 'draft',             label: 'Draft',             icon: '○' },
-    { status: 'requested',         label: '개발 요청',          icon: '→' },
-    { status: 'context-gathering', label: '정보 수집',          icon: '🔍' },
-    { status: 'plan',              label: '계획',              icon: '📝' },
-    { status: 'active',            label: 'Active',            icon: '●' },
-    { status: 'needs-review',      label: 'Needs Review',      icon: '⚠' },
-    { status: 'verified',          label: 'Verified',          icon: '✔' },
-    { status: 'deprecated',        label: 'Deprecated',        icon: '✕' },
-    { status: 'done',              label: 'Done',              icon: '✔✔' },
+    { status: 'draft',             label: '초안',              icon: '○' },
+  { status: 'queued',            label: '대기중',            icon: '→' },
+  { status: 'working',           label: '작업중',            icon: '●' },
+  { status: 'needs-review',      label: '검토 대기',          icon: '⚠' },
+  { status: 'verified',          label: '검증 완료',          icon: '✔' },
+  { status: 'deprecated',        label: '폐기',              icon: '✕' },
+  { status: 'done',              label: '완료',              icon: '✔✔' },
 ];
 
 export class KanbanPanel {
@@ -156,10 +154,8 @@ export class KanbanPanel {
     private getHtml(specs: Spec[]): string {
         const byStatus: Record<SpecStatus, Spec[]> = {
             'draft': [],
-            'requested': [],
-            'context-gathering': [],
-            'plan': [],
-            'active': [],
+          'queued': [],
+          'working': [],
             'needs-review': [],
             'verified': [],
             'deprecated': [],

@@ -203,10 +203,12 @@ public class GraphBuilder
     private static string GetStatusIcon(string status) => status switch
     {
         "verified" => "✅",
-        "active" => "🔵",
+        "working" => "🔵",
+        "queued" => "🟣",
         "draft" => "⬜",
         "needs-review" => "🟡",
         "deprecated" => "⛔",
+        "done" => "✔",
         _ => "❓"
     };
 }

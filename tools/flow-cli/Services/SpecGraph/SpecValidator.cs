@@ -11,7 +11,7 @@ public class SpecValidator
     private static readonly Regex ConditionIdPattern = new(@"^F-\d{3}(-\d{2})?-C\d+$", RegexOptions.Compiled);
     private static readonly HashSet<string> ValidStatuses = new()
     {
-        "draft", "requested", "context-gathering", "plan", "active", "needs-review", "verified", "deprecated", "done"
+        "draft", "queued", "working", "needs-review", "verified", "deprecated", "done"
     };
     private static readonly HashSet<string> ValidNodeTypes = new() { "feature", "condition", "task" };
     private static readonly HashSet<string> ValidEvidenceTypes = new()

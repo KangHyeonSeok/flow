@@ -824,7 +824,7 @@ export class SpecViewProvider {
     /** 조건 항목 렌더링 */
     private renderCondition(cond: Condition): string {
         const color = STATUS_COLORS[cond.status] || '#888';
-        const statusIcon = cond.status === 'verified' ? '✓' : cond.status === 'active' ? '◉' : '○';
+        const statusIcon = cond.status === 'verified' ? '✓' : cond.status === 'working' ? '◉' : '○';
 
         let refsHtml = '';
         if (cond.codeRefs.length > 0) {

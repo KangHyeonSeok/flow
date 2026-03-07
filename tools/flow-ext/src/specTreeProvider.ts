@@ -41,13 +41,12 @@ export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
     async getChildren(element?: SpecTreeItem): Promise<SpecTreeItem[]> {
         const graph = await this.loader.getGraph();
         const specs = graph.specs;
+        const visibleSpecs = this.applyFilters(specs);
+        const visibleSpecIds = new Set(visibleSpecs.map(spec => spec.id));
 
         if (!element) {
-            // 루트: parent가 null인 스펙들
-            let rootSpecs = specs.filter(s => !s.parent);
-
-            // 필터 적용
-            rootSpecs = this.applyFilters(rootSpecs);
+            // 루트: parent가 없거나, 현재 표시 집합에 parent가 없는 스펙들
+            const rootSpecs = visibleSpecs.filter(spec => !spec.parent || !visibleSpecIds.has(spec.parent));
 
             return rootSpecs
                 .sort((a, b) => a.id.localeCompare(b.id))
@@ -58,8 +57,7 @@ export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
             const items: SpecTreeItem[] = [];
 
             // 하위 스펙 (children)
-            let childSpecs = specs.filter(s => s.parent === element.spec!.id);
-            childSpecs = this.applyFilters(childSpecs);
+            const childSpecs = visibleSpecs.filter(s => s.parent === element.spec!.id);
             for (const child of childSpecs.sort((a, b) => a.id.localeCompare(b.id))) {
                 items.push(new SpecTreeItem(child));
             }
@@ -151,7 +149,7 @@ export class SpecTreeItem extends vscode.TreeItem {
     private getStatusThemeColor(status: SpecStatus): string {
         switch (status) {
             case 'verified': return 'testing.iconPassed';
-            case 'active': return 'charts.blue';
+            case 'working': return 'charts.blue';
             case 'needs-review': return 'editorWarning.foreground';
             case 'deprecated': return 'testing.iconFailed';
             case 'draft':

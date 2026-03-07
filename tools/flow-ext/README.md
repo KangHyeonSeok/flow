@@ -6,7 +6,7 @@
 
 ### 🌳 스펙 트리뷰 (Sidebar)
 - `docs/specs/*.json` 스펙 파일을 계층 구조(Feature → Condition)로 표시
-- 상태별 아이콘 및 색상 표시 (draft / active / needs-review / verified / deprecated)
+- 상태별 아이콘 및 색상 표시 (draft / queued / working / needs-review / verified / deprecated / done)
 - 상태·태그별 필터링
 - 노드 클릭 시 상세 패널 연동
 
@@ -62,7 +62,7 @@ npm run watch    # TypeScript 파일 변경 감시
   "id": "F-010",
   "nodeType": "feature",
   "title": "스펙 그래프 관리",
-  "status": "active",        // draft | active | needs-review | verified | deprecated
+  "status": "queued",        // draft | queued | working | needs-review | verified | deprecated | done
   "parent": "F-001",
   "dependencies": ["F-002"],
   "conditions": [
