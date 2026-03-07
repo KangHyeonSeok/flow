@@ -102,7 +102,7 @@ public partial class FlowApp
     /// <summary>
     /// FlowRequest를 파싱하여 기존 명령 핸들러로 라우팅한다. F-003-C2: command/subcommand 조합으로 핸들러와 payload 타입을 결정해 위임.
     /// </summary>
-    private void RouteRequest(FlowRequest request, bool pretty, string inputSource)
+    internal void RouteRequest(FlowRequest request, bool pretty, string inputSource)
     {
         // payload가 JSON 객체면 options에 병합 (payload 필드가 options보다 낮은 우선순위)
         var opts = MergePayloadIntoOptions(request.Options, request.Payload);
