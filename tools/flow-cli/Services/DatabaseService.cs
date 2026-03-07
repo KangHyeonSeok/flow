@@ -12,7 +12,6 @@ public class DatabaseService : IDisposable
     private readonly PathResolver _paths;
     private readonly EmbeddingBridge _embeddingBridge;
     private int? _embeddingDimension;
-    private bool _vectorIndexChecked;
     private SqliteConnection? _connection;
     private readonly SemaphoreSlim _indexQueue = new(1, 1);
     private Task? _indexWorker;
