@@ -40,6 +40,12 @@ public static class JsonOutput
     public static CommandResult Success(string command, object? data = null, string? message = null)
         => new() { Success = true, Command = command, Data = data, Message = message };
 
-    public static CommandResult Error(string command, string error, object? data = null)
-        => new() { Success = false, Command = command, Error = error, Data = data };
+    public static CommandResult Error(string command, string error, object? details = null)
+        => new()
+        {
+            Success = false,
+            Command = command,
+            Error = new Models.ErrorInfo { Code = "ERROR", Message = error, Details = details },
+            ExitCode = 1
+        };
 }
