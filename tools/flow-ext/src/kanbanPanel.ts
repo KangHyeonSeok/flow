@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from './types';
-import { getSpecReviewState } from './reviewState';
+import { getSpecReviewState, getUserFeedbackState } from './reviewState';
 
 const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
     { status: 'draft',             label: '초안',              icon: '○' },
@@ -408,6 +408,34 @@ export class KanbanPanel {
     background: rgba(255, 152, 0, 0.14);
     color: #ffb74d;
   }
+  .user-input-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    border: 1px solid rgba(233, 30, 99, 0.5);
+    background: rgba(233, 30, 99, 0.15);
+    color: #f48fb1;
+  }
+  .question-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgba(233, 30, 99, 0.15);
+    color: #f48fb1;
+    border: 1px solid rgba(233, 30, 99, 0.3);
+    margin-left: 4px;
+  }
+  .card.user-input-required {
+    border-left-color: #e91e63 !important;
+  }
   .review-note {
     margin-top: 6px;
     font-size: 10px;
@@ -715,46 +743,61 @@ function filterCards(query) {
 
     private renderCard(spec: Spec): string {
         const color = STATUS_COLORS[spec.status];
-      const review = getSpecReviewState(spec);
-        const tagsHtml = spec.tags && spec.tags.length > 0
-            ? `<div class="card-tags">${spec.tags.map(t => `<span class="tag">${this.esc(t)}</span>`).join('')}</div>`
-            : '';
+        const review = getSpecReviewState(spec);
+        const feedback = getUserFeedbackState(spec);
+        // C6: 태그 목록 기본 렌더링에서 제거 — 다음 행동 결정 정보만 표시
         const date = spec.updatedAt ? spec.updatedAt.slice(0, 10) : '';
         const title = spec.title || spec.id;
-      const progressHtml = review.totalConditions > 0
-        ? `<div class="card-progress">
+        const progressHtml = review.totalConditions > 0
+            ? `<div class="card-progress">
     <div class="card-progress-meta">
       <span>조건 ${review.verifiedConditions}/${review.totalConditions}</span>
       <span>${review.progressPercent}%</span>
     </div>
     <div class="progress-track"><div class="progress-fill" style="width:${review.progressPercent}%;background:${review.progressPercent === 100 ? '#4caf50' : '#2196f3'}"></div></div>
     </div>`
-        : '';
-      const reviewBadge = review.requiresManualVerification && spec.status !== 'verified'
-        ? `<div class="review-badge">⚠ 수동 검증 ${review.manualVerificationItems.length}건</div>`
-        : '';
-      const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
-        ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
-        : '';
+            : '';
+
+        // C1: 사용자 판단 필요 배지 (requiresUserInput 또는 questionStatus='waiting-user-input')
+        const userInputBadge = feedback.requiresUserInput
+            ? `<div class="user-input-badge">❓ 사용자 판단 필요${feedback.openQuestionCount > 0 ? ` (${feedback.openQuestionCount}건)` : ''}</div>`
+            : '';
+
+        // C6: 미해결 질문 수 표시 (requiresUserInput 아니더라도 open 질문 있으면 표시)
+        const openQuestionInfo = !feedback.requiresUserInput && feedback.openQuestionCount > 0
+            ? `<div class="question-count">❓ 미해결 질문 ${feedback.openQuestionCount}건</div>`
+            : '';
+
+        const reviewBadge = review.requiresManualVerification && spec.status !== 'verified'
+            ? `<div class="review-badge">⚠ 수동 검증 ${review.manualVerificationItems.length}건</div>`
+            : '';
+        const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
+            ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
+            : '';
 
         const statusOptions = COLUMNS.map(c =>
             `<option value="${c.status}"${c.status === spec.status ? ' selected' : ''}>${c.label}</option>`
         ).join('');
 
+        // C5: 날짜를 카드 헤더(ID 옆 같은 줄)에 배치, 하단 중복 날짜 제거
+        // user-input-required 클래스로 카드 테두리 색 차별화
+        const userInputClass = feedback.requiresUserInput ? ' user-input-required' : '';
+        const borderColor = feedback.requiresUserInput ? '#e91e63' : color;
+
         return /* html */`
-<div class="card"
+<div class="card${userInputClass}"
      data-id="${this.esc(spec.id)}"
      data-title="${this.esc(title)}"
      data-tags="${this.esc((spec.tags || []).join(' '))}"
-     style="border-left: 3px solid ${color};">
-  <div class="card-id">${this.esc(spec.id)}</div>
+     style="border-left: 3px solid ${borderColor};">
+  <div class="card-id">${this.esc(spec.id)}<span style="margin-left:6px;font-size:10px;opacity:0.45;">${date}</span></div>
   <div class="card-title">${this.esc(title)}</div>
-  ${tagsHtml}
+  ${userInputBadge}
+  ${openQuestionInfo}
   ${progressHtml}
   ${reviewBadge}
   ${reviewNote}
   <div class="card-footer">
-    <span class="card-date">${date}</span>
     <div class="card-actions">
       <button class="action-btn" data-action="open" title="파일 열기">↗</button>
       <button class="action-btn" data-action="detail" title="상세 보기">☰</button>

@@ -1,5 +1,25 @@
 import { Condition, GraphNode, Spec } from './types';
 
+/** 사용자 피드백 질문 항목 (F-009) */
+export interface UserQuestion {
+    id: string;
+    question: string;
+    status: 'open' | 'answered' | 'dismissed';
+    answer?: string;
+    answeredAt?: string;
+    suggestedContextMethods?: string[];
+}
+
+/** 사용자 피드백 필요 상태 (F-009) */
+export interface UserFeedbackState {
+    requiresUserInput: boolean;
+    questionStatus: string | null;
+    questions: UserQuestion[];
+    openQuestions: UserQuestion[];
+    openQuestionCount: number;
+    lastAnsweredAt: string | null;
+}
+
 export interface ManualVerificationItem {
     source: 'spec' | 'condition';
     label: string;
@@ -146,4 +166,47 @@ function readString(value: unknown): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** 사용자 피드백 필요 상태를 metadata에서 읽어 반환한다 (F-009) */
+export function getUserFeedbackState(holder: { metadata?: Record<string, unknown> | null }): UserFeedbackState {
+    const metadata = holder.metadata;
+    if (!metadata) {
+        return { requiresUserInput: false, questionStatus: null, questions: [], openQuestions: [], openQuestionCount: 0, lastAnsweredAt: null };
+    }
+
+    const requiresUserInput = readBoolean(metadata.requiresUserInput) === true;
+    const questionStatus = readString(metadata.questionStatus) ?? null;
+    const questions = readUserQuestions(metadata.questions);
+    const openQuestions = questions.filter(q => q.status === 'open');
+    const lastAnsweredAt = readString(metadata.lastAnsweredAt) ?? null;
+
+    return {
+        requiresUserInput: requiresUserInput || questionStatus === 'waiting-user-input',
+        questionStatus,
+        questions,
+        openQuestions,
+        openQuestionCount: openQuestions.length,
+        lastAnsweredAt,
+    };
+}
+
+function readUserQuestions(raw: unknown): UserQuestion[] {
+    if (!Array.isArray(raw)) { return []; }
+    return raw.flatMap((entry) => {
+        if (!isRecord(entry)) { return []; }
+        const id = readString(entry.id) ?? '';
+        const question = readString(entry.question) ?? readString(entry.text) ?? '';
+        if (!question) { return []; }
+        const statusRaw = readString(entry.status) ?? 'open';
+        const status: UserQuestion['status'] =
+            statusRaw === 'answered' ? 'answered' :
+            statusRaw === 'dismissed' ? 'dismissed' : 'open';
+        const answer = readString(entry.answer);
+        const answeredAt = readString(entry.answeredAt);
+        const suggestedContextMethods = Array.isArray(entry.suggestedContextMethods)
+            ? (entry.suggestedContextMethods as unknown[]).filter((s): s is string => typeof s === 'string')
+            : undefined;
+        return [{ id, question, status, answer, answeredAt, suggestedContextMethods }];
+    });
 }

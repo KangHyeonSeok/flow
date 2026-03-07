@@ -9,6 +9,7 @@ import * as path from 'path';
 import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_ICONS } from './types';
 import { BrokenSpecDiagRecord } from './brokenSpecDiag';
+import { getUserFeedbackState } from './reviewState';
 
 export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<SpecTreeItem | undefined | void>();
@@ -128,19 +129,37 @@ export class SpecTreeItem extends vscode.TreeItem {
         const status = spec?.status ?? condition?.status ?? 'draft';
         const nodeType = spec ? 'feature' : 'condition';
 
-        // 설명: 상태 + 태그
+        // 설명: 상태 + 태그 + 미해결 질문 수 (C2)
         if (spec) {
-            this.description = `[${status}]${spec.tags.length > 0 ? ' ' + spec.tags.join(', ') : ''}`;
+            const feedback = getUserFeedbackState(spec);
+            const questionBadge = feedback.openQuestionCount > 0
+                ? ` ❓${feedback.openQuestionCount}`
+                : '';
+            const userInputMark = feedback.requiresUserInput && feedback.openQuestionCount === 0
+                ? ' ❓'
+                : '';
+            this.description = `[${status}]${spec.tags.length > 0 ? ' ' + spec.tags.join(', ') : ''}${questionBadge}${userInputMark}`;
         } else if (condition) {
             this.description = `[${status}]`;
             this.tooltip = new vscode.MarkdownString(condition.description);
         }
 
-        // 상태 아이콘
-        this.iconPath = new vscode.ThemeIcon(
-            STATUS_ICONS[status as SpecStatus] || 'circle-outline',
-            new vscode.ThemeColor(this.getStatusThemeColor(status as SpecStatus)),
-        );
+        // 상태 아이콘 (C2: 사용자 입력 대기 시 별도 아이콘)
+        const isWaitingUserInput = spec
+            ? (() => { const fb = getUserFeedbackState(spec); return fb.requiresUserInput || fb.openQuestionCount > 0; })()
+            : false;
+
+        if (isWaitingUserInput) {
+            this.iconPath = new vscode.ThemeIcon(
+                'comment-discussion',
+                new vscode.ThemeColor('inputValidation.errorBorder'),
+            );
+        } else {
+            this.iconPath = new vscode.ThemeIcon(
+                STATUS_ICONS[status as SpecStatus] || 'circle-outline',
+                new vscode.ThemeColor(this.getStatusThemeColor(status as SpecStatus)),
+            );
+        }
 
         // 컨텍스트
         this.contextValue = nodeType;

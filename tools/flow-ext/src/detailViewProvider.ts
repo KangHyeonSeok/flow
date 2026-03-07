@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink, Condition, Spec } from './types';
-import { getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState } from './reviewState';
+import { getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
 
 export class DetailViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'specDetail';
@@ -91,6 +91,7 @@ body {
         const color = STATUS_COLORS[node.status] || '#888';
         const isFeature = node.nodeType === 'feature' || node.nodeType === 'task';
         const review = isFeature && spec ? getSpecReviewState(spec) : null;
+        const feedback = isFeature && spec ? getUserFeedbackState(spec) : null;
         const nodeManualItems = condition
             ? getConditionManualVerificationItems(condition)
             : getNodeManualVerificationItems(node);
@@ -117,6 +118,33 @@ body {
             reviewHtml = `<div class="review-panel manual">
                 <div class="review-title">수동 검증 필요</div>
                 <ul class="review-items">${nodeManualItems.map((item) => `<li><strong>${this.escapeHtml(item.label)}</strong>${item.reason ? ` - ${this.escapeHtml(item.reason)}` : ''}</li>`).join('')}</ul>
+            </div>`;
+        }
+
+        // C3: 사용자 피드백 필요 패널 - open 질문 목록, 컨텍스트 수집 방법, 최근 답변 시각, 답변 입력
+        let feedbackHtml = '';
+        if (feedback && (feedback.requiresUserInput || feedback.openQuestionCount > 0)) {
+            const lastAnsweredRow = feedback.lastAnsweredAt
+                ? `<div class="feedback-last-answered">🕐 마지막 답변: ${this.escapeHtml(feedback.lastAnsweredAt)}</div>`
+                : '';
+
+            const questionsHtml = feedback.openQuestions.map((q, idx) => {
+                const contextMethodsHtml = q.suggestedContextMethods && q.suggestedContextMethods.length > 0
+                    ? `<div class="feedback-context-methods"><span class="feedback-context-label">컨텍스트 수집 방법:</span> ${q.suggestedContextMethods.map(m => `<span class="feedback-context-item">${this.escapeHtml(m)}</span>`).join('')}</div>`
+                    : '';
+                return `<div class="feedback-question">
+                    <div class="feedback-q-text">❓ ${this.escapeHtml(q.question)}</div>
+                    ${contextMethodsHtml}
+                    <div class="feedback-answer-area">
+                        <textarea class="feedback-answer-input" data-q-id="${this.escapeAttr(q.id || String(idx))}" placeholder="답변을 스펙 JSON의 metadata.questions[${idx}].answer 필드에 직접 입력하세요..." readonly></textarea>
+                    </div>
+                </div>`;
+            }).join('');
+
+            feedbackHtml = `<div class="feedback-panel">
+                <div class="feedback-title">❓ 사용자 판단 필요</div>
+                ${lastAnsweredRow}
+                ${questionsHtml || '<div class="feedback-no-questions">대기 중인 미해결 질문이 없습니다.</div>'}
             </div>`;
         }
 
@@ -277,6 +305,71 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     color: var(--vscode-textLink-foreground); cursor: pointer;
 }
 .doc-link:hover { text-decoration: underline; }
+.feedback-panel {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(233, 30, 99, 0.5);
+    background: rgba(233, 30, 99, 0.08);
+}
+.feedback-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #f48fb1;
+    margin-bottom: 6px;
+}
+.feedback-last-answered {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 6px;
+}
+.feedback-question {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(233, 30, 99, 0.2);
+    margin-bottom: 6px;
+}
+.feedback-question:last-child { border-bottom: none; margin-bottom: 0; }
+.feedback-q-text {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--vscode-foreground);
+}
+.feedback-context-methods {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 4px;
+}
+.feedback-context-label { font-weight: 600; }
+.feedback-context-item {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(233, 30, 99, 0.1);
+    color: #f48fb1;
+    margin: 1px 2px;
+    font-size: 10px;
+}
+.feedback-answer-area { margin-top: 4px; }
+.feedback-answer-input {
+    width: 100%;
+    min-height: 40px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-descriptionForeground);
+    border: 1px solid rgba(233, 30, 99, 0.3);
+    border-radius: 3px;
+    font-size: 10px;
+    padding: 4px;
+    resize: none;
+    font-family: var(--vscode-font-family);
+    cursor: default;
+}
+.feedback-no-questions {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
 </style></head><body>
 <h2>${this.escapeHtml(node.id)}${isFeature ? ': ' + this.escapeHtml(node.label) : ''}</h2>
 <span class="badge" style="background:${color}">${node.status}</span>
@@ -284,6 +377,7 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
 
 <div class="desc">${this.escapeHtml(node.description)}</div>
 
+${feedbackHtml}
 ${reviewHtml}
 
 ${tagsHtml ? '<h3>Tags</h3>' + tagsHtml : ''}
