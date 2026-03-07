@@ -103,6 +103,17 @@ export class SpecLoader {
         this.watcher.onDidDelete(() => void this.reload());
     }
 
+    private refreshSpecsDir(): void {
+        const nextSpecsDir = this.resolveSpecsDir(this.workspaceRoot);
+        if (nextSpecsDir === this.specsDir) {
+            return;
+        }
+
+        this.watcher?.dispose();
+        this.specsDir = nextSpecsDir;
+        this.setupWatcher();
+    }
+
     /** 스펙 파일 로드 및 그래프 빌드 */
     async load(): Promise<SpecGraph> {
         const revision = ++this.loadRevision;
@@ -180,6 +191,7 @@ export class SpecLoader {
         this.reloadPromise = (async () => {
             do {
                 this.reloadQueued = false;
+                this.refreshSpecsDir();
                 await this.load();
                 this._onDidChange.fire();
             } while (this.reloadQueued);

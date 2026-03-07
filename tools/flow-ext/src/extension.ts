@@ -149,6 +149,18 @@ export function activate(context: vscode.ExtensionContext): void {
     // 새로고침
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.refresh', async () => {
+            const flowExe = resolveFlowExecutable(workspaceRoot);
+            if (flowExe) {
+                try {
+                    await execCommandAsync(flowExe, ['spec-sync'], workspaceRoot);
+                    output.appendLine('[spec-sync] refresh triggered remote spec sync');
+                } catch (err) {
+                    const msg = String(err);
+                    output.appendLine(`[spec-sync] sync failed during refresh: ${msg}`);
+                    vscode.window.showWarningMessage(`원격 스펙 동기화 실패: ${msg}`);
+                }
+            }
+
             await specLoader.reload();
             const gitRoot = findGitRoot(specLoader.specsDirectory);
             if (gitRoot) { await updatePendingPushContext(gitRoot); }
