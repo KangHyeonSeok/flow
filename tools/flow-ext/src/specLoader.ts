@@ -301,6 +301,26 @@ export class SpecLoader {
                 });
             }
 
+            // F-021-C5: supersedes/mutates 관계 엣지 추가
+            if (spec.supersedes) {
+                for (const oldId of spec.supersedes) {
+                    edges.push({
+                        source: spec.id,
+                        target: oldId,
+                        type: 'supersedes',
+                    });
+                }
+            }
+            if (spec.mutates) {
+                for (const targetId of spec.mutates) {
+                    edges.push({
+                        source: spec.id,
+                        target: targetId,
+                        type: 'mutates',
+                    });
+                }
+            }
+
             for (const condition of spec.conditions) {
                 nodes.push({
                     id: condition.id,

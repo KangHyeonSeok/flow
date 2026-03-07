@@ -61,6 +61,15 @@ export interface Condition {
     docLinks?: DocLink[];
 }
 
+/** 스펙 변경 이력 항목 */
+export interface ChangeLogEntry {
+    type: 'create' | 'mutate' | 'supersede' | 'deprecate' | 'restore';
+    at: string;
+    author: string;
+    summary: string;
+    relatedIds?: string[];
+}
+
 /** 스펙 (Feature/Task) - 그래프의 주 노드 */
 export interface Spec {
     schemaVersion: number;
@@ -78,6 +87,16 @@ export interface Spec {
     metadata: Record<string, unknown>;
     createdAt: string;
     updatedAt: string;
+    /** F-021: 이 스펙이 실질적으로 대체하는 이전 스펙 ID 목록 */
+    supersedes?: string[];
+    /** F-021: 이 스펙을 대체한 신규 스펙 ID 목록 */
+    supersededBy?: string[];
+    /** F-021: 이 스펙이 in-place로 변형하는 대상 스펙 ID 목록 */
+    mutates?: string[];
+    /** F-021: 이 스펙을 in-place 변형한 task 스펙 ID 목록 */
+    mutatedBy?: string[];
+    /** F-021: 스펙 변경 이력 */
+    changeLog?: ChangeLogEntry[];
     /** v4: GitHub 이슈/PR/Discussion 연결 */
     githubRefs?: GitHubRef[];
     /** v4: 관련 문서·참고자료 링크 */
@@ -108,7 +127,8 @@ export interface GraphNode {
 export interface GraphEdge {
     source: string;
     target: string;
-    type: 'parent' | 'dependency' | 'condition';
+    /** F-021: 'supersedes' | 'mutates' 관계 타입 추가 */
+    type: 'parent' | 'dependency' | 'condition' | 'supersedes' | 'mutates';
 }
 
 /** 전체 그래프 데이터 */

@@ -249,6 +249,44 @@ public partial class FlowApp
             }
         }
 
+        // F-021-C5: 관계 요약 (supersedes/mutates/supersededBy/mutatedBy)
+        var hasRelations = spec.Supersedes.Count > 0 || spec.SupersededBy.Count > 0
+            || spec.Mutates.Count > 0 || spec.MutatedBy.Count > 0;
+        if (hasRelations)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Relationships");
+            if (spec.Supersedes.Count > 0)
+                sb.AppendLine($"  supersedes:   {string.Join(", ", spec.Supersedes)}  ← 이 스펙이 대체함");
+            if (spec.SupersededBy.Count > 0)
+                sb.AppendLine($"  supersededBy: {string.Join(", ", spec.SupersededBy)}  ← 이 스펙을 대체한 신규 스펙");
+            if (spec.Mutates.Count > 0)
+                sb.AppendLine($"  mutates:      {string.Join(", ", spec.Mutates)}  ← 이 스펙이 변형함");
+            if (spec.MutatedBy.Count > 0)
+                sb.AppendLine($"  mutatedBy:    {string.Join(", ", spec.MutatedBy)}  ← 이 스펙을 변형한 스펙");
+
+            // 권장 후속 조치
+            if (spec.SupersededBy.Count > 0 && spec.Status != "deprecated")
+                sb.AppendLine($"  ⚠ 권장 조치: supersededBy 스펙({string.Join(", ", spec.SupersededBy)}) 검토 후 deprecated 전환 고려");
+            else if (spec.Supersedes.Count > 0)
+                sb.AppendLine($"  ✓ 이 스펙이 최신 기준 ({string.Join(", ", spec.Supersedes)}을(를) 대체)");
+        }
+
+        // F-021-C1: 변경 이력 요약
+        if (spec.ChangeLog.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## Change Log ({spec.ChangeLog.Count} entries)");
+            foreach (var entry in spec.ChangeLog.TakeLast(5))
+            {
+                var related = entry.RelatedIds.Count > 0 ? $" → {string.Join(",", entry.RelatedIds)}" : "";
+                sb.AppendLine($"  [{entry.Type}] {entry.At[..Math.Min(19, entry.At.Length)]} by {entry.Author}{related}");
+                sb.AppendLine($"    {entry.Summary}");
+            }
+            if (spec.ChangeLog.Count > 5)
+                sb.AppendLine($"  ... 및 {spec.ChangeLog.Count - 5}개 이전 항목");
+        }
+
         return sb.ToString().TrimEnd();
     }
 
@@ -309,6 +347,166 @@ public partial class FlowApp
         catch (Exception ex)
         {
             JsonOutput.Write(JsonOutput.Error("spec-delete", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
+    // ─── flow spec supersede ──────────────────────────────────────────
+    /// <summary>
+    /// F-021-C2: 기존 스펙의 목적/범위/수락 기준이 실질적으로 바뀌는 경우 신규 스펙을 생성하고
+    /// 기존 스펙과 양방향 supersedes↔supersededBy 관계를 설정한다.
+    /// 기존 스펙이 활성 상태이거나 downstream 참조가 있으면 F-021-C3 경고를 함께 반환한다.
+    /// </summary>
+    [Command("spec-supersede", Description = "기존 스펙을 대체하는 신규 스펙을 생성하고 양방향 관계를 설정합니다 (F-021-C2)")]
+    public void SpecSupersede(
+        [Argument(Description = "대체할 기존 스펙 ID")] string oldId,
+        [Option("title", Description = "신규 스펙 제목")] string title = "",
+        [Option("description", Description = "신규 스펙 설명")] string? description = null,
+        [Option("id", Description = "신규 스펙 ID (생략 시 자동 채번)")] string? newId = null,
+        [Option("parent", Description = "신규 스펙 상위 ID")] string? parent = null,
+        [Option("status", Description = "신규 스펙 초기 상태 (기본: draft)")] string status = "draft",
+        [Option("tags", Description = "태그 (콤마 구분)")] string? tags = null,
+        [Option("author", Description = "변경 주체 (기본: planner)")] string author = "planner",
+        [Option("summary", Description = "변경 사유 요약")] string? summary = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var oldSpec = SpecStore.Get(oldId);
+            if (oldSpec == null)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-supersede", $"기존 스펙 '{oldId}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var specId = newId ?? SpecStore.NextId();
+            var changeSummary = summary ?? $"'{oldId}' 스펙을 대체하는 신규 스펙 '{specId}' 생성";
+
+            // 신규 스펙 생성 (supersedes 관계 설정)
+            var newSpec = new SpecNode
+            {
+                Id = specId,
+                Title = string.IsNullOrWhiteSpace(title) ? $"{oldSpec.Title} (대체)" : title,
+                Description = description ?? oldSpec.Description,
+                Parent = parent ?? oldSpec.Parent,
+                Status = status,
+                Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+                        ?? new List<string>(oldSpec.Tags),
+                Dependencies = new List<string>(oldSpec.Dependencies),
+                Supersedes = new List<string> { oldId },
+                ChangeLog = new List<SpecChangeLogEntry>
+                {
+                    new() { Type = "supersede", At = DateTime.UtcNow.ToString("o"),
+                            Author = author, Summary = changeSummary, RelatedIds = new List<string> { oldId } }
+                }
+            };
+            var created = SpecStore.Create(newSpec);
+
+            // 기존 스펙에 supersededBy 역방향 포인터 추가 (F-021-C2)
+            if (!oldSpec.SupersededBy.Contains(specId))
+                oldSpec.SupersededBy.Add(specId);
+            SpecStore.UpdateInPlace(oldSpec,
+                $"신규 스펙 '{specId}'에 의해 대체됨",
+                author, "supersede", new[] { specId });
+
+            // F-021-C3: 안전 전환 분석
+            var specs = SpecStore.GetAll();
+            var graph = GraphBuilder.Build(specs);
+            var transition = StatusPropagator.PropagateSupersede(graph, oldId, specId);
+
+            JsonOutput.Write(JsonOutput.Success("spec-supersede",
+                new
+                {
+                    newSpec = created,
+                    oldSpecId = oldId,
+                    transition = new
+                    {
+                        recommendedAction = transition.RecommendedAction,
+                        isActiveSpec = transition.IsActiveSpec,
+                        hasActiveDownstream = transition.HasActiveDownstream,
+                        downstreamIds = transition.DownstreamIds,
+                        transitionNotes = transition.TransitionNotes
+                    }
+                },
+                $"신규 스펙 '{specId}'가 생성되었습니다. 기존 스펙 '{oldId}' 전환 권장: {transition.RecommendedAction}"), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-supersede", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
+    // ─── flow spec mutate ─────────────────────────────────────────────
+    /// <summary>
+    /// F-021-C2: 기존 스펙을 부분적으로 변형하거나 확장하는 경우 신규 스펙을 생성하고
+    /// 기존 스펙과 양방향 mutates↔mutatedBy 관계를 설정한다.
+    /// </summary>
+    [Command("spec-mutate", Description = "기존 스펙을 부분 변형하는 신규 스펙을 생성하고 양방향 관계를 설정합니다 (F-021-C2)")]
+    public void SpecMutate(
+        [Argument(Description = "변형 대상 기존 스펙 ID")] string targetId,
+        [Option("title", Description = "신규 스펙 제목")] string title = "",
+        [Option("description", Description = "신규 스펙 설명")] string? description = null,
+        [Option("id", Description = "신규 스펙 ID (생략 시 자동 채번)")] string? newId = null,
+        [Option("parent", Description = "신규 스펙 상위 ID")] string? parent = null,
+        [Option("status", Description = "신규 스펙 초기 상태 (기본: draft)")] string status = "draft",
+        [Option("tags", Description = "태그 (콤마 구분)")] string? tags = null,
+        [Option("author", Description = "변경 주체 (기본: planner)")] string author = "planner",
+        [Option("summary", Description = "변경 사유 요약")] string? summary = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var targetSpec = SpecStore.Get(targetId);
+            if (targetSpec == null)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-mutate", $"대상 스펙 '{targetId}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var specId = newId ?? SpecStore.NextId();
+            var changeSummary = summary ?? $"'{targetId}' 스펙을 부분 변형하는 신규 스펙 '{specId}' 생성";
+
+            // 신규 스펙 생성 (mutates 관계 설정)
+            var newSpec = new SpecNode
+            {
+                Id = specId,
+                Title = string.IsNullOrWhiteSpace(title) ? $"{targetSpec.Title} (변형)" : title,
+                Description = description ?? targetSpec.Description,
+                Parent = parent ?? targetSpec.Parent,
+                Status = status,
+                Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
+                        ?? new List<string>(targetSpec.Tags),
+                Mutates = new List<string> { targetId },
+                ChangeLog = new List<SpecChangeLogEntry>
+                {
+                    new() { Type = "mutate", At = DateTime.UtcNow.ToString("o"),
+                            Author = author, Summary = changeSummary, RelatedIds = new List<string> { targetId } }
+                }
+            };
+            var created = SpecStore.Create(newSpec);
+
+            // 기존 스펙에 mutatedBy 역방향 포인터 추가 (F-021-C2)
+            if (!targetSpec.MutatedBy.Contains(specId))
+                targetSpec.MutatedBy.Add(specId);
+            SpecStore.UpdateInPlace(targetSpec,
+                $"신규 스펙 '{specId}'에 의해 변형됨",
+                author, "mutate", new[] { specId });
+
+            JsonOutput.Write(JsonOutput.Success("spec-mutate",
+                new
+                {
+                    newSpec = created,
+                    targetSpecId = targetId,
+                    relation = $"{specId}.mutates → {targetId} / {targetId}.mutatedBy ∋ {specId}"
+                },
+                $"신규 스펙 '{specId}'가 생성되었습니다. '{targetId}'와 mutates 관계가 설정되었습니다."), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-mutate", ex.Message), pretty);
             Environment.ExitCode = 1;
         }
     }
@@ -444,7 +642,10 @@ public partial class FlowApp
                         dag = graph.Dag,
                         topologicalOrder = graph.TopologicalOrder,
                         cycleNodes = graph.CycleNodes,
-                        orphanNodes = graph.OrphanNodes
+                        orphanNodes = graph.OrphanNodes,
+                        // F-021-C5: 대체/변형 관계 엣지
+                        supersedesGraph = graph.SupersedesGraph,
+                        mutatesGraph = graph.MutatesGraph
                     }), pretty);
             }
         }

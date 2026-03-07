@@ -85,6 +85,18 @@ public class SpecStore
         spec.UpdatedAt = spec.CreatedAt;
         spec.SchemaVersion = 2;
 
+        // F-021-C1: 초기 생성 changeLog 자동 기록
+        if (!spec.ChangeLog.Any(e => string.Equals(e.Type, "create", StringComparison.OrdinalIgnoreCase)))
+        {
+            spec.ChangeLog.Insert(0, new SpecChangeLogEntry
+            {
+                Type = "create",
+                At = spec.CreatedAt,
+                Author = "planner",
+                Summary = $"스펙 '{spec.Id}' 생성"
+            });
+        }
+
         SaveSpec(spec);
         return spec;
     }
@@ -139,6 +151,29 @@ public class SpecStore
         spec.UpdatedAt = DateTime.UtcNow.ToString("o");
         SaveSpec(spec);
         return spec;
+    }
+
+    /// <summary>
+    /// F-021-C1: 제자리 수정(in-place update). changeLog에 변경 이력을 자동으로 기록한다.
+    /// 스펙의 핵심 목적과 범위가 유지될 때 사용. 대체/변형은 spec-supersede/spec-mutate 커맨드 사용.
+    /// </summary>
+    /// <param name="spec">수정된 스펙 (ID 유지)</param>
+    /// <param name="changeSummary">변경 요약 (한 줄)</param>
+    /// <param name="author">변경 주체 (사람 또는 runner ID)</param>
+    /// <param name="changeType">변경 유형. 기본 "mutate". supersede/deprecate/restore도 가능.</param>
+    /// <param name="relatedIds">관련 스펙 ID 목록 (선택)</param>
+    public SpecNode UpdateInPlace(SpecNode spec, string changeSummary, string author,
+        string changeType = "mutate", IEnumerable<string>? relatedIds = null)
+    {
+        spec.ChangeLog.Add(new SpecChangeLogEntry
+        {
+            Type = changeType,
+            At = DateTime.UtcNow.ToString("o"),
+            Author = author,
+            Summary = changeSummary,
+            RelatedIds = relatedIds?.ToList() ?? new List<string>()
+        });
+        return Update(spec);
     }
 
     /// <summary>spec 삭제</summary>

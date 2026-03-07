@@ -239,6 +239,60 @@ body {
 
         const fileId = isFeature ? node.id : node.featureId;
 
+        // F-021-C5: 관계 요약 HTML
+        let relationHtml = '';
+        if (spec && isFeature) {
+            const hasRelations = (spec.supersedes && spec.supersedes.length > 0)
+                || (spec.supersededBy && spec.supersededBy.length > 0)
+                || (spec.mutates && spec.mutates.length > 0)
+                || (spec.mutatedBy && spec.mutatedBy.length > 0);
+            if (hasRelations) {
+                const rows: string[] = [];
+                if (spec.supersedes && spec.supersedes.length > 0) {
+                    rows.push(`<div class="rel-row"><span class="rel-label supersedes-label">↠ supersedes</span>${
+                        spec.supersedes.map(id => `<a class="spec-link" data-spec="${this.escapeAttr(id)}">${this.escapeHtml(id)}</a>`).join(', ')
+                    }</div>`);
+                }
+                if (spec.supersededBy && spec.supersededBy.length > 0) {
+                    rows.push(`<div class="rel-row"><span class="rel-label supersededby-label">⇝ supersededBy</span>${
+                        spec.supersededBy.map(id => `<a class="spec-link" data-spec="${this.escapeAttr(id)}">${this.escapeHtml(id)}</a>`).join(', ')
+                    }${spec.status !== 'deprecated' ? ' <span class="rel-warn">⚠ 대체됨</span>' : ''}</div>`);
+                }
+                if (spec.mutates && spec.mutates.length > 0) {
+                    rows.push(`<div class="rel-row"><span class="rel-label mutates-label">⟳ mutates</span>${
+                        spec.mutates.map(id => `<a class="spec-link" data-spec="${this.escapeAttr(id)}">${this.escapeHtml(id)}</a>`).join(', ')
+                    }</div>`);
+                }
+                if (spec.mutatedBy && spec.mutatedBy.length > 0) {
+                    rows.push(`<div class="rel-row"><span class="rel-label mutatedby-label">⟲ mutatedBy</span>${
+                        spec.mutatedBy.map(id => `<a class="spec-link" data-spec="${this.escapeAttr(id)}">${this.escapeHtml(id)}</a>`).join(', ')
+                    }</div>`);
+                }
+                const recommended = spec.supersededBy && spec.supersededBy.length > 0 && spec.status !== 'deprecated'
+                    ? `<div class="rel-recommend">권장: 대체 스펙(${spec.supersededBy.join(', ')}) 검토 후 deprecated 전환 고려</div>`
+                    : '';
+                relationHtml = `<h3>Relationships</h3><div class="rel-summary">${rows.join('')}${recommended}</div>`;
+            }
+        }
+
+        // F-021-C1: 변경 이력 HTML
+        let changeLogHtml = '';
+        if (spec && spec.changeLog && spec.changeLog.length > 0) {
+            const entries = spec.changeLog.slice(-3);
+            const entryHtml = entries.map(entry => {
+                const at = entry.at ? entry.at.substring(0, 10) : '';
+                return `<div class="cl-entry">
+                    <span class="cl-type cl-type-${this.escapeAttr(entry.type)}">${this.escapeHtml(entry.type)}</span>
+                    <span class="cl-meta">${this.escapeHtml(at)} · ${this.escapeHtml(entry.author)}</span><br>
+                    <span class="cl-summary">${this.escapeHtml(entry.summary)}</span>
+                </div>`;
+            }).join('');
+            const moreLabel = spec.changeLog.length > 3
+                ? `<div class="cl-more">… 및 ${spec.changeLog.length - 3}개 이전 항목</div>`
+                : '';
+            changeLogHtml = `<h3>Change Log (${spec.changeLog.length})</h3><div class="cl-list">${entryHtml}${moreLabel}</div>`;
+        }
+
         return /*html*/ `<!DOCTYPE html>
 <html><head><style>
 body {
@@ -490,6 +544,34 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     margin-top: 4px;
     word-break: break-all;
 }
+/* F-021-C5: 관계 요약 스타일 */
+.rel-summary {
+    background: var(--vscode-editor-background);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+}
+.rel-row { font-size: 11px; margin: 3px 0; }
+.rel-label { display: inline-block; min-width: 90px; font-weight: 600; }
+.supersedes-label { color: #f44336; }
+.supersededby-label { color: #ff7043; }
+.mutates-label { color: #ff9800; }
+.mutatedby-label { color: #ffc107; }
+.rel-warn { color: #f44336; font-size: 10px; }
+.rel-recommend { color: #ff9800; font-size: 10px; margin-top: 4px; }
+.spec-link { color: var(--vscode-textLink-foreground); cursor: pointer; text-decoration: underline; }
+/* F-021-C1: 변경 이력 스타일 */
+.cl-list { font-size: 11px; }
+.cl-entry { padding: 3px 0; border-bottom: 1px solid var(--vscode-widget-border, #333); }
+.cl-type { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 10px; font-weight: 600; }
+.cl-type-create { background: #1b5e20; color: #a5d6a7; }
+.cl-type-mutate { background: #e65100; color: #ffccbc; }
+.cl-type-supersede { background: #b71c1c; color: #ffcdd2; }
+.cl-type-deprecate { background: #4e342e; color: #d7ccc8; }
+.cl-type-restore { background: #1a237e; color: #c5cae9; }
+.cl-meta { color: var(--vscode-descriptionForeground); font-size: 10px; margin-left: 4px; }
+.cl-summary { color: var(--vscode-foreground); }
+.cl-more { color: var(--vscode-descriptionForeground); font-size: 10px; }
 </style></head><body>
 <h2>${this.escapeHtml(node.id)}${isFeature ? ': ' + this.escapeHtml(node.label) : ''}</h2>
 <span class="badge" style="background:${color}">${node.status}</span>
@@ -506,6 +588,8 @@ ${refsHtml ? '<h3>Code References</h3>' + refsHtml : ''}
 ${githubRefsHtml ? '<h3>GitHub</h3>' + githubRefsHtml : ''}
 ${docLinksHtml ? '<h3>Related Docs</h3>' + docLinksHtml : ''}
 ${conditionsHtml ? '<h3>Conditions</h3>' + conditionsHtml : ''}
+${relationHtml}
+${changeLogHtml}
 
 ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄 ${fileId}.json 열기</button>` : ''}
 
@@ -532,6 +616,11 @@ ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄
         });
     });
     document.querySelectorAll('.btn-open').forEach(el => {
+        el.addEventListener('click', () => {
+            vscode.postMessage({ type: 'openSpec', specId: el.dataset.spec });
+        });
+    });
+    document.querySelectorAll('.spec-link[data-spec]').forEach(el => {
         el.addEventListener('click', () => {
             vscode.postMessage({ type: 'openSpec', specId: el.dataset.spec });
         });

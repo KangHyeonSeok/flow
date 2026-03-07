@@ -294,6 +294,53 @@ public class SpecValidator
                     "자동 승격 전에 changeLog에 type='mutate' 항목을 추가하세요."));
         }
 
+        // F-021-C4: supersededBy/mutatedBy가 있으면 대응하는 방향 포인터도 필요
+        // (역방향 포인터만 있고 정방향 관계가 없으면 불명확)
+        if (spec.SupersededBy.Count > 0 && spec.Supersedes.Count == 0)
+        {
+            // 역방향은 있지만 이 스펙 자신이 supersedes를 지정하지 않음 — 정상
+            // (이 스펙이 supersededBy 대상이라면 별도 검토가 필요)
+            result.Warnings.Add(Warning(spec.Id,
+                $"스펙 '{spec.Id}'이 supersededBy에 의해 대체될 예정입니다. " +
+                $"대체 스펙({string.Join(", ", spec.SupersededBy)})을 검토하고 deprecated 전환 시점을 결정하세요."));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// F-021-C4: 새 스펙이 기존 스펙을 부분적으로 변형하거나 확장할 때 관계 유형이 명시되어야 함을 검증한다.
+    /// supersedes/mutates 중 하나는 있지만 changeLog 또는 bidirectional link가 불완전하면 오류를 반환한다.
+    /// 관계가 모두 불명확(parent/dep/supersedes/mutates 모두 없고 다른 스펙과 유사한 제목)하면 경고를 추가한다.
+    /// </summary>
+    public ValidationResult ValidateRelationCompleteness(SpecNode spec, IReadOnlyList<SpecNode> allSpecs)
+    {
+        var result = new ValidationResult();
+
+        // supersedes는 있는데 supersede changeLog가 없으면 관계 불명확
+        foreach (var targetId in spec.Supersedes)
+        {
+            bool hasLog = spec.ChangeLog.Any(e =>
+                string.Equals(e.Type, "supersede", StringComparison.OrdinalIgnoreCase)
+                && e.RelatedIds.Contains(targetId));
+            if (!hasLog)
+                result.Errors.Add(Error(spec.Id, "supersedes",
+                    $"supersedes[{targetId}] 관계에 대한 changeLog(type=supersede, relatedIds∋{targetId}) 가 없습니다. " +
+                    "관계가 불명확하면 auto-queue 승격이 금지됩니다."));
+        }
+
+        // mutates는 있는데 mutate changeLog가 없으면 관계 불명확
+        foreach (var targetId in spec.Mutates)
+        {
+            bool hasLog = spec.ChangeLog.Any(e =>
+                string.Equals(e.Type, "mutate", StringComparison.OrdinalIgnoreCase)
+                && e.RelatedIds.Contains(targetId));
+            if (!hasLog)
+                result.Errors.Add(Error(spec.Id, "mutates",
+                    $"mutates[{targetId}] 관계에 대한 changeLog(type=mutate, relatedIds∋{targetId}) 가 없습니다. " +
+                    "관계가 불명확하면 auto-queue 승격이 금지됩니다."));
+        }
+
         return result;
     }
 

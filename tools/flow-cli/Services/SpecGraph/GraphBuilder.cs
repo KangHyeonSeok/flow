@@ -25,6 +25,9 @@ public class GraphBuilder
         // DAG 구조 (dependencies)
         BuildDag(graph, specs);
 
+        // 대체/변형 관계 엣지 (F-021)
+        BuildRelationEdges(graph, specs);
+
         // 순환 참조 감지 + 위상 정렬 (Kahn 알고리즘)
         DetectCycles(graph);
 
@@ -65,6 +68,22 @@ public class GraphBuilder
                     graph.ReverseDag[dep] = new List<string>();
                 graph.ReverseDag[dep].Add(spec.Id);
             }
+        }
+    }
+
+    /// <summary>
+    /// F-021: supersedes/mutates 관계 엣지를 그래프에 추가합니다.
+    /// SupersedesGraph[newId] = [oldId, ...], MutatesGraph[mutatingId] = [targetId, ...]
+    /// </summary>
+    private void BuildRelationEdges(SpecGraph graph, List<SpecNode> specs)
+    {
+        foreach (var spec in specs)
+        {
+            if (spec.Supersedes.Count > 0)
+                graph.SupersedesGraph[spec.Id] = new List<string>(spec.Supersedes);
+
+            if (spec.Mutates.Count > 0)
+                graph.MutatesGraph[spec.Id] = new List<string>(spec.Mutates);
         }
     }
 
@@ -172,7 +191,22 @@ public class GraphBuilder
         var title = node?.Title ?? nodeId;
         var statusIcon = GetStatusIcon(status);
 
-        lines.Add($"{prefix}{connector}{statusIcon} [{nodeId}] {title}");
+        // 관계 마커 (F-021-C5)
+        var relationMarkers = new List<string>();
+        if (graph.SupersedesGraph.TryGetValue(nodeId, out var supersedesIds) && supersedesIds.Count > 0)
+            relationMarkers.Add($"↠supersedes:{string.Join(",", supersedesIds)}");
+        if (node?.Supersedes.Count == 0 && node?.SupersededBy.Count > 0)
+            relationMarkers.Add($"⇝supersededBy:{string.Join(",", node.SupersededBy)}");
+        if (graph.MutatesGraph.TryGetValue(nodeId, out var mutatesIds) && mutatesIds.Count > 0)
+            relationMarkers.Add($"⟳mutates:{string.Join(",", mutatesIds)}");
+        if (node?.MutatedBy.Count > 0)
+            relationMarkers.Add($"⟲mutatedBy:{string.Join(",", node.MutatedBy)}");
+
+        var relationSuffix = relationMarkers.Count > 0
+            ? $"  [{string.Join(" | ", relationMarkers)}]"
+            : "";
+
+        lines.Add($"{prefix}{connector}{statusIcon} [{nodeId}] {title}{relationSuffix}");
 
         // Condition 하위 노드
         if (node != null)

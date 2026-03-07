@@ -247,6 +247,51 @@ public class SpecGraph
 
     /// <summary>orphan 노드 (존재하지 않는 parent를 참조하는 노드)</summary>
     public List<string> OrphanNodes { get; set; } = new();
+
+    /// <summary>
+    /// 대체 관계 그래프 (newSpecId → [supersededSpecIds]).
+    /// A.Supersedes = [B] 이면 SupersedesGraph[A] = [B].
+    /// </summary>
+    public Dictionary<string, List<string>> SupersedesGraph { get; set; } = new();
+
+    /// <summary>
+    /// 변형 관계 그래프 (mutatingSpecId → [targetSpecIds]).
+    /// A.Mutates = [B] 이면 MutatesGraph[A] = [B].
+    /// </summary>
+    public Dictionary<string, List<string>> MutatesGraph { get; set; } = new();
+}
+
+/// <summary>
+/// 스펙 대체(Supersede) 안전 전환 분석 결과 (F-021-C3).
+/// PropagateSupersede() 호출 결과로 반환된다.
+/// </summary>
+public class SupersedeTransitionResult
+{
+    /// <summary>대체되는 기존 스펙 ID</summary>
+    public string OldSpecId { get; set; } = "";
+
+    /// <summary>기존 스펙을 대체하는 신규 스펙 ID</summary>
+    public string NewSpecId { get; set; } = "";
+
+    /// <summary>기존 스펙이 queued/working/needs-review 상태인지 여부</summary>
+    public bool IsActiveSpec { get; set; }
+
+    /// <summary>기존 스펙을 참조하는 활성 downstream 스펙이 있는지 여부</summary>
+    public bool HasActiveDownstream { get; set; }
+
+    /// <summary>
+    /// 권장 전환 방식.
+    /// "deprecate": 즉시 deprecated 처리 가능.
+    /// "needs-review": 스펙 자체가 활성 상태 — 검토 후 전환.
+    /// "blocked-review": 활성 downstream 참조 존재 — 사용자 승인 필요.
+    /// </summary>
+    public string RecommendedAction { get; set; } = "";
+
+    /// <summary>기존 스펙에 의존하는 활성 downstream 스펙 ID 목록</summary>
+    public List<string> DownstreamIds { get; set; } = new();
+
+    /// <summary>전환 시 고려사항 안내 메시지</summary>
+    public string TransitionNotes { get; set; } = "";
 }
 
 /// <summary>영향 분석 결과</summary>

@@ -356,6 +356,52 @@ export class GraphPanel {
             cursor: pointer;
             font-size: 12px;
         }
+        /* F-021-C5: 관계 요약 스타일 */
+        .detail-panel .relation-summary {
+            background: var(--vscode-editor-background, #1e1e1e);
+            border-radius: 4px;
+            padding: 6px 8px;
+            margin-bottom: 8px;
+        }
+        .detail-panel .relation-row {
+            font-size: 12px;
+            margin: 3px 0;
+        }
+        .detail-panel .rel-label {
+            display: inline-block;
+            min-width: 100px;
+            font-weight: 600;
+        }
+        .detail-panel .supersedes-row .rel-label { color: #f44336; }
+        .detail-panel .supersededby-row .rel-label { color: #ff7043; }
+        .detail-panel .mutates-row .rel-label { color: #ff9800; }
+        .detail-panel .mutatedby-row .rel-label { color: #ffc107; }
+        .detail-panel .spec-link {
+            display: inline;
+            color: var(--vscode-textLink-foreground, #3794ff);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        /* F-021-C1: 변경 이력 스타일 */
+        .detail-panel .changelog-list {
+            font-size: 11px;
+        }
+        .detail-panel .changelog-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--vscode-widget-border, #333);
+        }
+        .detail-panel .changelog-type {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        .detail-panel .changelog-type-create { background: #1b5e20; color: #a5d6a7; }
+        .detail-panel .changelog-type-mutate { background: #e65100; color: #ffccbc; }
+        .detail-panel .changelog-type-supersede { background: #b71c1c; color: #ffcdd2; }
+        .detail-panel .changelog-type-deprecate { background: #4e342e; color: #d7ccc8; }
+        .detail-panel .changelog-type-restore { background: #1a237e; color: #c5cae9; }
 
         /* 범례 */
         .legend {
@@ -534,6 +580,44 @@ export class GraphPanel {
                         'width': 1,
                     }
                 },
+                // F-021-C5: Supersedes 엣지 (빨간 점선 — 대체 관계)
+                {
+                    selector: 'edge[type="supersedes"]',
+                    style: {
+                        'line-color': '#f44336',
+                        'target-arrow-color': '#f44336',
+                        'target-arrow-shape': 'triangle',
+                        'curve-style': 'bezier',
+                        'line-style': 'dashed',
+                        'width': 2,
+                        'arrow-scale': 0.9,
+                        'label': 'supersedes',
+                        'font-size': '9px',
+                        'color': '#f44336',
+                        'text-background-color': '#1e1e1e',
+                        'text-background-opacity': 0.7,
+                        'text-background-padding': '2px',
+                    } as Record<string, unknown>
+                },
+                // F-021-C5: Mutates 엣지 (주황 점선 — 변형 관계)
+                {
+                    selector: 'edge[type="mutates"]',
+                    style: {
+                        'line-color': '#ff9800',
+                        'target-arrow-color': '#ff9800',
+                        'target-arrow-shape': 'vee',
+                        'curve-style': 'bezier',
+                        'line-style': 'dotted',
+                        'width': 2,
+                        'arrow-scale': 0.9,
+                        'label': 'mutates',
+                        'font-size': '9px',
+                        'color': '#ff9800',
+                        'text-background-color': '#1e1e1e',
+                        'text-background-opacity': 0.7,
+                        'text-background-padding': '2px',
+                    } as Record<string, unknown>
+                },
                 // 선택됨
                 {
                     selector: ':selected',
@@ -654,6 +738,68 @@ export class GraphPanel {
                 }
             }
 
+            // F-021-C5: 관계 요약 (supersedes/mutates/supersededBy/mutatedBy)
+            if (spec) {
+                const hasRelations = (spec.supersedes && spec.supersedes.length > 0)
+                    || (spec.supersededBy && spec.supersededBy.length > 0)
+                    || (spec.mutates && spec.mutates.length > 0)
+                    || (spec.mutatedBy && spec.mutatedBy.length > 0);
+                if (hasRelations) {
+                    html += '<h3>🔗 Relationships</h3>';
+                    html += '<div class="relation-summary">';
+                    if (spec.supersedes && spec.supersedes.length > 0) {
+                        html += '<div class="relation-row supersedes-row">'
+                              + '<span class="rel-label">↠ supersedes</span> '
+                              + spec.supersedes.map(id => '<a class="spec-link" data-spec-id="' + escapeAttr(id) + '">' + escapeHtml(id) + '</a>').join(', ')
+                              + '</div>';
+                    }
+                    if (spec.supersededBy && spec.supersededBy.length > 0) {
+                        html += '<div class="relation-row supersededby-row">'
+                              + '<span class="rel-label">⇝ supersededBy</span> '
+                              + spec.supersededBy.map(id => '<a class="spec-link" data-spec-id="' + escapeAttr(id) + '">' + escapeHtml(id) + '</a>').join(', ')
+                              + ' <span style="color:#f44336;font-size:10px">⚠ 이 스펙은 대체됨</span>'
+                              + '</div>';
+                    }
+                    if (spec.mutates && spec.mutates.length > 0) {
+                        html += '<div class="relation-row mutates-row">'
+                              + '<span class="rel-label">⟳ mutates</span> '
+                              + spec.mutates.map(id => '<a class="spec-link" data-spec-id="' + escapeAttr(id) + '">' + escapeHtml(id) + '</a>').join(', ')
+                              + '</div>';
+                    }
+                    if (spec.mutatedBy && spec.mutatedBy.length > 0) {
+                        html += '<div class="relation-row mutatedby-row">'
+                              + '<span class="rel-label">⟲ mutatedBy</span> '
+                              + spec.mutatedBy.map(id => '<a class="spec-link" data-spec-id="' + escapeAttr(id) + '">' + escapeHtml(id) + '</a>').join(', ')
+                              + '</div>';
+                    }
+                    // 권장 후속 조치
+                    if (spec.supersededBy && spec.supersededBy.length > 0 && spec.status !== 'deprecated') {
+                        html += '<div style="margin-top:6px;color:#ff9800;font-size:11px">'
+                              + '권장: 대체 스펙 검토 후 deprecated 전환 고려</div>';
+                    }
+                    html += '</div>';
+                }
+
+                // 변경 이력 (최근 3개)
+                if (spec.changeLog && spec.changeLog.length > 0) {
+                    html += '<h3>📋 Change Log</h3>';
+                    html += '<div class="changelog-list">';
+                    const recent = spec.changeLog.slice(-3);
+                    for (const entry of recent) {
+                        const at = entry.at ? entry.at.substring(0, 10) : '';
+                        html += '<div class="changelog-entry">'
+                              + '<span class="changelog-type changelog-type-' + escapeAttr(entry.type) + '">' + escapeHtml(entry.type) + '</span> '
+                              + '<span style="color:#888;font-size:10px">' + escapeHtml(at) + ' · ' + escapeHtml(entry.author) + '</span><br>'
+                              + '<span style="font-size:11px">' + escapeHtml(entry.summary) + '</span>'
+                              + '</div>';
+                    }
+                    if (spec.changeLog.length > 3) {
+                        html += '<div style="color:#888;font-size:10px">... 및 ' + (spec.changeLog.length - 3) + '개 이전 항목</div>';
+                    }
+                    html += '</div>';
+                }
+            }
+
             // 스펙 파일 열기 버튼
             const fileId = isSpecNode ? nodeId : nodeData.featureId;
             if (fileId) {
@@ -668,6 +814,21 @@ export class GraphPanel {
                     const ref = el.getAttribute('data-ref');
                     if (ref) {
                         openCodeRef(ref);
+                    }
+                });
+            });
+
+            content.querySelectorAll('.spec-link').forEach(el => {
+                el.addEventListener('click', () => {
+                    const specId = el.getAttribute('data-spec-id');
+                    if (specId) {
+                        // 그래프에서 해당 노드로 포커스 이동
+                        const node = cy.getElementById(specId);
+                        if (node && node.length > 0) {
+                            cy.fit(node, 80);
+                            node.select();
+                            showDetail(specId);
+                        }
                     }
                 });
             });
