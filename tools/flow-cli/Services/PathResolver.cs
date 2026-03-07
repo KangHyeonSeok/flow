@@ -20,6 +20,9 @@ public class PathResolver
     public virtual string RagDbPath { get; }
     public string EmbedExePath { get; }
 
+    /// <summary>.flow/spec-cache/broken-spec-diag.json 경로 (스펙 JSON 파싱 오류 진단 캐시)</summary>
+    public string BrokenSpecDiagPath { get; }
+
     public PathResolver()
     {
         ProjectRoot = FindProjectRoot()
@@ -33,6 +36,7 @@ public class PathResolver
         SpecCacheDir = Path.Combine(FlowRoot, "spec-cache");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
+        BrokenSpecDiagPath = Path.Combine(SpecCacheDir, "broken-spec-diag.json");
     }
 
     /// <summary>
@@ -48,6 +52,7 @@ public class PathResolver
         SpecCacheDir = Path.Combine(FlowRoot, "spec-cache");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
         EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
+        BrokenSpecDiagPath = Path.Combine(SpecCacheDir, "broken-spec-diag.json");
     }
 
     /// <summary>

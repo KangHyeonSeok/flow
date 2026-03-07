@@ -8,6 +8,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_ICONS } from './types';
+import { BrokenSpecDiagRecord } from './brokenSpecDiag';
 
 export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<SpecTreeItem | undefined | void>();
@@ -45,12 +46,21 @@ export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
         const visibleSpecIds = new Set(visibleSpecs.map(spec => spec.id));
 
         if (!element) {
+            const items: SpecTreeItem[] = [];
+
+            // 손상 스펙 항목을 트리 최상단에 표시 (F-026)
+            const brokenSpecs = this.loader.getBrokenSpecs();
+            for (const broken of brokenSpecs) {
+                items.push(new BrokenSpecTreeItem(broken));
+            }
+
             // 루트: parent가 없거나, 현재 표시 집합에 parent가 없는 스펙들
             const rootSpecs = visibleSpecs.filter(spec => !spec.parent || !visibleSpecIds.has(spec.parent));
+            for (const s of rootSpecs.sort((a, b) => a.id.localeCompare(b.id))) {
+                items.push(new SpecTreeItem(s));
+            }
 
-            return rootSpecs
-                .sort((a, b) => a.id.localeCompare(b.id))
-                .map(s => new SpecTreeItem(s));
+            return items;
         }
 
         if (element.spec) {
@@ -155,5 +165,32 @@ export class SpecTreeItem extends vscode.TreeItem {
             case 'draft':
             default: return 'disabledForeground';
         }
+    }
+}
+
+/** 손상 스펙 진단 트리 항목 (F-026) */
+export class BrokenSpecTreeItem extends SpecTreeItem {
+    constructor(public readonly record: BrokenSpecDiagRecord) {
+        super(); // no spec/condition — renders as 'Unknown' base, then we override below
+
+        this.label = `⚠ ${record.specId}`;
+        const locInfo = record.line != null
+            ? ` (line ${record.line}${record.column != null ? `:${record.column}` : ''})`
+            : '';
+        this.description = `JSON 파싱 오류${locInfo}`;
+        this.tooltip = new vscode.MarkdownString(
+            `**${record.specId}** — 손상 스펙\n\n` +
+            `**오류**: ${record.errorMessage}\n\n` +
+            `**파일**: ${record.filePath}\n\n` +
+            `**감지**: ${record.detectedAt}`
+        );
+        this.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+        this.contextValue = 'brokenSpec';
+        this.collapsibleState = vscode.TreeItemCollapsibleState.None;
+        this.command = {
+            command: 'specGraph.openSpec',
+            title: '파일 열기',
+            arguments: [record.specId],
+        };
     }
 }
