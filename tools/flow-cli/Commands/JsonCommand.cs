@@ -114,6 +114,13 @@ public partial class FlowApp
         switch (request.Command.ToLowerInvariant())
         {
             case "build":
+                // F-004-C2: 타입 불일치 사전 검출
+                if (RejectIfInvalid(ValidateOptionTypes(opts, new Dictionary<string, Type>
+                {
+                    ["lint"] = typeof(bool), ["build"] = typeof(bool),
+                    ["test"] = typeof(bool), ["run"] = typeof(bool), ["all"] = typeof(bool),
+                    ["timeout"] = typeof(int)
+                }), "build", pretty)) break;
                 Build(
                     target: args.Length > 0 ? args[0] : GetOption<string?>(opts, "target", null),
                     platform: GetOption(opts, "platform", "auto"),
@@ -135,6 +142,8 @@ public partial class FlowApp
                 break;
 
             case "db-add":
+                // F-004-C2: 필수 필드 사전 검출
+                if (RejectIfInvalid(ValidateRequiredFields(opts, "content"), "db-add", pretty)) break;
                 DbAdd(
                     content: GetOption(opts, "content", ""),
                     tags: GetOption(opts, "tags", ""),
@@ -146,6 +155,8 @@ public partial class FlowApp
                 break;
 
             case "db-query":
+                // F-004-C2: 필수 필드 사전 검출
+                if (RejectIfInvalid(ValidateRequiredFields(opts, "query"), "db-query", pretty)) break;
                 DbQuery(
                     query: GetOption(opts, "query", ""),
                     plan: GetOption(opts, "plan", false),
@@ -207,6 +218,8 @@ public partial class FlowApp
                 break;
 
             case "spec-create":
+                // F-004-C2: 필수 필드 사전 검출
+                if (RejectIfInvalid(ValidateRequiredFields(opts, "title"), "spec-create", pretty)) break;
                 SpecCreate(
                     id: GetOption<string?>(opts, "id", null),
                     title: GetOption(opts, "title", ""),
@@ -345,6 +358,77 @@ public partial class FlowApp
         {
             return null;
         }
+    }
+
+    // ─── F-004-C2: 명령 실행 전 유효성 검사 헬퍼 ────────────────────────
+
+    /// <summary>
+    /// F-004-C2: 필수 필드 누락을 명령 실행 전에 검출한다.
+    /// </summary>
+    internal static List<string> ValidateRequiredFields(
+        Dictionary<string, JsonElement>? options,
+        params string[] requiredKeys)
+    {
+        var errors = new List<string>();
+        foreach (var key in requiredKeys)
+        {
+            if (options == null || !options.TryGetValue(key, out var element) ||
+                element.ValueKind == JsonValueKind.Null ||
+                (element.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(element.GetString())))
+            {
+                errors.Add($"필수 필드 누락: '{key}'");
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// F-004-C2: 타입 불일치를 명령 실행 전에 검출한다.
+    /// </summary>
+    internal static List<string> ValidateOptionTypes(
+        Dictionary<string, JsonElement>? options,
+        IReadOnlyDictionary<string, Type> expectedTypes)
+    {
+        var errors = new List<string>();
+        if (options == null) return errors;
+
+        foreach (var (key, expectedType) in expectedTypes)
+        {
+            if (!options.TryGetValue(key, out var element)) continue;
+            try
+            {
+                element.Deserialize(expectedType, JsonOutput.Read);
+            }
+            catch
+            {
+                errors.Add($"타입 오류: '{key}' 필드는 {expectedType.Name} 타입이어야 합니다");
+            }
+        }
+        return errors;
+    }
+
+    /// <summary>
+    /// 검증 오류가 있으면 VALIDATION_ERROR 응답을 출력하고 false를 반환한다.
+    /// </summary>
+    private static bool RejectIfInvalid(IEnumerable<string> errors, string command, bool pretty)
+    {
+        var errorList = errors.ToList();
+        if (errorList.Count == 0) return false;
+
+        JsonOutput.Write(new CommandResult
+        {
+            Success = false,
+            Command = command,
+            Error = new ErrorInfo
+            {
+                Code = "VALIDATION_ERROR",
+                Message = "요청 검증 실패: 명령 실행 전 오류가 검출되었습니다",
+                Details = new { errors = errorList }
+            },
+            ExitCode = 1
+        }, pretty);
+        Environment.ExitCode = 1;
+        return true;
     }
 
     /// <summary>
