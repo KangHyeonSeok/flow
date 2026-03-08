@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "JSON 기반 통합 명령 요청/응답",
   "description": "flow CLI의 모든 기능이 분리된 positional/option 인자 조합 대신 공통 JSON 요청 계약을 기본 입력으로 받아 처리하도록 표준화하고, 실행 결과와 오류도 동일한 JSON 응답 계약으로 출력하는 기능. build/spec/db/test/runner/config 등 기존 명령군은 내부적으로 공통 요청 DTO와 응답 DTO를 사용하도록 수렴하며, stdin/file/direct string 입력과 기계 친화적 오류 보고를 지원한다.",
-  "status": "queued",
+  "status": "needs-review",
   "parent": "F-001",
   "dependencies": [],
   "conditions": [
@@ -102,37 +102,38 @@
   "mutatedBy": [],
   "changeLog": [],
   "metadata": {
-    "runnerInstanceId": "runner-54356-143035",
-    "runnerStartedAt": "2026-03-08T15:04:58.2737932Z",
+    "runnerInstanceId": "runner-60224-155814",
+    "runnerStartedAt": "2026-03-08T15:58:14.9443147Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-002: JSON 기반 통합 명령 요청/응답' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T15:04:58.2737944Z"
+      "startedAt": "2026-03-08T15:58:14.9443249Z"
     },
     "lastCompletedAt": "2026-03-08T14:43:52.9210813Z",
     "lastCompletedBy": "runner-54356-143035",
     "review": {
       "source": "copilot-cli-review",
-      "reviewedAt": "2026-03-08T14:50:50.8373818Z",
-      "reviewedBy": "runner-54356-143035",
-      "summary": "JSON 기반 요청/응답 계약은 구현 의도가 충실하지만 오류 코드 표준화와 마이그레이션 정책이 명확하지 않아 재작업이 필요합니다.",
+      "reviewedAt": "2026-03-08T16:13:46.6640902Z",
+      "reviewedBy": "runner-60224-155814",
+      "summary": "자동 테스트 실패로 인해 일부 조건이 확실히 확인되지 않아 재작업이 필요합니다.",
       "failureReasons": [
-        "오류 응답의 표준 error.code 목록과 exitCode 매핑이 명세에 없음",
-        "레거시 CLI 인자 → JSON 변환의 우선순위와 deprecation 사용자 통지가 불명확",
-        "end-to-end 테스트(파일/stdin/direct string 경로 포함) 및 언어별 클라이언트 호환성 검증이 누락"
+        "자동화된 xUnit 테스트에서 F-002-C2 관련 테스트가 실패함 (runner-status 라우팅 오류).",
+        "리뷰에 제출된 증거(통합 테스트 통과 출력 또는 실행 가능한 JSON 예제 결과)가 부족함"
       ],
       "alternatives": [
-        "오류 코드 레지스트리와 exitCode 매핑을 별도 문서로 정의",
-        "마이그레이션 기간 동안 JSON/legacy 병행 모드를 명시하고 경고 메시지 표준을 추가",
-        "우선적으로 핵심 명령(build/spec/test)에 대해 E2E 테스트를 작성 후 확장"
+        "runner-status 명령의 라우팅 로직을 점검하고 JSON 요청 바인딩을 보강",
+        "통합 테스트를 보강하여 JSON 입력으로 주요 명령의 라우팅과 데이터 바인딩을 검증",
+        "명확한 예제 JSON 요청/응답과 수동 검증 스크립트를 문서화하여 리뷰 증거로 제공"
       ],
       "suggestedAttempts": [
-        "error.code 목록과 exitCode 규칙을 스펙에 추가하고 코드Refs에서 일치하는지 확인",
-        "legacy 인자 변환 로직의 우선순위와 deprecation 메시지를 명세에 명시",
-        "stdin/file/direct string 입력 경로를 포함한 E2E 테스트 시나리오를 작성하여 실행"
+        "로컬에서 FlowCLI.Tests.F002ConditionTests를 실행해 실패 사례의 상세 스택과 원인을 확인",
+        "runner 관련 명령의 라우팅 경로에서 unknown command가 발생하는 지점의 로그 및 코드 검토",
+        "문제 수정 후 동일한 절차로 spec-append-review를 재시도"
       ],
-      "additionalInformationRequests": [],
-      "questions": []
+      "verifiedConditionIds": [],
+      "additionalInformationRequests": [
+        "구현자가 내부 runner 로그와 관련 변경 커밋을 검토해야 함(명시적 제출은 불필요함)"
+      ]
     },
     "questions": [
       {
@@ -144,22 +145,25 @@
         "answeredAt": "2026-03-08T14:51:42.344Z"
       }
     ],
-    "reviewDisposition": "retry-queued",
-    "plannerState": "standby",
-    "lastReviewAt": "2026-03-08T14:50:50.8373818Z",
-    "lastReviewBy": "runner-54356-143035",
+    "reviewDisposition": "needs-user-decision",
+    "plannerState": "waiting-user-input",
+    "lastReviewAt": "2026-03-08T16:13:46.6640902Z",
+    "lastReviewBy": "runner-60224-155814",
     "selectionReason": {
-      "selectedAt": "2026-03-08T15:04:58.2726579Z",
+      "selectedAt": "2026-03-08T15:58:14.8760463Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
-      "totalCandidates": 10
+      "totalCandidates": 11
     },
     "lastAnsweredAt": "2026-03-08T14:51:42.344Z",
     "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-002",
     "worktreeBranch": "runner/F-002",
-    "implementationAttempts": 1
+    "implementationAttempts": 1,
+    "lastError": "자동 테스트 실패 (dotnet): mapped=0, failed=0 - [xUnit.net 00:00:00.29]     FlowCLI.Tests.F002ConditionTests.C2_ReadOnlyCommands_RouteRequest_DoesNotReturnUnknownCommandError(command: \"runner-status\") [FAIL]",
+    "lastErrorAt": "2026-03-08T16:12:16.0729693Z",
+    "questionStatus": "waiting-user-input"
   },
   "createdAt": "2026-03-07T04:02:46.6346598Z",
-  "updatedAt": "2026-03-08T15:10:52.716Z"
+  "updatedAt": "2026-03-08T16:13:46.6727806Z"
 }

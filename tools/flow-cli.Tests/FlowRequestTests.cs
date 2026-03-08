@@ -218,6 +218,7 @@ public class FlowRequestTests
     [InlineData("spec", "order", "spec-order")]
     [InlineData("spec", "init", "spec-init")]
     [InlineData("spec", "append-review", "spec-append-review")]
+    [InlineData("spec", "record-condition-review", "spec-record-condition-review")]
     [InlineData("runner", "start", "runner-start")]
     [InlineData("runner", "status", "runner-status")]
     [InlineData("runner", "stop", "runner-stop")]

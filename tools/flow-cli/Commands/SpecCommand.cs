@@ -199,6 +199,116 @@ public partial class FlowApp
         }
     }
 
+    [Command("spec-record-condition-review", Description = "review 단계에서 condition의 수동 테스트 결과(pass|failed)와 코멘트를 기록합니다")]
+    public void SpecRecordConditionReview(
+        [Argument(Description = "스펙 ID")] string id,
+        [Option("condition-id", Description = "condition ID")] string conditionId = "",
+        [Option("result", Description = "수동 테스트 결과 (passed|failed)")] string result = "",
+        [Option("comment", Description = "리뷰 코멘트")] string? comment = null,
+        [Option("reviewer", Description = "리뷰어 ID")] string reviewer = "human-review",
+        [Option("reviewed-at", Description = "리뷰 시각 (ISO-8601, 생략 시 현재 UTC)")] string? reviewedAt = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(conditionId))
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", "--condition-id 값은 필수입니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            if (!TryNormalizeManualReviewResult(result, out var normalizedResult))
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", "--result 값은 passed 또는 failed 여야 합니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var spec = SpecStore.Get(id);
+            if (spec == null)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", $"스펙 '{id}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var condition = spec.Conditions.FirstOrDefault(c => string.Equals(c.Id, conditionId, StringComparison.OrdinalIgnoreCase));
+            if (condition == null)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", $"condition '{conditionId}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var reviewedAtUtc = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(reviewedAt))
+            {
+                if (!DateTime.TryParse(reviewedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out reviewedAtUtc))
+                {
+                    JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", $"reviewed-at 값 '{reviewedAt}'은(는) 올바른 ISO-8601 형식이 아닙니다."), pretty);
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                reviewedAtUtc = reviewedAtUtc.ToUniversalTime();
+            }
+
+            ApplyManualConditionReview(spec, condition, normalizedResult, comment, reviewer, reviewedAtUtc);
+
+            var evaluation = SpecReviewEvaluator.Evaluate(spec);
+            spec.Metadata ??= new Dictionary<string, object>();
+
+            if (normalizedResult == "failed")
+            {
+                spec.Status = "needs-review";
+                spec.Metadata["reviewDisposition"] = "manual-verification-failed";
+                spec.Metadata["verificationSource"] = "manual-review";
+                spec.Metadata.Remove("lastVerifiedAt");
+                spec.Metadata.Remove("lastVerifiedBy");
+            }
+            else if (evaluation.CanAutoVerify)
+            {
+                spec.Status = string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase) ? "done" : "verified";
+                spec.Metadata["lastVerifiedAt"] = reviewedAtUtc.ToString("o");
+                spec.Metadata["lastVerifiedBy"] = reviewer;
+                spec.Metadata["verificationSource"] = "manual-review";
+                spec.Metadata.Remove("worktreePath");
+                spec.Metadata.Remove("worktreeBranch");
+                spec.Metadata.Remove("questionStatus");
+                spec.Metadata.Remove("reviewDisposition");
+                spec.Metadata.Remove("requiresUserInput");
+            }
+            else
+            {
+                spec.Status = "needs-review";
+                spec.Metadata["reviewDisposition"] = "manual-verification-pending";
+                spec.Metadata["verificationSource"] = "manual-review";
+            }
+
+            var updated = SpecStore.Update(spec);
+
+            JsonOutput.Write(JsonOutput.Success("spec-record-condition-review",
+                new
+                {
+                    id = updated.Id,
+                    specFile = Path.Combine(SpecStore.SpecsDir, $"{updated.Id}.json"),
+                    specStatus = updated.Status,
+                    conditionId = condition.Id,
+                    conditionStatus = condition.Status,
+                    result = normalizedResult,
+                    reviewer,
+                    reviewedAt = reviewedAtUtc.ToString("o")
+                },
+                $"condition '{condition.Id}' review 결과를 반영했습니다."), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-record-condition-review", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
     private static string FormatSpecForAI(SpecNode spec)
     {
         var sb = new System.Text.StringBuilder();
@@ -325,6 +435,16 @@ public partial class FlowApp
         return rawValue.ToString();
     }
 
+    private static string? GetMetadataString(Dictionary<string, object>? metadata, string key)
+    {
+        if (metadata == null || !metadata.TryGetValue(key, out var rawValue) || rawValue == null)
+        {
+            return null;
+        }
+
+        return rawValue.ToString();
+    }
+
     private static int CountOpenQuestions(SpecNode spec)
     {
         if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
@@ -356,6 +476,100 @@ public partial class FlowApp
         }
 
         return 0;
+    }
+
+    private static bool TryNormalizeManualReviewResult(string rawResult, out string normalized)
+    {
+        normalized = rawResult.Trim().ToLowerInvariant();
+        return normalized is "passed" or "failed";
+    }
+
+    private static void ApplyManualConditionReview(
+        SpecNode spec,
+        SpecCondition condition,
+        string result,
+        string? comment,
+        string reviewer,
+        DateTime reviewedAtUtc)
+    {
+        condition.Metadata ??= new Dictionary<string, object>();
+
+        condition.Metadata["manualVerificationReview"] = new Dictionary<string, object>
+        {
+            ["result"] = result,
+            ["comment"] = comment ?? string.Empty,
+            ["reviewer"] = reviewer,
+            ["reviewedAt"] = reviewedAtUtc.ToString("o")
+        };
+
+        condition.Metadata["manualVerificationStatus"] = result;
+
+        if (result == "passed")
+        {
+            condition.Status = "verified";
+            condition.Metadata.Remove("requiresManualVerification");
+            condition.Metadata.Remove("manualVerificationReason");
+            condition.Metadata.Remove("manualVerificationItems");
+        }
+        else
+        {
+            condition.Status = "needs-review";
+            condition.Metadata["requiresManualVerification"] = true;
+
+            if (string.IsNullOrWhiteSpace(GetMetadataString(condition.Metadata, "manualVerificationReason")) && !string.IsNullOrWhiteSpace(comment))
+            {
+                condition.Metadata["manualVerificationReason"] = comment!;
+            }
+        }
+
+        UpsertManualReviewTest(condition, reviewer, reviewedAtUtc, result, comment);
+        UpsertManualReviewEvidence(spec.Evidence, spec.Id, condition.Id, reviewedAtUtc, result, comment);
+        UpsertManualReviewEvidence(condition.Evidence, spec.Id, condition.Id, reviewedAtUtc, result, comment);
+    }
+
+    private static void UpsertManualReviewTest(
+        SpecCondition condition,
+        string reviewer,
+        DateTime reviewedAtUtc,
+        string result,
+        string? comment)
+    {
+        var testId = $"manual-review:{condition.Id}";
+        var existing = condition.Tests.FirstOrDefault(test => string.Equals(test.TestId, testId, StringComparison.OrdinalIgnoreCase));
+        if (existing == null)
+        {
+            existing = new TestLink { TestId = testId };
+            condition.Tests.Add(existing);
+        }
+
+        existing.Name = $"Manual review for {condition.Id}";
+        existing.Suite = reviewer;
+        existing.Status = result;
+        existing.RunAt = reviewedAtUtc.ToString("o");
+        existing.ErrorMessage = string.IsNullOrWhiteSpace(comment) ? null : comment;
+        existing.Quarantined = false;
+    }
+
+    private static void UpsertManualReviewEvidence(
+        List<SpecEvidence> evidenceList,
+        string specId,
+        string conditionId,
+        DateTime reviewedAtUtc,
+        string result,
+        string? comment)
+    {
+        var path = $"manual-review://{specId}/{conditionId}";
+        evidenceList.RemoveAll(evidence => evidence.Type == "test-result" && string.Equals(evidence.Path, path, StringComparison.OrdinalIgnoreCase));
+        evidenceList.Add(new SpecEvidence
+        {
+            Type = "test-result",
+            Path = path,
+            CapturedAt = reviewedAtUtc.ToString("o"),
+            Platform = "manual-review",
+            Summary = string.IsNullOrWhiteSpace(comment)
+                ? $"{conditionId} manual review: {result}"
+                : $"{conditionId} manual review: {result} - {comment}"
+        });
     }
 
     // ─── flow spec list ───────────────────────────────────────────────

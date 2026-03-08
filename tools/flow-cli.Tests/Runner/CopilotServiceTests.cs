@@ -17,6 +17,7 @@ public class CopilotServiceTests
         prompt.Should().Contain("requiresManualVerification");
         prompt.Should().Contain("manualVerificationReason");
         prompt.Should().Contain("manualVerificationItems");
+        prompt.Should().Contain("spec-record-condition-review F-302");
         prompt.Should().Contain("condition.status는 직접 `verified`나 `done`으로 바꾸지 마세요.");
     }
 
@@ -29,6 +30,7 @@ public class CopilotServiceTests
         prompt.Should().Contain("자동 테스트로 다룬 condition ID 목록");
         prompt.Should().Contain("수동 검증으로 남긴 condition ID 목록과 이유");
         prompt.Should().Contain("추가하거나 실행한 테스트/검증 명령");
+        prompt.Should().Contain("수집한 테스트 결과 파일, 로그, 스크린샷 등 evidence 경로");
     }
 
     [Fact]

@@ -110,6 +110,111 @@ public class SpecReviewEvaluatorTests
         evaluation.CanAutoVerify.Should().BeFalse();
     }
 
+      [Fact]
+      public void PromoteVerifiedConditionsFromArtifacts_PromotesConditionWithPassingTestsAndEvidence()
+      {
+        var spec = CreateSpec(
+          status: "needs-review",
+          conditions:
+          [
+            CreateCondition(
+              "F-100-C1",
+              "needs-review",
+              tests:
+              [
+                new TestLink { TestId = "test-1", Status = "passed" }
+              ],
+              evidence:
+              [
+                new SpecEvidence { Type = "test-result", Path = "artifacts/test-results.xml" }
+              ])
+          ]);
+
+        var promoted = SpecReviewEvaluator.PromoteVerifiedConditionsFromArtifacts(
+          spec,
+          "runner-01",
+          "runner-review-artifacts",
+          DateTime.Parse("2026-03-09T00:00:00Z"));
+
+        promoted.Should().Be(1);
+        spec.Conditions[0].Status.Should().Be("verified");
+        spec.Conditions[0].Metadata.Should().NotBeNull();
+        spec.Conditions[0].Metadata!["verificationSource"].Should().Be("runner-review-artifacts");
+        spec.Conditions[0].Metadata["lastVerifiedBy"].Should().Be("runner-01");
+      }
+
+      [Fact]
+      public void PromoteVerifiedConditionsFromArtifacts_DoesNotPromoteWhenManualVerificationIsRequired()
+      {
+        var spec = CreateSpec(
+          status: "needs-review",
+          conditions:
+          [
+            CreateCondition(
+              "F-100-C1",
+              "needs-review",
+              tests:
+              [
+                new TestLink { TestId = "test-1", Status = "passed" }
+              ],
+              evidence:
+              [
+                new SpecEvidence { Type = "test-result", Path = "artifacts/test-results.xml" }
+              ],
+              metadata: new Dictionary<string, object>
+              {
+                ["requiresManualVerification"] = true,
+                ["manualVerificationItems"] = new object[] { "화면 색상 확인" }
+              })
+          ]);
+
+        var promoted = SpecReviewEvaluator.PromoteVerifiedConditionsFromArtifacts(
+          spec,
+          "runner-01",
+          "runner-review-artifacts",
+          DateTime.Parse("2026-03-09T00:00:00Z"));
+
+        promoted.Should().Be(0);
+        spec.Conditions[0].Status.Should().Be("needs-review");
+      }
+
+      [Fact]
+      public void PromoteVerifiedConditionsFromArtifacts_DoesNotPromoteWhenEvidenceIsMissingOrTestsFailed()
+      {
+        var spec = CreateSpec(
+          status: "needs-review",
+          conditions:
+          [
+            CreateCondition(
+              "F-100-C1",
+              "needs-review",
+              tests:
+              [
+                new TestLink { TestId = "test-1", Status = "passed" }
+              ]),
+            CreateCondition(
+              "F-100-C2",
+              "needs-review",
+              tests:
+              [
+                new TestLink { TestId = "test-2", Status = "failed" }
+              ],
+              evidence:
+              [
+                new SpecEvidence { Type = "test-result", Path = "artifacts/test-results.xml" }
+              ])
+          ]);
+
+        var promoted = SpecReviewEvaluator.PromoteVerifiedConditionsFromArtifacts(
+          spec,
+          "runner-01",
+          "runner-review-artifacts",
+          DateTime.Parse("2026-03-09T00:00:00Z"));
+
+        promoted.Should().Be(0);
+        spec.Conditions.Should().OnlyContain(condition => condition.Status == "needs-review");
+      }
+
     private static SpecNode CreateSpec(
         string status,
         List<SpecCondition> conditions,
@@ -126,11 +231,20 @@ public class SpecReviewEvaluatorTests
         CodeRefs = codeRefs ?? new List<string>()
     };
 
-      private static SpecCondition CreateCondition(string id, string status, List<string>? codeRefs = null) => new()
+      private static SpecCondition CreateCondition(
+        string id,
+        string status,
+        List<string>? codeRefs = null,
+        List<TestLink>? tests = null,
+        List<SpecEvidence>? evidence = null,
+        Dictionary<string, object>? metadata = null) => new()
     {
         Id = id,
         Description = id,
         Status = status,
-        CodeRefs = codeRefs ?? new List<string>()
+        CodeRefs = codeRefs ?? new List<string>(),
+        Tests = tests ?? new List<TestLink>(),
+        Evidence = evidence ?? new List<SpecEvidence>(),
+        Metadata = metadata
     };
 }

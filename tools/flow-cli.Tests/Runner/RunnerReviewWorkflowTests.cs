@@ -32,8 +32,31 @@ public class RunnerReviewWorkflowTests
 
         parsed.Should().BeTrue();
         analysis.Summary.Should().Be("머지 실패로 재시도 필요");
+        analysis.VerifiedConditionIds.Should().BeEmpty();
         analysis.RequiresUserInput.Should().BeTrue();
         analysis.Questions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void ParseReviewAnalysis_ParsesVerifiedConditionIds()
+    {
+        const string output = """
+        {
+          "summary": "조건 확인 완료",
+          "failureReasons": [],
+          "alternatives": [],
+          "suggestedAttempts": [],
+          "verifiedConditionIds": ["F-210-C1", "F-210-C2"],
+          "requiresUserInput": false,
+          "additionalInformationRequests": [],
+          "questions": []
+        }
+        """;
+
+        var parsed = RunnerService.TryParseReviewAnalysis(output, out var analysis);
+
+        parsed.Should().BeTrue();
+        analysis.VerifiedConditionIds.Should().Equal("F-210-C1", "F-210-C2");
     }
 
     [Fact]
@@ -146,5 +169,46 @@ public class RunnerReviewWorkflowTests
         spec.Metadata.Should().NotContainKey("requiresUserInput");
         spec.Metadata.Should().NotContainKey("questionStatus");
         spec.Metadata["reviewDisposition"].Should().Be("retry-queued");
+    }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WhenReviewVerifiesAllConditions_MarksSpecVerified()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-202",
+            NodeType = "feature",
+            Status = "needs-review",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-202-C1",
+                    Status = "needs-review",
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["requiresManualVerification"] = true,
+                        ["manualVerificationItems"] = new object[] { "검토 필요" }
+                    }
+                }
+            ],
+            Metadata = new Dictionary<string, object>()
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "조건 확인 완료",
+            SuggestedAttempts = ["추가 작업 불필요"],
+            VerifiedConditionIds = ["F-202-C1"],
+            RequiresUserInput = false
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
+
+        spec.Status.Should().Be("verified");
+        spec.Conditions[0].Status.Should().Be("verified");
+        spec.Conditions[0].Metadata.Should().NotContainKey("requiresManualVerification");
+        ((Dictionary<string, object>)spec.Metadata!["review"])["verifiedConditionIds"].Should().NotBeNull();
+        spec.Metadata["reviewDisposition"].Should().Be("review-verified");
+        spec.Metadata["verificationSource"].Should().Be("copilot-cli-review");
     }
 }

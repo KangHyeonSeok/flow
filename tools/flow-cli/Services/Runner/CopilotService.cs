@@ -15,6 +15,21 @@ public class CopilotService
     private readonly RunnerConfig _config;
     private readonly RunnerLogService _log;
 
+    /// <summary>
+    /// 검토 목적:
+    /// - verified가 아닌 condition의 code/tests/evidence/metadata를 검토해 조건이 이미 충족되었는지 판단
+    /// - 왜 실패했는지 또는 왜 재작업이 필요한지 요약
+    /// - 어떤 대안이 있는지 제안
+    /// - 다음 시도에서 무엇을 해야 하는지 제안
+    /// - 사용자 판단이 필요한지 식별
+    /// - 추가 정보 요청이 필요한지 식별
+    /// 
+    /// condition 판정 규칙:
+    /// - 스펙 JSON 안의 condition, tests, evidence, metadata, codeRefs와 실제 워크스페이스 파일을 함께 검토할 수 있습니다.
+    /// - 조건이 이미 만족되었다고 근거를 갖고 판단되면 그 condition ID를 `verifiedConditionIds`에 추가하세요.
+    /// - 확신할 수 없는 condition은 `verifiedConditionIds`에 넣지 마세요.
+    /// - `verifiedConditionIds`에 넣는 condition은 코드 수정 없이 review 단계에서 verified 처리됩니다.
+    /// - 스펙 JSON 파일을 직접 수정하지 않습니다.
     public CopilotService(RunnerConfig config, RunnerLogService log)
     {
         _config = config;
@@ -230,12 +245,16 @@ public class CopilotService
             - `requiresManualVerification`: true
             - `manualVerificationReason`: 자동화가 어려운 이유
             - `manualVerificationItems`: 사용자가 review 단계에서 확인할 수 있는 짧은 체크 항목 배열
+            자동 테스트를 실행했다면 condition별 성공/실패 여부와 수집한 결과 파일/로그 위치를 분명히 남겨서 runner가 tests/evidence를 동기화할 수 있게 하세요.
+            사람이 직접 확인해야 하는 condition은 review 단계에서 아래 명령으로 결과를 기록할 수 있게 condition ID와 확인 항목을 남기세요.
+            - `./flow.ps1 spec-record-condition-review {specId} --condition-id <condition-id> --result passed|failed --comment ""<review comment>"" --reviewer ""human-review""`
             condition.status는 직접 `verified`나 `done`으로 바꾸지 마세요. 상태 변경은 runner/review 단계에서 처리합니다.
             테스트를 추가하거나 실행했다면 어떤 condition을 어떤 테스트로 검증했는지 결과를 남길 수 있게 파일/명령 기준이 분명해야 합니다.
             최종 응답에는 다음을 짧게 요약하세요.
             - 자동 테스트로 다룬 condition ID 목록
             - 수동 검증으로 남긴 condition ID 목록과 이유
             - 추가하거나 실행한 테스트/검증 명령
+            - 수집한 테스트 결과 파일, 로그, 스크린샷 등 evidence 경로
             {reviewSection}
             스펙 ID: {specId}
             스펙 파일 경로: {specFilePath}
@@ -286,11 +305,19 @@ public class CopilotService
 7. 최종 응답은 짧은 완료 메시지 한 줄만 출력합니다.
 
 검토 목적:
+- verified가 아닌 condition의 code/tests/evidence/metadata를 검토해 조건이 이미 충족되었는지 판단
 - 왜 실패했는지 또는 왜 재작업이 필요한지 요약
 - 어떤 대안이 있는지 제안
 - 다음 시도에서 무엇을 해야 하는지 제안
 - 사용자 판단이 필요한지 식별
 - 추가 정보 요청이 필요한지 식별
+
+condition 판정 규칙:
+- 스펙 JSON 안의 condition, tests, evidence, metadata, codeRefs와 실제 워크스페이스 파일을 함께 검토할 수 있습니다.
+- 조건이 이미 만족되었다고 근거를 갖고 판단되면 그 condition ID를 `verifiedConditionIds`에 추가하세요.
+- 확신할 수 없는 condition은 `verifiedConditionIds`에 넣지 마세요.
+- `verifiedConditionIds`에 넣는 condition은 코드 수정 없이 review 단계에서 verified 처리됩니다.
+- 스펙 JSON 파일을 직접 수정하지 않습니다.
 
 질문 생성 규칙:
 - 사용자 질문은 제품 요구사항, 정책 결정, 도메인 지식, 누락된 스펙 설명처럼 사용자만 답할 수 있는 정보에 한정합니다.
@@ -303,6 +330,7 @@ review JSON 스키마:
     ""failureReasons"": [""실패/보류 원인""],
     ""alternatives"": [""가능한 대안""],
     ""suggestedAttempts"": [""다음 시도 액션""],
+    ""verifiedConditionIds"": [""충족이 확인된 condition ID""],
     ""requiresUserInput"": true,
     ""additionalInformationRequests"": [""추가로 필요한 정보""],
     ""questions"": [

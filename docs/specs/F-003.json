@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "공통 JSON 요청 스키마 및 디스패처 도입",
   "description": "모든 flow 명령이 공유할 JSON 요청 envelope와 내부 디스패처를 정의한다. 명령 식별자, 서브커맨드, payload, 옵션, 실행 컨텍스트를 공통 모델로 표준화하고, 단일 진입점에서 적절한 명령 핸들러로 위임하는 기반 작업이다.",
-  "status": "queued",
+  "status": "working",
   "parent": "F-002",
   "dependencies": [],
   "conditions": [
@@ -62,12 +62,12 @@
   "changeLog": [],
   "metadata": {
     "workItemType": "task",
-    "runnerInstanceId": "runner-54356-143035",
-    "runnerStartedAt": "2026-03-08T14:43:54.8400331Z",
+    "runnerInstanceId": "runner-60224-155814",
+    "runnerStartedAt": "2026-03-08T16:12:16.0973949Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-003: 공통 JSON 요청 스키마 및 디스패처 도입' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T14:43:54.8400342Z"
+      "startedAt": "2026-03-08T16:12:16.0973964Z"
     },
     "lastCompletedAt": "2026-03-08T14:50:51.9303297Z",
     "lastCompletedBy": "runner-54356-143035",
@@ -139,16 +139,16 @@
     "lastReviewAt": "2026-03-08T14:53:00.4181884Z",
     "lastReviewBy": "runner-54356-143035",
     "selectionReason": {
-      "selectedAt": "2026-03-08T14:43:54.8392654Z",
+      "selectedAt": "2026-03-08T16:12:16.0956877Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
-      "totalCandidates": 9
+      "totalCandidates": 10
     },
     "lastAnsweredAt": "2026-03-08T14:54:38.841Z",
     "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-003",
     "worktreeBranch": "runner/F-003"
   },
   "createdAt": "2026-03-07T04:04:25.0823518Z",
-  "updatedAt": "2026-03-08T14:54:38.841Z"
+  "updatedAt": "2026-03-08T16:12:16.0976438Z"
 }

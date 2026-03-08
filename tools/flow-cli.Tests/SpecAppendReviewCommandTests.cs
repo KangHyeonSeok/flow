@@ -117,6 +117,59 @@ public class SpecAppendReviewCommandTests : IDisposable
         ReadCapturedOutput().Should().Contain("리뷰 JSON 파싱 실패");
     }
 
+    [Fact]
+    public void SpecAppendReview_WhenReviewVerifiesCondition_UpdatesConditionAndSpecStatus()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(new SpecNode
+        {
+            Id = "F-303",
+            Title = "condition review verify test",
+            Description = "review append verify condition",
+            Status = "needs-review",
+            NodeType = "feature",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-303-C1",
+                    Status = "needs-review",
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["requiresManualVerification"] = true,
+                        ["manualVerificationItems"] = new object[] { "검토 필요" }
+                    }
+                }
+            ]
+        });
+
+        var inputFile = Path.Combine(_tempDir, "review-verified.json");
+        File.WriteAllText(inputFile, """
+        {
+          "summary": "조건 확인 완료",
+          "failureReasons": [],
+          "alternatives": [],
+          "suggestedAttempts": ["추가 작업 불필요"],
+          "verifiedConditionIds": ["F-303-C1"],
+          "requiresUserInput": false,
+          "questions": []
+        }
+        """);
+
+        var app = new FlowApp();
+
+        app.SpecAppendReview("F-303", inputFile: inputFile, reviewer: "runner-test");
+
+        Environment.ExitCode.Should().Be(0);
+        var updated = store.Get("F-303");
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be("verified");
+        updated.Conditions[0].Status.Should().Be("verified");
+        updated.Conditions[0].Metadata.Should().NotContainKey("requiresManualVerification");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("review-verified");
+    }
+
     private string ReadCapturedOutput()
     {
         var text = _capturedOut.ToString();

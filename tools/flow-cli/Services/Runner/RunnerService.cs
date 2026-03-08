@@ -1052,7 +1052,21 @@ public class RunnerService
                 continue;
             }
 
+            var verifiedAtUtc = DateTime.UtcNow;
+            var promotedConditions = SpecReviewEvaluator.PromoteVerifiedConditionsFromArtifacts(
+                spec,
+                _instanceId,
+                "runner-review-artifacts",
+                verifiedAtUtc);
             var evaluation = SpecReviewEvaluator.Evaluate(spec);
+
+            if (promotedConditions > 0 && !evaluation.CanAutoVerify)
+            {
+                _specStore.Update(spec);
+                _log.Info("condition-auto-verify",
+                    $"review loop가 테스트/evidence를 확인해 condition {promotedConditions}건을 verified로 승격", spec.Id);
+            }
+
             if (!evaluation.CanAutoVerify)
             {
                 continue;
@@ -1424,8 +1438,10 @@ public class RunnerService
             return FinalizeResult(result);
         }
 
-        // 검토 완료 후 queued로 재배치된 경우 worktree 정리 (needs-review+미해결 질문은 보존)
-        if (string.Equals(reviewedSpec!.Status, "queued", StringComparison.OrdinalIgnoreCase))
+        // 검토 완료 후 queued/verified/done 전환된 경우 worktree 정리 (needs-review+미해결 질문은 보존)
+        if (string.Equals(reviewedSpec!.Status, "queued", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(reviewedSpec.Status, "verified", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(reviewedSpec.Status, "done", StringComparison.OrdinalIgnoreCase))
         {
             await CleanupWorktreeFromMetadataAsync(reviewedSpec);
         }
@@ -1537,6 +1553,7 @@ public class RunnerService
         spec.Metadata ??= new Dictionary<string, object>();
 
         var reviewedAt = reviewedAtUtc.ToString("o");
+        ApplyReviewVerifiedConditions(spec, analysis.VerifiedConditionIds, reviewerId, reviewedAtUtc, "copilot-cli-review");
         var questions = BuildReviewQuestions(spec, analysis, reviewerId, reviewedAt);
         var hasOpenQuestions = questions.Any(q => string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
 
@@ -1575,8 +1592,31 @@ public class RunnerService
             spec.Metadata["implementationAttempts"] = 0;
         }
 
-        // 미해결 질문이 있으면 "needs-review" 상태 유지, 없으면 "queued"로 재배치한다.
-        spec.Status = hasOpenQuestions ? "needs-review" : "queued";
+        var evaluation = SpecReviewEvaluator.Evaluate(spec);
+
+        if (hasOpenQuestions)
+        {
+            spec.Status = "needs-review";
+            spec.Metadata.Remove("lastVerifiedAt");
+            spec.Metadata.Remove("lastVerifiedBy");
+            spec.Metadata.Remove("verificationSource");
+        }
+        else if (evaluation.CanAutoVerify)
+        {
+            spec.Status = string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase) ? "done" : "verified";
+            spec.Metadata["lastVerifiedAt"] = reviewedAt;
+            spec.Metadata["lastVerifiedBy"] = reviewerId;
+            spec.Metadata["verificationSource"] = "copilot-cli-review";
+            spec.Metadata.Remove("worktreePath");
+            spec.Metadata.Remove("worktreeBranch");
+        }
+        else
+        {
+            spec.Status = "queued";
+            spec.Metadata.Remove("lastVerifiedAt");
+            spec.Metadata.Remove("lastVerifiedBy");
+            spec.Metadata.Remove("verificationSource");
+        }
 
         spec.Metadata["review"] = new Dictionary<string, object>
         {
@@ -1587,6 +1627,7 @@ public class RunnerService
             ["failureReasons"] = analysis.FailureReasons,
             ["alternatives"] = analysis.Alternatives,
             ["suggestedAttempts"] = analysis.SuggestedAttempts,
+            ["verifiedConditionIds"] = analysis.VerifiedConditionIds,
             ["additionalInformationRequests"] = analysis.AdditionalInformationRequests
         };
         spec.Metadata["questions"] = questions
@@ -1601,7 +1642,11 @@ public class RunnerService
                 ["requestedBy"] = question.RequestedBy ?? reviewerId
             })
             .ToList();
-        spec.Metadata["reviewDisposition"] = hasOpenQuestions ? "needs-user-decision" : "retry-queued";
+        spec.Metadata["reviewDisposition"] = hasOpenQuestions
+            ? "needs-user-decision"
+            : evaluation.CanAutoVerify
+                ? "review-verified"
+                : "retry-queued";
         spec.Metadata["plannerState"] = hasOpenQuestions ? "waiting-user-input" : "standby";
         spec.Metadata["lastReviewAt"] = reviewedAt;
         spec.Metadata["lastReviewBy"] = reviewerId;
@@ -1622,8 +1667,10 @@ public class RunnerService
         if (spec == null || spec.Metadata == null)
             return false;
 
-        // "queued" (자동 재시도) 또는 "needs-review" + open 질문 존재(사용자 입력 대기) 모두 유효한 반영 결과
+        // "queued"(자동 재시도), "verified/done"(검토 완료), 또는 "needs-review" + open 질문 존재(사용자 입력 대기) 모두 유효한 반영 결과
         var hasValidStatus = string.Equals(spec.Status, "queued", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(spec.Status, "verified", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(spec.Status, "done", StringComparison.OrdinalIgnoreCase)
             || (string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && HasOpenQuestions(spec));
 
         if (!hasValidStatus)
@@ -1642,6 +1689,7 @@ public class RunnerService
             FailureReasons = GetStringArray(root, "failureReasons"),
             Alternatives = GetStringArray(root, "alternatives"),
             SuggestedAttempts = GetStringArray(root, "suggestedAttempts"),
+            VerifiedConditionIds = GetStringArray(root, "verifiedConditionIds"),
             RequiresUserInput = GetBoolean(root, "requiresUserInput"),
             AdditionalInformationRequests = GetStringArray(root, "additionalInformationRequests"),
             Questions = GetQuestions(root)
@@ -1657,6 +1705,12 @@ public class RunnerService
 
     private static SpecReviewAnalysis SanitizeReviewAnalysis(SpecReviewAnalysis analysis)
     {
+        analysis.VerifiedConditionIds = analysis.VerifiedConditionIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         analysis.AdditionalInformationRequests = analysis.AdditionalInformationRequests
             .Where(request => !LooksLikeInternalExecutionArtifactRequest(request))
             .ToList();
@@ -1673,6 +1727,45 @@ public class RunnerService
         }
 
         return analysis;
+    }
+
+    private static void ApplyReviewVerifiedConditions(
+        SpecNode spec,
+        IEnumerable<string>? verifiedConditionIds,
+        string reviewerId,
+        DateTime reviewedAtUtc,
+        string verificationSource)
+    {
+        if (verifiedConditionIds == null)
+        {
+            return;
+        }
+
+        var normalizedIds = new HashSet<string>(
+            verifiedConditionIds.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (normalizedIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var condition in spec.Conditions)
+        {
+            if (!normalizedIds.Contains(condition.Id))
+            {
+                continue;
+            }
+
+            condition.Status = "verified";
+            condition.Metadata ??= new Dictionary<string, object>();
+            condition.Metadata["lastVerifiedAt"] = reviewedAtUtc.ToString("o");
+            condition.Metadata["lastVerifiedBy"] = reviewerId;
+            condition.Metadata["verificationSource"] = verificationSource;
+            condition.Metadata.Remove("requiresManualVerification");
+            condition.Metadata.Remove("manualVerificationReason");
+            condition.Metadata.Remove("manualVerificationItems");
+        }
     }
 
     private static bool LooksLikeInternalExecutionArtifactRequest(string? text, string? why = null)

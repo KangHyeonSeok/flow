@@ -157,6 +157,7 @@ public class SpecReviewAnalysis
     public List<string> FailureReasons { get; set; } = new();
     public List<string> Alternatives { get; set; } = new();
     public List<string> SuggestedAttempts { get; set; } = new();
+    public List<string> VerifiedConditionIds { get; set; } = new();
     public bool RequiresUserInput { get; set; }
     public List<string> AdditionalInformationRequests { get; set; } = new();
     public List<SpecReviewQuestion> Questions { get; set; } = new();

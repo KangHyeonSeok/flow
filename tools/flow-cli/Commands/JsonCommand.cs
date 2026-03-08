@@ -332,6 +332,18 @@ public partial class FlowApp
                     pretty: pretty);
                 break;
 
+            case "spec-record-condition-review":
+                if (RejectIfInvalid(ValidateRequiredFields(opts, "condition-id", "result"), "spec-record-condition-review", pretty)) break;
+                SpecRecordConditionReview(
+                    id: args.Length > 0 ? args[0] : GetOption(opts, "id", ""),
+                    conditionId: GetOption(opts, "condition-id", ""),
+                    result: GetOption(opts, "result", ""),
+                    comment: GetOption<string?>(opts, "comment", null),
+                    reviewer: GetOption(opts, "reviewer", "human-review"),
+                    reviewedAt: GetOption<string?>(opts, "reviewed-at", null),
+                    pretty: pretty);
+                break;
+
             default:
                 JsonOutput.Write(new CommandResult
                 {
@@ -350,7 +362,7 @@ public partial class FlowApp
                                 "spec", "spec-init", "spec-create", "spec-get",
                                 "spec-list", "spec-delete", "spec-validate", "spec-graph",
                                 "spec-impact", "spec-propagate", "spec-check-refs", "spec-order",
-                                "spec-append-review",
+                                "spec-append-review", "spec-record-condition-review",
                                 "runner", "runner-start", "runner-status", "runner-stop", "runner-logs",
                                 "human-input"
                             }

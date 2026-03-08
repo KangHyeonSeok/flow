@@ -55,8 +55,96 @@ internal static class SpecReviewEvaluator
         };
     }
 
+    public static int PromoteVerifiedConditionsFromArtifacts(
+        SpecNode spec,
+        string verifier,
+        string verificationSource,
+        DateTime verifiedAtUtc)
+    {
+        var promoted = 0;
+
+        foreach (var condition in spec.Conditions)
+        {
+            if (!CanPromoteConditionFromArtifacts(condition))
+            {
+                continue;
+            }
+
+            condition.Status = "verified";
+            condition.Metadata ??= new Dictionary<string, object>();
+            condition.Metadata["lastVerifiedAt"] = verifiedAtUtc.ToString("o");
+            condition.Metadata["lastVerifiedBy"] = verifier;
+            condition.Metadata["verificationSource"] = verificationSource;
+            promoted++;
+        }
+
+        return promoted;
+    }
+
     private static int CountCodeRefs(SpecNode spec)
         => (spec.CodeRefs?.Count ?? 0) + spec.Conditions.Sum(condition => condition.CodeRefs?.Count ?? 0);
+
+    private static bool CanPromoteConditionFromArtifacts(SpecCondition condition)
+    {
+        if (string.Equals(condition.Status, "verified", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(condition.Status, "done", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (HasManualVerificationRequirement(condition.Metadata))
+        {
+            return false;
+        }
+
+        if (!HasSupportingEvidence(condition))
+        {
+            return false;
+        }
+
+        return HasHealthyAutomatedTests(condition);
+    }
+
+    private static bool HasManualVerificationRequirement(Dictionary<string, object>? metadata)
+    {
+        if (metadata == null || metadata.Count == 0)
+        {
+            return false;
+        }
+
+        var requiresManualVerification = TryGetBoolean(metadata, "requiresManualVerification", out var required) && required;
+        var explicitItems = TryGetManualVerificationItems(metadata, "condition", null);
+        return requiresManualVerification || explicitItems.Count > 0;
+    }
+
+    private static bool HasSupportingEvidence(SpecCondition condition)
+        => condition.Evidence.Any(evidence =>
+            !string.IsNullOrWhiteSpace(evidence.Path)
+            || !string.IsNullOrWhiteSpace(evidence.Summary));
+
+    private static bool HasHealthyAutomatedTests(SpecCondition condition)
+    {
+        if (condition.Tests.Count == 0)
+        {
+            return false;
+        }
+
+        if (condition.Tests.Any(test => test.Quarantined))
+        {
+            return false;
+        }
+
+        var statuses = condition.Tests
+            .Select(test => test.Status?.Trim().ToLowerInvariant() ?? string.Empty)
+            .ToList();
+
+        if (statuses.Any(status => status is "failed" or "flaky" or "quarantined"))
+        {
+            return false;
+        }
+
+        return statuses.Any(status => status == "passed");
+    }
 
     private static void AppendManualVerificationItems(
         Dictionary<string, object>? metadata,
