@@ -36,4 +36,35 @@ public class ConsoleHelperTests
         });
         Assert.Null(ex);
     }
+
+    /// <summary>
+    /// DetachConsoleForDaemon은 스레드에서 호출되어도 예외를 던지지 않아야 한다.
+    /// 비동기 데몬 시작 시나리오에서의 안정성을 검증한다.
+    /// </summary>
+    [Fact]
+    public async Task DetachConsoleForDaemon_CalledFromThread_DoesNotThrow()
+    {
+        Exception? capturedEx = null;
+        await Task.Run(() =>
+        {
+            try { ConsoleHelper.DetachConsoleForDaemon(); }
+            catch (Exception ex) { capturedEx = ex; }
+        });
+        Assert.Null(capturedEx);
+    }
+
+    /// <summary>
+    /// DetachConsoleForDaemon은 병렬 호출 시에도 예외를 던지지 않아야 한다.
+    /// ConPTY 환경에서 여러 스레드가 동시에 초기화하는 엣지 케이스를 커버한다.
+    /// </summary>
+    [Fact]
+    public async Task DetachConsoleForDaemon_CalledConcurrently_DoesNotThrow()
+    {
+        var tasks = Enumerable.Range(0, 5)
+            .Select(_ => Task.Run(() => ConsoleHelper.DetachConsoleForDaemon()))
+            .ToArray();
+
+        var ex = await Record.ExceptionAsync(() => Task.WhenAll(tasks));
+        Assert.Null(ex);
+    }
 }
