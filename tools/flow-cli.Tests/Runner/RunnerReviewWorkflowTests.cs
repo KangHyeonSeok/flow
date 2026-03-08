@@ -52,6 +52,35 @@ public class RunnerReviewWorkflowTests
         errorMessage.Should().Contain("리뷰 JSON 파싱 실패");
     }
 
+        [Fact]
+        public void ParseReviewAnalysis_FiltersInternalArtifactRequests()
+        {
+                const string output = """
+                {
+                    "summary": "자동 분석에 내부 실행 정보가 더 필요합니다.",
+                    "failureReasons": ["현재 컨텍스트만으로 원인 확정이 어렵습니다."],
+                    "alternatives": ["검토자가 내부 로그를 확인한 뒤 재시도"],
+                    "suggestedAttempts": ["runner 로그와 변경 사항을 내부적으로 점검"],
+                    "requiresUserInput": true,
+                    "additionalInformationRequests": ["검토 실행의 전체 로그와 변경 파일 목록을 제공해 주시겠습니까?"],
+                    "questions": [
+                        {
+                            "type": "missing-info",
+                            "question": "검토 실행의 전체 로그와 변경 파일 목록을 제공해 주시겠습니까?",
+                            "why": "자동 원인 분석을 위해 상세 로그와 변경 사항이 필요합니다."
+                        }
+                    ]
+                }
+                """;
+
+                var parsed = RunnerService.TryParseReviewAnalysis(output, out var analysis);
+
+                parsed.Should().BeTrue();
+                analysis.RequiresUserInput.Should().BeFalse();
+                analysis.AdditionalInformationRequests.Should().BeEmpty();
+                analysis.Questions.Should().BeEmpty();
+        }
+
     [Fact]
     public void ApplyReviewAnalysis_WhenQuestionsExist_RequeuesAndFlagsUserInput()
     {

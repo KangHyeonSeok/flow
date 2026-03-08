@@ -88,9 +88,14 @@ export class KanbanPanel {
     /** Webview → Extension 메시지 핸들링 */
     private async handleMessage(msg: { type: string; [key: string]: unknown }): Promise<void> {
         switch (msg.type) {
+            case '__jsError': {
+                vscode.window.showErrorMessage(`[칸반 JS 에러] line ${msg.line}: ${msg.msg}`);
+                break;
+            }
             case 'selectSpec': {
                 const specId = msg.specId as string;
                 vscode.commands.executeCommand('specGraph.showDetail', specId);
+                vscode.commands.executeCommand('specGraph.openSpecViewFocused', specId, true);
                 break;
             }
             case 'openSpec': {
@@ -286,6 +291,7 @@ export class KanbanPanel {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+
 <title>칸반 보드</title>
 <style>
   :root {
@@ -517,10 +523,7 @@ export class KanbanPanel {
   .card-actions {
     display: flex;
     gap: 4px;
-    opacity: 0;
-    transition: opacity 0.1s;
   }
-  .card:hover .card-actions { opacity: 1; }
   .action-btn {
     background: transparent;
     border: 1px solid var(--border);
@@ -532,6 +535,18 @@ export class KanbanPanel {
     transition: background 0.1s;
   }
   .action-btn:hover { background: var(--card-hover); }
+  .detail-btn {
+    background: var(--vscode-button-secondaryBackground, transparent);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .detail-btn:hover { background: var(--card-hover); }
   /* ── 상태 변경 드롭다운 ── */
   .status-select {
     background: var(--input-bg);
@@ -672,7 +687,17 @@ export class KanbanPanel {
 </div>
 
 <script>
+// acquireVsCodeApi()는 반드시 가장 먼저 한 번만 호출해야 한다.
 const vscode = acquireVsCodeApi();
+// JS 에러를 extension으로 보고 (vscode 취득 후 정의)
+window.onerror = function(msg, src, line, col, err) {
+  try { vscode.postMessage({ type: '__jsError', msg: String(msg), line: line }); } catch(e) {}
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:6px 10px;font-size:11px;z-index:9999;';
+  d.textContent = 'JS Error line ' + line + ': ' + msg;
+  document.body.prepend(d);
+  return false;
+};
 let ctxSpecId = null;
 
 const STATUS_COLORS = {
@@ -707,12 +732,12 @@ function setSelectedCard(card) {
   card.classList.add('selected');
 }
 
-// ── 카드 클릭 → 상세 보기
-document.getElementById('board').addEventListener('click', (e) => {
+// ── 카드 mousedown → 상세 보기 (click 대신 mousedown: VS Code 포커스-클릭 우회)
+document.getElementById('board').addEventListener('mousedown', (e) => {
   const card = e.target.closest('.card');
   if (!card) { return; }
-  // status-select나 컨텍스트 메뉴 컨트롤 클릭이면 무시
-  if (e.target.closest('.action-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select') || e.target.closest('.question-answer-input') || e.target.closest('.question-save-btn') || e.target.closest('.question-suggestion-btn')) { return; }
+  // 컨트롤 클릭이면 무시 (버튼/드롭다운 등)
+  if (e.target.closest('.detail-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select') || e.target.closest('.question-answer-input') || e.target.closest('.question-save-btn') || e.target.closest('.question-suggestion-btn')) { return; }
   setSelectedCard(card);
   vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
 });
@@ -761,16 +786,13 @@ document.querySelectorAll('.ctx-status').forEach(el => {
   });
 });
 
-// ── 파일 열기 버튼
-document.getElementById('board').addEventListener('click', (e) => {
-  const btn = e.target.closest('.action-btn');
+// ── 상세 표시 버튼 (mousedown: VS Code 포커스-클릭 우회)
+document.getElementById('board').addEventListener('mousedown', (e) => {
+  const btn = e.target.closest('.detail-btn');
   if (!btn) { return; }
   const card = btn.closest('.card');
   if (!card) { return; }
-  const action = btn.dataset.action;
-  if (action === 'open') {
-    vscode.postMessage({ type: 'openSpec', specId: card.dataset.id });
-  }
+  vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
   e.stopPropagation();
 });
 
@@ -922,7 +944,7 @@ function cssEscape(value) {
   if (window.CSS && typeof window.CSS.escape === 'function') {
     return window.CSS.escape(value);
   }
-  return String(value).replace(/(["\\#.;?+*~':!^$\[\]()=>|/@])/g, '\\$1');
+  return String(value).replace(/[!"#$%&'()*+,./:;<=>?@[\\\]^\`{|}~]/g, '\\$&');
 }
 
 // ── 검색 필터
@@ -1002,7 +1024,8 @@ function filterCards(query) {
         const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
             ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
             : '';
-        const inlineQuestion = feedback.openQuestions[0];
+        // 질문이 정확히 1건일 때만 카드 내 인라인 표시. 여러 건이면 상세 패널에서만 표시.
+        const inlineQuestion = feedback.openQuestionCount === 1 ? feedback.openQuestions[0] : undefined;
         const questionBox = inlineQuestion ? this.renderQuestionBox(inlineQuestion, feedback.openQuestionCount) : '';
 
         const statusOptions = COLUMNS.map(c =>
@@ -1042,7 +1065,7 @@ function filterCards(query) {
   ${questionBox}
   <div class="card-footer">
     <div class="card-actions">
-      <button class="action-btn" data-action="open" title="파일 열기">↗</button>
+      <button class="detail-btn" data-action="detail" title="스펙 상세 보기">상세 표시</button>
     </div>
   </div>
   <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">
@@ -1088,4 +1111,13 @@ function filterCards(query) {
         return `<!DOCTYPE html><html><body style="background:var(--vscode-editor-background);color:var(--vscode-editor-foreground);padding:20px;">
 <h3>오류</h3><p>${msg}</p></body></html>`;
     }
+}
+
+function getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 }

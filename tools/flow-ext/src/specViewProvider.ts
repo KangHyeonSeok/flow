@@ -41,8 +41,9 @@ export class SpecViewProvider {
         extensionUri: vscode.Uri,
         loader: SpecLoader,
         workspaceRoot: string,
+        preferColumn?: vscode.ViewColumn,
     ): SpecViewProvider {
-        const column = vscode.ViewColumn.One;
+        const column = preferColumn ?? vscode.ViewColumn.One;
 
         if (SpecViewProvider.currentPanel) {
             SpecViewProvider.currentPanel.panel.reveal(column);

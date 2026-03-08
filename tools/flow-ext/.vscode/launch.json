@@ -6,13 +6,28 @@
             "type": "extensionHost",
             "request": "launch",
             "args": [
-                "--extensionDevelopmentPath=${workspaceFolder}/tools/flow-ext",
-                "${workspaceFolder}"
+                "--disable-extensions",
+                "--extensionDevelopmentPath=${workspaceFolder}",
+                "${workspaceFolder}/.vscode/flow-ext-dev.code-workspace"
             ],
             "outFiles": [
-                "${workspaceFolder}/tools/flow-ext/dist/**/*.js"
+                "${workspaceFolder}/dist/**/*.js"
             ],
-            "preLaunchTask": "npm: build - flow-ext"
+            "preLaunchTask": "build"
+        },
+        {
+            "name": "Run Extension (Watch)",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": [
+                "--disable-extensions",
+                "--extensionDevelopmentPath=${workspaceFolder}",
+                "${workspaceFolder}/.vscode/flow-ext-dev.code-workspace"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/dist/**/*.js"
+            ],
+            "preLaunchTask": "watch"
         }
     ]
 }

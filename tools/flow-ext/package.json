@@ -2,7 +2,7 @@
   "name": "flow-ext",
   "displayName": "Flow",
   "description": "Flow 통합 확장 - 스펙 그래프 시각화, 칸반 보드, Flow Runner 데몬 관리",
-  "version": "0.1.68",
+  "version": "0.1.71",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
@@ -125,6 +125,41 @@
         "command": "flowExt.stopDaemon",
         "title": "Flow Runner 중지",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "flowExt.testA_noCSP",
+        "title": "TestA: CSP없음",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testB_cspSource",
+        "title": "TestB: nonce+cspSource",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testC_nonceOnly",
+        "title": "TestC: nonce only",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testKanban_step1",
+        "title": "KanbanTest Step1: ViewColumn.One",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testKanban_step2",
+        "title": "KanbanTest Step2: retainContext+mousedown",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testKanban_step3",
+        "title": "KanbanTest Step3: 싱글톤",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "flowExt.testKanban_step4",
+        "title": "KanbanTest Step4: html 다중교체",
+        "icon": "$(beaker)"
       }
     ],
     "keybindings": [],
@@ -180,6 +215,41 @@
           "command": "specGraph.openKanban",
           "when": "view == specTree",
           "group": "navigation"
+        },
+        {
+          "command": "flowExt.testA_noCSP",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testB_cspSource",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testC_nonceOnly",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testKanban_step1",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testKanban_step2",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testKanban_step3",
+          "when": "view == specTree",
+          "group": "navigation@99"
+        },
+        {
+          "command": "flowExt.testKanban_step4",
+          "when": "view == specTree",
+          "group": "navigation@99"
         },
         {
           "command": "flowExt.reloadWindow",

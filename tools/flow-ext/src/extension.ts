@@ -17,6 +17,7 @@ import { DetailViewProvider } from './detailViewProvider';
 import { SpecViewProvider } from './specViewProvider';
 import { KanbanPanel } from './kanbanPanel';
 import { SpecStatus } from './types';
+import { registerWebviewTests } from './webviewTest';
 
 let specLoader: SpecLoader;
 let output: vscode.OutputChannel;
@@ -31,13 +32,27 @@ export function activate(context: vscode.ExtensionContext): void {
     output.appendLine('[activate] Flow extension activated');
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        output.appendLine('[activate] No workspace folder found');
-        return;
-    }
+    const workspaceRoot = workspaceFolders?.[0]?.uri.fsPath;
+    output.appendLine(workspaceRoot
+        ? `[activate] workspaceRoot=${workspaceRoot}`
+        : '[activate] No workspace folder found');
 
-    const workspaceRoot = workspaceFolders[0].uri.fsPath;
-    output.appendLine(`[activate] workspaceRoot=${workspaceRoot}`);
+    const requireWorkspace = async (featureName: string): Promise<string | null> => {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (root) {
+            return root;
+        }
+
+        const choice = await vscode.window.showWarningMessage(
+            `${featureName} 기능을 사용하려면 폴더 또는 워크스페이스를 열어야 합니다.`,
+            '폴더 열기'
+        );
+
+        if (choice === '폴더 열기') {
+            await vscode.commands.executeCommand('vscode.openFolder');
+        }
+        return null;
+    };
 
     // 0. Daemon StatusBar 아이템
     daemonStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
@@ -54,73 +69,98 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(reloadStatusBarItem);
     reloadStatusBarItem.show();
 
-    // 0-2. 빌드 스크립트가 남기는 자동 리로드 신호 감시
-    const reloadSignalPattern = new vscode.RelativePattern(workspaceRoot, '.flow/flow-ext.reload.signal');
-    reloadSignalWatcher = vscode.workspace.createFileSystemWatcher(reloadSignalPattern);
-    const handleReloadSignal = async () => {
-        output.appendLine('[reload] auto reload signal detected');
-        await vscode.commands.executeCommand('flowExt.reloadWindow', { source: 'signal' });
-    };
-    reloadSignalWatcher.onDidCreate(handleReloadSignal);
-    reloadSignalWatcher.onDidChange(handleReloadSignal);
-    context.subscriptions.push(reloadSignalWatcher);
+    if (workspaceRoot) {
+        const reloadSignalPattern = new vscode.RelativePattern(workspaceRoot, '.flow/flow-ext.reload.signal');
+        reloadSignalWatcher = vscode.workspace.createFileSystemWatcher(reloadSignalPattern);
+        const handleReloadSignal = async () => {
+            output.appendLine('[reload] auto reload signal detected');
+            await vscode.commands.executeCommand('flowExt.reloadWindow', { source: 'signal' });
+        };
+        reloadSignalWatcher.onDidCreate(handleReloadSignal);
+        reloadSignalWatcher.onDidChange(handleReloadSignal);
+        context.subscriptions.push(reloadSignalWatcher);
 
-    // 주기적 데몬 상태 폴링 (10초)
-    daemonPollTimer = setInterval(async () => {
-        const running = await checkDaemonRunning(workspaceRoot);
-        await setDaemonRunningContext(running);
-    }, 10_000);
-    context.subscriptions.push({ dispose: () => { if (daemonPollTimer) { clearInterval(daemonPollTimer); } } });
+        daemonPollTimer = setInterval(async () => {
+            const running = await checkDaemonRunning(workspaceRoot);
+            await setDaemonRunningContext(running);
+        }, 10_000);
+        context.subscriptions.push({ dispose: () => { if (daemonPollTimer) { clearInterval(daemonPollTimer); } } });
 
-    // 초기 상태 확인
-    checkDaemonRunning(workspaceRoot).then(running => setDaemonRunningContext(running));
+        checkDaemonRunning(workspaceRoot).then(running => setDaemonRunningContext(running));
 
-    // 1. SpecLoader 초기화
-    specLoader = new SpecLoader(workspaceRoot);
-    context.subscriptions.push({ dispose: () => specLoader.dispose() });
+        specLoader = new SpecLoader(workspaceRoot);
+        context.subscriptions.push({ dispose: () => specLoader.dispose() });
+    }
 
-    // 2. TreeView Provider 등록
-    const treeProvider = new SpecTreeProvider(specLoader);
-    const treeView = vscode.window.createTreeView('specTree', {
-        treeDataProvider: treeProvider,
-        showCollapseAll: true,
-    });
-    context.subscriptions.push(treeView);
+    let treeProvider: SpecTreeProvider | undefined;
+    let detailProvider: DetailViewProvider | undefined;
 
-    // 3. Detail Webview Provider 등록
-    const detailProvider = new DetailViewProvider(
-        context.extensionUri,
-        specLoader,
-        workspaceRoot,
-    );
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(
-            DetailViewProvider.viewType,
-            detailProvider,
-        ),
-    );
+    if (specLoader && workspaceRoot) {
+        try {
+            treeProvider = new SpecTreeProvider(specLoader);
+            const treeView = vscode.window.createTreeView('specTree', {
+                treeDataProvider: treeProvider,
+                showCollapseAll: true,
+            });
+            context.subscriptions.push(treeView);
+        } catch (err) {
+            output.appendLine(`[activate] specTree init failed: ${String(err)}`);
+            vscode.window.showWarningMessage(`Flow 트리 초기화 실패: ${String(err)}`);
+        }
+
+        try {
+            detailProvider = new DetailViewProvider(
+                context.extensionUri,
+                specLoader,
+                workspaceRoot,
+            );
+            context.subscriptions.push(
+                vscode.window.registerWebviewViewProvider(
+                    DetailViewProvider.viewType,
+                    detailProvider,
+                ),
+            );
+        } catch (err) {
+            output.appendLine(`[activate] specDetail init failed: ${String(err)}`);
+            vscode.window.showWarningMessage(`Flow 상세 패널 초기화 실패: ${String(err)}`);
+        }
+    }
 
     // 4. 명령어 등록
 
     // 그래프 열기
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openGraph', () => {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!specLoader || !root) {
+                void requireWorkspace('그래프 보기');
+                return;
+            }
             output.appendLine('[command] specGraph.openGraph');
-            GraphPanel.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+            GraphPanel.createOrShow(context.extensionUri, specLoader, root);
         }),
     );
 
     // 웹 렌더링 프리뷰 (별도 패널)
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openGraphPreview', () => {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!specLoader || !root) {
+                void requireWorkspace('그래프 프리뷰');
+                return;
+            }
             output.appendLine('[command] specGraph.openGraphPreview');
-            GraphPanel.openPreview(context.extensionUri, specLoader, workspaceRoot);
+            GraphPanel.openPreview(context.extensionUri, specLoader, root);
         }),
     );
 
     // 디버그 정보 출력
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.debugInfo', async () => {
+            if (!specLoader) {
+                await requireWorkspace('디버그 정보 보기');
+                return;
+            }
             const graph = await specLoader.getGraph();
             const brokenSpecs = specLoader.getBrokenSpecs();
             const msg = [
@@ -149,10 +189,12 @@ export function activate(context: vscode.ExtensionContext): void {
     // 새로고침
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.refresh', async () => {
-            const flowExe = resolveFlowExecutable(workspaceRoot);
+            const root = await requireWorkspace('새로고침');
+            if (!root || !specLoader) { return; }
+            const flowExe = resolveFlowExecutable(root);
             if (flowExe) {
                 try {
-                    await execCommandAsync(flowExe, ['spec-sync'], workspaceRoot);
+                    await execCommandAsync(flowExe, ['spec-sync'], root);
                     output.appendLine('[spec-sync] refresh triggered remote spec sync');
                 } catch (err) {
                     const msg = String(err);
@@ -184,23 +226,31 @@ export function activate(context: vscode.ExtensionContext): void {
     // 노드 포커스 (트리 클릭 → 그래프 포커스 + 상세 패널)
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.focusNode', (nodeId: string) => {
+            if (!specLoader) {
+                void requireWorkspace('노드 포커스');
+                return;
+            }
             if (GraphPanel.currentPanel) {
                 GraphPanel.currentPanel.focusNode(nodeId);
             }
-            detailProvider.showNode(nodeId);
+            void detailProvider?.showNode(nodeId);
         }),
     );
 
     // 상세 표시 (그래프에서 호출)
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.showDetail', (nodeId: string) => {
-            detailProvider.showNode(nodeId);
+            void detailProvider?.showNode(nodeId);
         }),
     );
 
     // 스펙 파일 열기
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openSpec', async (item: any) => {
+            if (!specLoader) {
+                await requireWorkspace('스펙 파일 열기');
+                return;
+            }
             const specId = item?.spec?.id || item;
             if (!specId) { return; }
 
@@ -219,6 +269,10 @@ export function activate(context: vscode.ExtensionContext): void {
     // 스펙 삭제
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.deleteSpec', async (item: any) => {
+            if (!specLoader) {
+                await requireWorkspace('스펙 삭제');
+                return;
+            }
             const specId = item?.spec?.id || (typeof item === 'string' ? item : undefined);
             if (!specId) { return; }
 
@@ -244,6 +298,10 @@ export function activate(context: vscode.ExtensionContext): void {
     // 상태별 필터
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.filterByStatus', async () => {
+            if (!specLoader) {
+                await requireWorkspace('상태 필터');
+                return;
+            }
             const statuses: (SpecStatus | 'all')[] = ['all', 'draft', 'queued', 'working', 'needs-review', 'verified', 'deprecated', 'done'];
             const statusLabels: Record<SpecStatus | 'all', string> = {
                 all: '전체',
@@ -266,6 +324,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
             if (picked) {
                 const value = (picked as any).value;
+                if (!treeProvider) {
+                    vscode.window.showWarningMessage('Spec Tree가 초기화되지 않아 상태 필터를 적용할 수 없습니다.');
+                    return;
+                }
                 treeProvider.setStatusFilter(value === 'all' ? null : value);
             }
         }),
@@ -274,17 +336,28 @@ export function activate(context: vscode.ExtensionContext): void {
     // 스펙 문서 뷰 열기 (전체)
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openSpecView', () => {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!specLoader || !root) {
+                void requireWorkspace('스펙 문서 보기');
+                return;
+            }
             output.appendLine('[command] specGraph.openSpecView');
-            SpecViewProvider.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+            SpecViewProvider.createOrShow(context.extensionUri, specLoader, root);
         }),
     );
 
     // 스펙 문서 뷰 열기 (선택된 노드 포커스)
     context.subscriptions.push(
-        vscode.commands.registerCommand('specGraph.openSpecViewFocused', (item: any) => {
+        vscode.commands.registerCommand('specGraph.openSpecViewFocused', (item: any, preferBeside?: boolean) => {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!specLoader || !root) {
+                void requireWorkspace('선택 스펙 문서 보기');
+                return;
+            }
             output.appendLine('[command] specGraph.openSpecViewFocused');
             const specId = item?.spec?.id || item;
-            const panel = SpecViewProvider.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+            const column = preferBeside ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
+            const panel = SpecViewProvider.createOrShow(context.extensionUri, specLoader, root, column);
             if (specId && typeof specId === 'string') {
                 panel.focusSpec(specId);
             }
@@ -294,14 +367,23 @@ export function activate(context: vscode.ExtensionContext): void {
     // 칸반 보드 열기
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.openKanban', () => {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!specLoader || !root) {
+                void requireWorkspace('칸반 보드');
+                return;
+            }
             output.appendLine('[command] specGraph.openKanban');
-            KanbanPanel.createOrShow(context.extensionUri, specLoader, workspaceRoot);
+            KanbanPanel.createOrShow(context.extensionUri, specLoader, root);
         }),
     );
 
     // 태그별 필터
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.filterByTag', async () => {
+            if (!specLoader) {
+                await requireWorkspace('태그 필터');
+                return;
+            }
             const tags = specLoader.getAllTags();
             const items = [
                 { label: '$(list-flat) 전체', value: 'all' },
@@ -314,14 +396,24 @@ export function activate(context: vscode.ExtensionContext): void {
 
             if (picked) {
                 const value = (picked as any).value;
+                if (!treeProvider) {
+                    vscode.window.showWarningMessage('Spec Tree가 초기화되지 않아 태그 필터를 적용할 수 없습니다.');
+                    return;
+                }
                 treeProvider.setTagFilter(value === 'all' ? null : value);
             }
         }),
     );
 
+    output.appendLine('[activate] command registration completed');
+
     // 스펙 push
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.pushSpecs', async () => {
+            if (!specLoader) {
+                await requireWorkspace('스펙 push');
+                return;
+            }
             output.appendLine('[command] specGraph.pushSpecs');
 
             const specsDir = specLoader.specsDirectory;
@@ -382,23 +474,27 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     // 5. 초기 로드
-    specLoader.load().then(async () => {
-        const graph = specLoader.getSpecs();
-        output.appendLine(`[load] completed specs=${graph.length}, specsDirectory=${specLoader.specsDirectory}`);
-        vscode.window.setStatusBarMessage('$(type-hierarchy) Flow 로드 완료', 3000);
+    if (specLoader) {
+        specLoader.load().then(async () => {
+            const graph = specLoader.getSpecs();
+            output.appendLine(`[load] completed specs=${graph.length}, specsDirectory=${specLoader.specsDirectory}`);
+            vscode.window.setStatusBarMessage('$(type-hierarchy) Flow 로드 완료', 3000);
 
-        const gitRoot = findGitRoot(specLoader.specsDirectory);
-        if (gitRoot) { await updatePendingPushContext(gitRoot); }
-    }).catch((err) => {
-        output.appendLine(`[load] failed: ${String(err)}`);
-        vscode.window.showErrorMessage(`Flow 로드 실패: ${String(err)}`);
-    });
+            const gitRoot = findGitRoot(specLoader.specsDirectory);
+            if (gitRoot) { await updatePendingPushContext(gitRoot); }
+        }).catch((err) => {
+            output.appendLine(`[load] failed: ${String(err)}`);
+            vscode.window.showErrorMessage(`Flow 로드 실패: ${String(err)}`);
+        });
+    }
 
     // Flow Runner 데몬 시작
     context.subscriptions.push(
         vscode.commands.registerCommand('flowExt.startDaemon', async () => {
             output.appendLine('[command] flowExt.startDaemon');
-            const flowExe = resolveFlowExecutable(workspaceRoot);
+            const root = await requireWorkspace('Flow Runner 시작');
+            if (!root) { return; }
+            const flowExe = resolveFlowExecutable(root);
             if (!flowExe) {
                 vscode.window.showErrorMessage('flow CLI를 찾을 수 없습니다. PATH 또는 flow.executablePath 설정을 확인하세요.');
                 return;
@@ -408,7 +504,7 @@ export function activate(context: vscode.ExtensionContext): void {
             // terminal.sendText()로 실행하면 VS Code ConPTY 콘솔 세션에 붙어서
             // checkDaemonRunning() 호출 시 Windows가 CTRL_C_EVENT를 콘솔 그룹 전체에
             // 브로드캐스트하여 daemon이 즉시 종료되는 문제가 발생한다.
-            const spawned = spawnDaemonBackground(workspaceRoot, output);
+            const spawned = spawnDaemonBackground(root, output);
             if (!spawned) {
                 vscode.window.showErrorMessage('Flow Runner 데몬 시작 실패: flow 실행 파일을 찾을 수 없습니다.');
                 return;
@@ -416,7 +512,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
             // 잠시 대기 후 상태 확인
             await new Promise(r => setTimeout(r, 2000));
-            const running = await checkDaemonRunning(workspaceRoot);
+            const running = await checkDaemonRunning(root);
             await setDaemonRunningContext(running);
             if (running) {
                 vscode.window.showInformationMessage('Flow Runner 데몬이 시작되었습니다.');
@@ -459,14 +555,16 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.commands.registerCommand('flowExt.stopDaemon', async () => {
             output.appendLine('[command] flowExt.stopDaemon');
-            const flowExe = resolveFlowExecutable(workspaceRoot);
+            const root = await requireWorkspace('Flow Runner 중지');
+            if (!root) { return; }
+            const flowExe = resolveFlowExecutable(root);
             if (!flowExe) {
                 vscode.window.showErrorMessage('flow CLI를 찾을 수 없습니다.');
                 return;
             }
 
             try {
-                await execCommandAsync(flowExe, ['runner-stop'], workspaceRoot);
+                await execCommandAsync(flowExe, ['runner-stop'], root);
                 await setDaemonRunningContext(false);
                 vscode.window.showInformationMessage('Flow Runner 데몬이 중지되었습니다.');
             } catch (err) {
@@ -476,6 +574,9 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         }),
     );
+
+    // 웹뷰 postMessage 진단 테스트 (CSP 비교)
+    registerWebviewTests(context);
 }
 
 /**

@@ -269,6 +269,11 @@ public class CopilotService
 - 사용자 판단이 필요한지 식별
 - 추가 정보 요청이 필요한지 식별
 
+질문 생성 규칙:
+- 사용자 질문은 제품 요구사항, 정책 결정, 도메인 지식, 누락된 스펙 설명처럼 사용자만 답할 수 있는 정보에 한정합니다.
+- runner 로그, stdout/stderr, git diff, 변경 파일 목록, 실행 아티팩트 같은 내부 디버깅 정보는 사용자에게 요청하지 않습니다.
+- 내부 실행 정보가 더 필요하면 질문 대신 failureReasons, alternatives, suggestedAttempts에 검토자가 내부 로그/변경 사항을 확인해야 한다고만 남기고 requiresUserInput은 false로 유지합니다.
+
 review JSON 스키마:
 {{
     ""summary"": ""한두 문장 요약"",

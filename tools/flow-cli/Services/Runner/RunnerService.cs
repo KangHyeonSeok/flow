@@ -1541,7 +1541,61 @@ public class RunnerService
             analysis.FailureReasons.Add(analysis.Summary);
         }
 
+        return SanitizeReviewAnalysis(analysis);
+    }
+
+    private static SpecReviewAnalysis SanitizeReviewAnalysis(SpecReviewAnalysis analysis)
+    {
+        analysis.AdditionalInformationRequests = analysis.AdditionalInformationRequests
+            .Where(request => !LooksLikeInternalExecutionArtifactRequest(request))
+            .ToList();
+
+        analysis.Questions = analysis.Questions
+            .Where(question => !LooksLikeInternalExecutionArtifactRequest(question.Question, question.Why))
+            .ToList();
+
+        if (analysis.RequiresUserInput
+            && analysis.AdditionalInformationRequests.Count == 0
+            && analysis.Questions.Count == 0)
+        {
+            analysis.RequiresUserInput = false;
+        }
+
         return analysis;
+    }
+
+    private static bool LooksLikeInternalExecutionArtifactRequest(string? text, string? why = null)
+    {
+        if (string.IsNullOrWhiteSpace(text) && string.IsNullOrWhiteSpace(why))
+        {
+            return false;
+        }
+
+        var combined = string.Join(" ", new[] { text, why }.Where(value => !string.IsNullOrWhiteSpace(value)))
+            .ToLowerInvariant();
+
+        return combined.Contains("stdout", StringComparison.Ordinal)
+            || combined.Contains("stderr", StringComparison.Ordinal)
+            || combined.Contains("stack trace", StringComparison.Ordinal)
+            || combined.Contains("traceback", StringComparison.Ordinal)
+            || combined.Contains("runner log", StringComparison.Ordinal)
+            || combined.Contains("log file", StringComparison.Ordinal)
+            || combined.Contains("full log", StringComparison.Ordinal)
+            || combined.Contains("execution log", StringComparison.Ordinal)
+            || combined.Contains("changed file", StringComparison.Ordinal)
+            || combined.Contains("changed files", StringComparison.Ordinal)
+            || combined.Contains("git diff", StringComparison.Ordinal)
+            || combined.Contains("diff output", StringComparison.Ordinal)
+            || combined.Contains("patch", StringComparison.Ordinal)
+            || combined.Contains("commit hash", StringComparison.Ordinal)
+            || combined.Contains("전체 로그", StringComparison.Ordinal)
+            || combined.Contains("실행 로그", StringComparison.Ordinal)
+            || combined.Contains("로그 파일", StringComparison.Ordinal)
+            || combined.Contains("에러 로그", StringComparison.Ordinal)
+            || combined.Contains("스택 트레이스", StringComparison.Ordinal)
+            || combined.Contains("변경 파일", StringComparison.Ordinal)
+            || combined.Contains("패치", StringComparison.Ordinal)
+            || combined.Contains("커밋 해시", StringComparison.Ordinal);
     }
 
     private static List<SpecReviewQuestion> BuildReviewQuestions(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, string reviewedAt)

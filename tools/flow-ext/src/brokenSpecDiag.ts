@@ -36,7 +36,27 @@ export function loadDiagCache(workspaceRoot: string): BrokenSpecDiagCache {
     const cachePath = getDiagCachePath(workspaceRoot);
     try {
         if (fs.existsSync(cachePath)) {
-            return JSON.parse(fs.readFileSync(cachePath, 'utf-8')) as BrokenSpecDiagCache;
+            const raw = JSON.parse(fs.readFileSync(cachePath, 'utf-8')) as Record<string, unknown>;
+            // C# runner는 PascalCase로 저장하므로 양쪽 모두 지원
+            const rawRecords = (raw['records'] ?? raw['Records'] ?? []) as unknown[];
+            const records: BrokenSpecDiagRecord[] = rawRecords.map((r) => {
+                const rec = r as Record<string, unknown>;
+                return {
+                    specId: (rec['specId'] ?? rec['SpecId'] ?? '') as string,
+                    filePath: (rec['filePath'] ?? rec['FilePath'] ?? '') as string,
+                    errorMessage: (rec['errorMessage'] ?? rec['ErrorMessage'] ?? '') as string,
+                    line: (rec['line'] ?? rec['Line'] ?? null) as number | null,
+                    column: (rec['column'] ?? rec['Column'] ?? null) as number | null,
+                    detectedAt: (rec['detectedAt'] ?? rec['DetectedAt'] ?? '') as string,
+                    fileMtime: (rec['fileMtime'] ?? rec['FileMtime'] ?? null) as string | null,
+                    status: (rec['status'] ?? rec['Status'] ?? 'unresolved') as BrokenSpecDiagRecord['status'],
+                    resolvedAt: (rec['resolvedAt'] ?? rec['ResolvedAt'] ?? null) as string | null,
+                    lastCheckedAt: (rec['lastCheckedAt'] ?? rec['LastCheckedAt'] ?? null) as string | null,
+                    failReason: (rec['failReason'] ?? rec['FailReason'] ?? null) as string | null,
+                    repairAttempts: (rec['repairAttempts'] ?? rec['RepairAttempts'] ?? 0) as number,
+                };
+            });
+            return { version: (raw['version'] ?? raw['Version'] ?? 1) as number, records };
         }
     } catch { /* ignore read/parse errors */ }
     return { version: 1, records: [] };
