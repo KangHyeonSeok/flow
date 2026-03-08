@@ -94,12 +94,19 @@ jobs:
         run: |
           mkdir -p temp-release/.flow/bin
           mkdir -p temp-release/.github/skills
-          mkdir -p temp-e2e
           cp -r .flow temp-release/
           find temp-release/.flow -type f \( -name "*.pdb" -o -name "*.db" \) -delete
+          # 런타임 생성 파일 제거 (설치 대상 아님)
+          rm -rf temp-release/.flow/logs
+          rm -rf temp-release/.flow/spec-cache
+          rm -rf temp-release/.flow/worktrees
+          rm -rf temp-release/.flow/review
+          rm -f  temp-release/.flow/runner.pid
+          rm -f  temp-release/.flow/spec-state.json
+          rm -f  temp-release/.flow/flow-ext.reload.signal
           echo '{}' > temp-release/.flow/config.json
 
-          # Flow CLI 단일 파일 바이너리 포함
+          # Flow CLI 단일 파일 바이너리
           cp build-win/flow.exe        temp-release/.flow/bin/flow.exe
           cp build-linux/flow          temp-release/.flow/bin/flow-linux
           cp build-osx-arm64/flow      temp-release/.flow/bin/flow-osx-arm64
@@ -107,22 +114,33 @@ jobs:
           chmod +x temp-release/.flow/bin/flow-linux
           chmod +x temp-release/.flow/bin/flow-osx-arm64
           chmod +x temp-release/.flow/bin/flow-osx-x64
+
+          # VS Code 확장 (.vsix)
           cp flow-ext-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
+
+          # E2E 테스트
           cp -r tools/e2e-test temp-release/.flow/e2e-test
           find temp-release/.flow/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
           find temp-release/.flow/e2e-test -type f -name "*.pyc" -delete
+
+          # .github/agents
           if [ -d .github/agents ]; then
             cp -r .github/agents temp-release/.github/
           fi
-          if [ -d .github/skills/flow-spec-create ]; then
-            cp -r .github/skills/flow-spec-create temp-release/.github/skills/
-          fi
-          if [ -d .github/skills/flow-spec-graph ]; then
-            cp -r .github/skills/flow-spec-graph temp-release/.github/skills/
-          fi
+
+          # .github/skills 전체 포함 (flow-*, skill-creator, skill-downloader)
+          for skill_dir in .github/skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            if [ -f "$skill_dir/SKILL.md" ]; then
+              cp -r "$skill_dir" "temp-release/.github/skills/$skill_name"
+            fi
+          done
+
+          # 래퍼 스크립트
           cp flow.ps1 temp-release/
           cp flow temp-release/
           chmod +x temp-release/flow
+
           cd temp-release
           zip -r ../flow.zip .flow/ .github/ flow.ps1 flow
           cd ..
@@ -134,33 +152,48 @@ jobs:
           tag_name: v${{ steps.bump.outputs.version }}
           name: Flow Prompts v${{ steps.bump.outputs.version }}
           body: |
-            ## Flow Prompts v${{ steps.bump.outputs.version }}
-            
+            ## Flow v${{ steps.bump.outputs.version }}
+
             ### 설치 방법
-            
+
             **Windows (PowerShell):**
             ```powershell
             irm https://raw.githubusercontent.com/${{ github.repository }}/main/install.ps1 | iex
             ```
-            
+
             **macOS / Linux:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
             ```
-            
+
+            > VS Code 확장은 설치 스크립트가 자동으로 설치합니다.
+            > 수동 설치: 위 Assets에서 `flow-ext-*.vsix` 다운로드 → VS Code Extensions 탭 → `Install from VSIX...`
+
             ### 업데이트 방법
-            
+
             **Windows:**
             ```powershell
             irm https://raw.githubusercontent.com/${{ github.repository }}/main/update.ps1 | iex
             ```
-            
+
             **macOS / Linux:**
             ```bash
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/update.sh | bash
             ```
 
+            ### 포함된 구성 요소
+            - `flow.exe` / `flow-linux` / `flow-osx-arm64` / `flow-osx-x64` — Flow CLI
+            - `flow-ext-*.vsix` — VS Code 확장 (스펙 트리뷰, 칸반, 그래프)
+            - `.github/skills/flow-spec-graph` — 스펙 그래프 관리 스킬
+            - `.github/skills/flow-spec-create` — 스펙 생성 마법사 스킬
+            - `.github/skills/flow-build` — 빌드 통합 스킬
+            - `.github/skills/flow-rag` — RAG 데이터베이스 스킬
+            - `.github/skills/flow-e2e-test` — E2E 테스트 스킬
+            - `.github/skills/skill-creator` — 커스텀 스킬 생성 도구
+            - `.github/agents/` — 스펙 플래너 에이전트
+
           files: |
             flow.zip
+            flow-ext-${{ steps.bump.outputs.version }}.vsix
           draft: false
           prerelease: false

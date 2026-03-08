@@ -455,6 +455,28 @@ export class SpecViewProvider {
         .condition-desc {
             font-size: 13px;
         }
+        .condition-refs-details {
+            margin-top: 4px;
+        }
+        .condition-refs-summary {
+            font-size: 11px;
+            color: var(--fg-secondary);
+            cursor: pointer;
+            user-select: none;
+            list-style: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .condition-refs-summary::before {
+            content: '▶';
+            font-size: 9px;
+            display: inline-block;
+            transition: transform 0.15s;
+        }
+        .condition-refs-details[open] > .condition-refs-summary::before {
+            transform: rotate(90deg);
+        }
         .condition-refs {
             margin-top: 4px;
         }
@@ -1105,11 +1127,14 @@ export class SpecViewProvider {
 
         let refsHtml = '';
         if (cond.codeRefs.length > 0) {
-            refsHtml = `<div class="condition-refs">
-                ${cond.codeRefs.map(r =>
-                    `<a data-code-ref="${escAttr(r)}">📄 ${esc(r)}</a>`
-                ).join('')}
-            </div>`;
+            refsHtml = `<details class="condition-refs-details">
+                <summary class="condition-refs-summary">코드 참조 (${cond.codeRefs.length})</summary>
+                <div class="condition-refs">
+                    ${cond.codeRefs.map(r =>
+                        `<a data-code-ref="${escAttr(r)}">📄 ${esc(r)}</a>`
+                    ).join('')}
+                </div>
+            </details>`;
         }
 
         return `

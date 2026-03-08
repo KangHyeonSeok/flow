@@ -230,15 +230,6 @@ try {
         throw ".flow 폴더를 찾을 수 없습니다."
     }
 
-    # .github/prompts 폴더 복사 (있으면)
-    $extractedPrompts = Join-Path $tempDir "prompts"
-    if (Test-Path $extractedPrompts) {
-        $githubDir = Join-Path (Get-Location) ".github"
-        $targetPrompts = Join-Path $githubDir "prompts"
-        New-Item -ItemType Directory -Path $targetPrompts -Force | Out-Null
-        Copy-Item -Path "$extractedPrompts\*" -Destination $targetPrompts -Recurse -Force
-    }
-
     # .github/agents 폴더 복사 (있으면)
     $extractedAgents = Join-Path $tempDir ".github\agents"
     if (Test-Path $extractedAgents) {
@@ -247,22 +238,22 @@ try {
         Copy-Item -Path "$extractedAgents\*" -Destination $targetAgents -Recurse -Force
     }
 
+    # .github/skills 폴더 복사 (있으면)
+    $extractedSkills = Join-Path $tempDir ".github\skills"
+    if (Test-Path $extractedSkills) {
+        $targetSkills = Join-Path (Get-Location) ".github\skills"
+        New-Item -ItemType Directory -Path $targetSkills -Force | Out-Null
+        Copy-Item -Path "$extractedSkills\*" -Destination $targetSkills -Recurse -Force
+    }
+
     # flow.ps1 복사 (있으면)
     $extractedFlowPs1 = Join-Path $tempDir "flow.ps1"
     if (Test-Path $extractedFlowPs1) {
         Copy-Item -Path $extractedFlowPs1 -Destination (Join-Path (Get-Location) "flow.ps1") -Force
     }
-    
-    # 5. 필수 디렉토리 사전 생성
-    $requiredDirs = @(
-        ".github/prompts",
-        ".github/agents",
-        "docs",
-        "docs/flow",
-        "docs/flow/backlogs",
-        "docs/flow/implements",
-        "docs/flow/meta"
-    )
+
+    # 필수 디렉토리 사전 생성
+    $requiredDirs = @(".github\agents", ".github\skills", "docs\specs")
     foreach ($dir in $requiredDirs) {
         $fullPath = Join-Path (Get-Location) $dir
         if (-not (Test-Path $fullPath)) {
@@ -270,29 +261,20 @@ try {
         }
     }
 
-    # skill-creator 스킬이 없으면 GitHub에서 다운로드
-    $skillCreatorPath = Join-Path (Get-Location) ".github\skills\skill-creator"
-    $skillCreatorMarker = Join-Path $skillCreatorPath "SKILL.md"
-    if (-not (Test-Path $skillCreatorMarker)) {
-        Write-Step "skill-creator 스킬 다운로드 중..."
-        $skillZipUrl = "https://github.com/anthropics/skills/archive/refs/heads/main.zip"
-        $skillTempZip = Join-Path ([System.IO.Path]::GetTempPath()) "skill-creator.zip"
-        $skillTempDir = Join-Path ([System.IO.Path]::GetTempPath()) "skill-creator-extract-$([Guid]::NewGuid().ToString('N'))"
-        try {
-            Invoke-WebRequest -Uri $skillZipUrl -OutFile $skillTempZip -UseBasicParsing
-            Expand-Archive -Path $skillTempZip -DestinationPath $skillTempDir -Force
-            $skillSource = Join-Path $skillTempDir "skills-main\skills\skill-creator"
-            if (-not (Test-Path $skillSource)) {
-                throw "skill-creator 경로를 찾을 수 없습니다."
+    # VS Code 확장 설치 (code CLI가 있을 때)
+    $vsixFile = Get-ChildItem -Path $flowDir -Filter "*.vsix" | Select-Object -First 1
+    if ($vsixFile) {
+        $codeCmd = Get-Command code -ErrorAction SilentlyContinue
+        if ($codeCmd) {
+            Write-Step "VS Code 확장 설치 중..."
+            try {
+                & code --install-extension $vsixFile.FullName --force 2>&1 | Out-Null
+                Write-Success "VS Code 확장 설치 완료"
+            } catch {
+                Write-Warning "VS Code 확장 설치 실패 (수동 설치: Extensions 탭에서 .vsix 파일 선택)"
             }
-            New-Item -ItemType Directory -Path (Split-Path $skillCreatorPath) -Force | Out-Null
-            Copy-Item -Path $skillSource -Destination $skillCreatorPath -Recurse -Force
-            Write-Success "skill-creator 스킬 다운로드 완료"
-        } catch {
-            Write-Warning "skill-creator 다운로드 실패: $_"
-        } finally {
-            if (Test-Path $skillTempZip) { Remove-Item -Path $skillTempZip -Force }
-            if (Test-Path $skillTempDir) { Remove-Item -Path $skillTempDir -Recurse -Force }
+        } else {
+            Write-Warning "VS Code CLI(code)를 찾을 수 없습니다. 수동으로 $($vsixFile.FullName) 설치하세요."
         }
     }
 

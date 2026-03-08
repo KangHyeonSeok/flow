@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "공통 JSON 요청 스키마 및 디스패처 도입",
   "description": "모든 flow 명령이 공유할 JSON 요청 envelope와 내부 디스패처를 정의한다. 명령 식별자, 서브커맨드, payload, 옵션, 실행 컨텍스트를 공통 모델로 표준화하고, 단일 진입점에서 적절한 명령 핸들러로 위임하는 기반 작업이다.",
-  "status": "needs-review",
+  "status": "queued",
   "parent": "F-002",
   "dependencies": [],
   "conditions": [
@@ -62,33 +62,37 @@
   "changeLog": [],
   "metadata": {
     "workItemType": "task",
-    "runnerInstanceId": "runner-58008-133901",
-    "runnerStartedAt": "2026-03-08T13:48:29.3710489Z",
+    "runnerInstanceId": "runner-54356-143035",
+    "runnerStartedAt": "2026-03-08T14:43:54.8400331Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-003: 공통 JSON 요청 스키마 및 디스패처 도입' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T13:48:29.3710502Z"
+      "startedAt": "2026-03-08T14:43:54.8400342Z"
     },
-    "lastCompletedAt": "2026-03-08T13:55:20.8632916Z",
-    "lastCompletedBy": "runner-58008-133901",
+    "lastCompletedAt": "2026-03-08T14:50:51.9303297Z",
+    "lastCompletedBy": "runner-54356-143035",
     "review": {
       "source": "copilot-cli-review",
-      "reviewedAt": "2026-03-08T02:37:41.2927880Z",
-      "reviewedBy": "runner-4380-023636",
-      "summary": "자동 검토가 Copilot 출력의 구조화된 JSON을 해석하지 못해 재작업이 필요합니다.",
+      "reviewedAt": "2026-03-08T14:53:00.4181884Z",
+      "reviewedBy": "runner-54356-143035",
+      "summary": "파싱/스키마 불일치로 인해 디스패처 검증에서 실패하여 재작업이 필요합니다.",
       "failureReasons": [
-        "자동 리뷰 결과를 JSON으로 파싱하지 못함",
-        "구현 로그 및 검증 증거 부족으로 실패 원인 재현 불가"
+        "요청 payload와 기대하는 JSON 스키마 간 불일치",
+        "명령 식별자/서브커맨드 매핑 규칙이 명확하지 않음",
+        "유효성 검사 오류 메시지가 충분히 상세하지 않아 원인 파악이 어려움"
       ],
       "alternatives": [
-        "검토 출력 스키마와 직렬화 경로를 점검한 뒤 재시도",
-        "수동 검토로 구체적 실패 원인을 기록하고 재요청"
+        "스펙에 JSON Schema를 명시하고 샘플 페이로드를 추가",
+        "디스패처에서 호환성을 허용하는 파싱 모드(백호환성) 제공",
+        "유효성 검사 오류에 필드 경로 및 이유를 포함하여 반환"
       ],
       "suggestedAttempts": [
-        "spec-append-review 입력 스키마와 생성 경로를 다시 점검한 뒤 재실행",
-        "검증 테스트와 샘플 JSON 페이로드를 추가하여 검증 케이스를 확보"
+        "스펙에 명확한 JSON Schema(예: JSON Schema draft) 및 최소/확장 샘플 추가",
+        "디스패처 구현에서 validation 오류의 필드 경로와 메시지를 로깅/반환하도록 개선",
+        "수정 후 동일한 spec-append-review 명령을 다시 실행"
       ],
-      "additionalInformationRequests": []
+      "additionalInformationRequests": [],
+      "questions": []
     },
     "questions": [
       {
@@ -112,23 +116,39 @@
         "requestedBy": "runner-4380-023636",
         "answer": "기본 샘플은 {\"command\":\"spec\",\"subcommand\":\"list\",\"arguments\":[],\"options\":{\"status\":\"queued\",\"json\":true},\"payload\":{},\"metadata\":{\"source\":\"runner\"}} 형태로 두고, build/test 계열은 payload에 중첩 옵션을 넣는 방식으로 확장합니다.",
         "answeredAt": "2026-03-08T10:24:00.000Z"
+      },
+      {
+        "id": "review-request-2",
+        "type": "missing-info",
+        "question": "검증 정책: 엄격(Strict) vs 호환성(Compat) 중 선택",
+        "status": "answered",
+        "answer": "- unknown fields 허용\n- 누락된 optional 필드는 default 처리\n- validation error는 명확한 JSON error 반환",
+        "answeredAt": "2026-03-08T14:54:18.816Z"
+      },
+      {
+        "id": "review-request-1",
+        "type": "missing-info",
+        "question": "대표 샘플 요청 JSON(기본, build/test, edge-case)",
+        "status": "answered",
+        "answer": "{\n  \"command\": \"test\",\n  \"subcommand\": \"unit\",\n  \"payload\": {\n    \"path\": \"tests/\"\n  },\n  \"options\": {\n    \"coverage\": true\n  },\n  \"context\": {\n    \"cwd\": \"/workspace\",\n    \"request_id\": \"req-test-001\"\n  }\n}\n{\n  \"command\": \"build\",\n  \"subcommand\": \"project\",\n  \"payload\": {\n    \"target\": \"api\"\n  },\n  \"options\": {\n    \"watch\": false,\n    \"release\": true\n  },\n  \"context\": {\n    \"cwd\": \"/workspace\",\n    \"request_id\": \"req-build-001\"\n  }\n}",
+        "answeredAt": "2026-03-08T14:54:38.841Z"
       }
     ],
     "reviewDisposition": "retry-queued",
     "plannerState": "standby",
-    "lastReviewAt": "2026-03-08T02:37:41.2927880Z",
-    "lastReviewBy": "runner-4380-023636",
+    "lastReviewAt": "2026-03-08T14:53:00.4181884Z",
+    "lastReviewBy": "runner-54356-143035",
     "selectionReason": {
-      "selectedAt": "2026-03-08T13:48:29.3697975Z",
+      "selectedAt": "2026-03-08T14:43:54.8392654Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
-      "totalCandidates": 10
+      "totalCandidates": 9
     },
-    "lastAnsweredAt": "2026-03-08T10:24:00.000Z",
+    "lastAnsweredAt": "2026-03-08T14:54:38.841Z",
     "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-003",
     "worktreeBranch": "runner/F-003"
   },
   "createdAt": "2026-03-07T04:04:25.0823518Z",
-  "updatedAt": "2026-03-08T13:55:20.8640214Z"
+  "updatedAt": "2026-03-08T14:54:38.841Z"
 }

@@ -156,6 +156,65 @@ public class TestSyncService
     }
 
     /// <summary>
+    /// 동기화된 테스트 결과 파일을 스펙/조건 evidence에 연결한다.
+    /// </summary>
+    public int AppendEvidence(string artifactPath, TestSyncResult syncResult, string? platform = null, string? capturedAt = null)
+    {
+        if (syncResult.Mappings.Count == 0)
+        {
+            return 0;
+        }
+
+        var specs = _specStore.GetAll().ToDictionary(spec => spec.Id, StringComparer.OrdinalIgnoreCase);
+        var groupedBySpec = syncResult.Mappings.GroupBy(mapping => mapping.SpecId, StringComparer.OrdinalIgnoreCase);
+        var updatedCount = 0;
+        var normalizedPath = NormalizeEvidencePath(artifactPath);
+        var timestamp = capturedAt ?? DateTime.UtcNow.ToString("o");
+
+        foreach (var specGroup in groupedBySpec)
+        {
+            if (!specs.TryGetValue(specGroup.Key, out var spec))
+            {
+                continue;
+            }
+
+            spec.Evidence.RemoveAll(evidence => evidence.Type == "test-result" && evidence.Path == normalizedPath);
+            spec.Evidence.Add(new SpecEvidence
+            {
+                Type = "test-result",
+                Path = normalizedPath,
+                CapturedAt = timestamp,
+                Platform = platform,
+                Summary = BuildEvidenceSummary(specGroup)
+            });
+
+            foreach (var conditionGroup in specGroup.GroupBy(mapping => mapping.ConditionId, StringComparer.OrdinalIgnoreCase))
+            {
+                var condition = spec.Conditions.FirstOrDefault(c => string.Equals(c.Id, conditionGroup.Key, StringComparison.OrdinalIgnoreCase));
+                if (condition == null)
+                {
+                    continue;
+                }
+
+                condition.Evidence.RemoveAll(evidence => evidence.Type == "test-result" && evidence.Path == normalizedPath);
+                condition.Evidence.Add(new SpecEvidence
+                {
+                    Type = "test-result",
+                    Path = normalizedPath,
+                    CapturedAt = timestamp,
+                    Platform = platform,
+                    Summary = BuildEvidenceSummary(conditionGroup)
+                });
+            }
+
+            _specStore.Update(spec);
+            updatedCount++;
+        }
+
+        return updatedCount;
+    }
+
+    /// <summary>
     /// 텍스트 테이블 형태로 건강도 리포트를 렌더링한다 (F-014-C2).
     /// </summary>
     public static string RenderReportTable(TestHealthReport report)
@@ -225,6 +284,42 @@ public class TestSyncService
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────────
+
+    private string NormalizeEvidencePath(string artifactPath)
+    {
+        var docsDir = Path.GetDirectoryName(_specStore.EvidenceDir) ?? _specStore.EvidenceDir;
+        var projectRoot = Path.GetDirectoryName(docsDir) ?? docsDir;
+        return Path.GetRelativePath(projectRoot, artifactPath).Replace('\\', '/');
+    }
+
+    private static string BuildEvidenceSummary(IEnumerable<TestMappingEntry> mappings)
+    {
+        var passed = 0;
+        var failed = 0;
+        var skipped = 0;
+        var flaky = 0;
+
+        foreach (var mapping in mappings)
+        {
+            switch (mapping.Status)
+            {
+                case "passed":
+                    passed++;
+                    break;
+                case "failed":
+                    failed++;
+                    break;
+                case "skipped":
+                    skipped++;
+                    break;
+                case "flaky":
+                    flaky++;
+                    break;
+            }
+        }
+
+        return $"Runner automated tests: passed={passed}, failed={failed}, skipped={skipped}, flaky={flaky}";
+    }
 
     private static Dictionary<string, (string specId, int condIdx)> BuildConditionIndex(List<SpecNode> specs)
     {

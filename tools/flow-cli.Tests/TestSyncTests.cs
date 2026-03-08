@@ -349,4 +349,67 @@ public class TestSyncTests
 
         result.Errors.Should().NotContain(e => e.Field.Contains("tests"));
     }
+
+    [Fact]
+    public void AppendEvidence_AddsSpecAndConditionEvidence()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"flow-testsync-evidence-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var store = new SpecStore(tempDir);
+            store.Initialize();
+
+            store.Create(new SpecNode
+            {
+                Id = "F-030",
+                Title = "Runner test sync",
+                Description = "desc",
+                NodeType = "feature",
+                Conditions =
+                [
+                    new SpecCondition { Id = "F-030-C1", Description = "condition" }
+                ]
+            });
+
+            var service = new TestSyncService(store);
+            var artifactPath = Path.Combine(tempDir, "docs", "evidence", "F-030", "runner-tests", "20260309-000000", "runner-tests.trx");
+            Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
+            File.WriteAllText(artifactPath, "trx");
+
+            var syncResult = new TestSyncResult
+            {
+                Mappings =
+                [
+                    new TestMappingEntry
+                    {
+                        SpecId = "F-030",
+                        ConditionId = "F-030-C1",
+                        TestId = "test-1",
+                        TestName = "Runner test",
+                        Status = "passed"
+                    }
+                ]
+            };
+
+            var updated = service.AppendEvidence(artifactPath, syncResult, "dotnet", "2026-03-09T00:00:00Z");
+            var updatedSpec = store.Get("F-030");
+
+            updated.Should().Be(1);
+            updatedSpec.Should().NotBeNull();
+            updatedSpec!.Evidence.Should().ContainSingle(e => e.Type == "test-result" && e.Path == "docs/evidence/F-030/runner-tests/20260309-000000/runner-tests.trx");
+            updatedSpec.Conditions[0].Evidence.Should().ContainSingle(e => e.Type == "test-result" && e.Summary!.Contains("passed=1"));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch
+            {
+            }
+        }
+    }
 }

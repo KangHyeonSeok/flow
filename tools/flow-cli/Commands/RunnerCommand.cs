@@ -262,6 +262,8 @@ public partial class FlowApp
             CopilotTimeoutMinutes = flowConfig.CopilotTimeoutMinutes,
             RemoteName            = flowConfig.RemoteName,
             MainBranch            = flowConfig.MainBranch,
+            AutomatedTestsEnabled = flowConfig.AutomatedTestsEnabled,
+            AutomatedTestTimeoutMinutes = flowConfig.AutomatedTestTimeoutMinutes,
 
             // GitHub 이슈 연동 (F-070-C11~C15)
             IssuePollIntervalMinutes = flowConfig.IssuePollIntervalMinutes,

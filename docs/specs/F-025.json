@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "손상 스펙 JSON 진단 및 자동 복구",
   "description": "스펙 트리와 runner가 파싱 불가능한 스펙 JSON을 단순 토스트로 흘리지 않고 구조화된 진단 정보로 캐시한 뒤, runner가 일반 구현 작업보다 우선적으로 복구를 시도하도록 만드는 기능. 손상 파일의 경로, 메시지, line/column, 감지 시각, 최근 원본/백업 위치를 추적 가능하게 남기고, 복구 성공 여부와 실패 사유도 캐시와 로그에 이어서 기록해야 한다.",
-  "status": "needs-review",
+  "status": "queued",
   "parent": "F-010",
   "dependencies": [],
   "conditions": [
@@ -97,31 +97,33 @@
   "mutatedBy": [],
   "changeLog": [],
   "metadata": {
-    "runnerInstanceId": "runner-58008-133901",
-    "runnerStartedAt": "2026-03-08T13:55:28.4571184Z",
+    "runnerInstanceId": "runner-54356-143035",
+    "runnerStartedAt": "2026-03-08T14:50:53.7830156Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-025: 손상 스펙 JSON 진단 및 자동 복구' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T13:55:28.4571199Z"
+      "startedAt": "2026-03-08T14:50:53.7830167Z"
     },
     "lastCompletedAt": "2026-03-08T01:40:04.0130485Z",
     "lastCompletedBy": "runner-7472-011050",
     "review": {
       "source": "copilot-cli-review",
-      "reviewedAt": "2026-03-08T02:39:12.1147157Z",
-      "reviewedBy": "runner-4380-023636",
-      "summary": "Worktree 생성 실패로 인해 자동 복구가 중단되어 재작업 필요.",
+      "reviewedAt": "2026-03-08T15:03:58.1417568Z",
+      "reviewedBy": "runner-54356-143035",
+      "summary": "Worktree 생성 실패로 실행이 중단되어 검토가 반영되지 않았습니다. 스펙은 needs-review 상태로 유지되어야 합니다.",
       "failureReasons": [
-        "Worktree 생성 실패",
-        "최근 실행된 복구 절차가 파싱 불가 상태를 구조화하지 못함"
+        "Runner가 작업용 worktree를 생성하지 못해 spec-append-review 프로세스가 중단됨 (lastError: Worktree 생성 실패)",
+        "로컬 파일시스템 권한 또는 이미 존재하는 잠금/디렉토리 충돌 가능성"
       ],
       "alternatives": [
-        "Runner가 재시도하도록 queued로 되돌리기",
-        "수동으로 워크트리 문제 해결 후 재시도"
+        "Runner 실행 환경의 권한·디스크 상태를 복구한 뒤 동일 명령으로 재시도",
+        "검토 파일을 .flow/review에 수동으로 업로드하고 명령 재실행",
+        "Runner가 사용하는 임시/작업 디렉토리 경로를 변경해 충돌을 회피 후 재시도"
       ],
       "suggestedAttempts": [
-        "워크트리 권한/경로 및 디스크 상태 확인",
-        "로그에서 정확한 실패 스택을 확인하고 queued 상태에서 재시작"
+        "Runner가 worktree 생성 시 출력하는 오류(권한/경로)를 확인하고 해결한 뒤 명령 재실행",
+        "임시로 다른 작업 디렉토리 경로를 지정하거나 권한을 부여한 뒤 다시 시도",
+        "권한·락 문제 의심 시 runner 프로세스 재시작 후 동일 명령 재실행"
       ],
       "additionalInformationRequests": []
     },
@@ -140,20 +142,21 @@
     ],
     "reviewDisposition": "retry-queued",
     "plannerState": "standby",
-    "lastReviewAt": "2026-03-08T02:39:12.1147157Z",
-    "lastReviewBy": "runner-4380-023636",
+    "lastReviewAt": "2026-03-08T15:03:58.1417568Z",
+    "lastReviewBy": "runner-54356-143035",
     "selectionReason": {
-      "selectedAt": "2026-03-08T13:55:28.4563181Z",
+      "selectedAt": "2026-03-08T14:50:53.7821807Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
       "totalCandidates": 9
     },
     "lastError": "Worktree 생성 실패",
-    "lastErrorAt": "2026-03-08T13:55:28.7640143Z",
+    "lastErrorAt": "2026-03-08T14:50:53.9742897Z",
     "lastAnsweredAt": "2026-03-08T10:24:00.000Z",
-    "implementationAttempts": 1
+    "implementationAttempts": 0,
+    "questionStatus": "waiting-user-input"
   },
   "createdAt": "2026-03-07T12:47:28.6228976Z",
-  "updatedAt": "2026-03-08T13:55:28.7645505Z"
+  "updatedAt": "2026-03-08T15:03:58.1481126Z"
 }

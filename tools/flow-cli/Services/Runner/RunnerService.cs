@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using FlowCLI.Services.TestSync;
 using FlowCLI.Services.SpecGraph;
 
 namespace FlowCLI.Services.Runner;
@@ -21,6 +22,7 @@ public class RunnerService
     private readonly SpecStore _specStore;
     private readonly GitWorktreeService _git;
     private readonly CopilotService _copilot;
+    private readonly AutomatedTestService _automatedTests;
     private readonly RunnerLogService _log;
     private readonly GitHubIssueService? _githubIssue;
     private readonly BrokenSpecDiagService _diagService;
@@ -132,6 +134,7 @@ public class RunnerService
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
         _copilot = new CopilotService(_config, _log);
+        _automatedTests = new AutomatedTestService(_config, _specStore, _log);
 
         // GitHub 이슈 연동 (F-070-C11~C15)
         if (_config.GitHubIssuesEnabled)
@@ -539,6 +542,22 @@ public class RunnerService
                 result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 구현 실패";
                 MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
                 result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                return FinalizeResult(result);
+            }
+
+            // 3.5. 구현 후 자동 테스트 실행 및 condition/tests/evidence 동기화
+            var automatedTestResult = await _automatedTests.RunAndSyncAsync(spec.Id, worktreePath);
+            if (automatedTestResult.Executed)
+            {
+                spec = _specStore.Get(spec.Id) ?? spec;
+            }
+
+            if (automatedTestResult.Executed && !automatedTestResult.Success)
+            {
+                result.Success = false;
+                result.ErrorMessage = automatedTestResult.ErrorMessage ?? "자동 테스트 실패";
+                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
+                result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
 

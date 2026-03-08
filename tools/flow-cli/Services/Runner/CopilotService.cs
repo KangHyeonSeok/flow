@@ -208,8 +208,9 @@ public class CopilotService
         }
     }
 
-    private static string BuildImplementPrompt(string specId, string specJson, string? previousReview)
+    internal static string BuildImplementPrompt(string specId, string specJson, string? previousReview)
     {
+        var specFilePath = $"docs/specs/{specId}.json";
         var reviewSection = string.IsNullOrWhiteSpace(previousReview)
             ? ""
             : $"""
@@ -223,8 +224,21 @@ public class CopilotService
             다음 스펙을 구현하세요. 스펙의 description과 conditions(수락 조건)를 모두 만족하도록 코드를 작성하세요.
             기존 프로젝트 구조와 코딩 패턴을 따르세요.
             구현 후 빌드가 통과하는지 확인하세요.
+            각 condition별로 가능한 자동 테스트를 먼저 추가하거나 실행 가능한 상태로 맞추세요.
+            자동 테스트를 만들거나 안정적으로 실행하기 어려운 condition은 추측으로 통과 처리하지 말고 수동 검증 대상으로 남기세요.
+            수동 검증으로 남길 때는 스펙 파일 `{specFilePath}`의 해당 condition.metadata에 아래 필드를 기록하세요.
+            - `requiresManualVerification`: true
+            - `manualVerificationReason`: 자동화가 어려운 이유
+            - `manualVerificationItems`: 사용자가 review 단계에서 확인할 수 있는 짧은 체크 항목 배열
+            condition.status는 직접 `verified`나 `done`으로 바꾸지 마세요. 상태 변경은 runner/review 단계에서 처리합니다.
+            테스트를 추가하거나 실행했다면 어떤 condition을 어떤 테스트로 검증했는지 결과를 남길 수 있게 파일/명령 기준이 분명해야 합니다.
+            최종 응답에는 다음을 짧게 요약하세요.
+            - 자동 테스트로 다룬 condition ID 목록
+            - 수동 검증으로 남긴 condition ID 목록과 이유
+            - 추가하거나 실행한 테스트/검증 명령
             {reviewSection}
             스펙 ID: {specId}
+            스펙 파일 경로: {specFilePath}
             스펙 내용:
             {specJson}
             """;

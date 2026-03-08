@@ -63,6 +63,14 @@ public class FlowConfig
     [JsonPropertyName("mainBranch")]
     public string MainBranch { get; set; } = "main";
 
+    /// <summary>Runner가 구현 후 자동 테스트를 실행할지 여부</summary>
+    [JsonPropertyName("automatedTestsEnabled")]
+    public bool AutomatedTestsEnabled { get; set; } = true;
+
+    /// <summary>Runner 자동 테스트 타임아웃 (분)</summary>
+    [JsonPropertyName("automatedTestTimeoutMinutes")]
+    public int AutomatedTestTimeoutMinutes { get; set; } = 10;
+
     // ── GitHub 이슈 연동 설정 (F-070-C11~C15) ─────────────────────
 
     /// <summary>GitHub 이슈 폴링 주기 (분)</summary>

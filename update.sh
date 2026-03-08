@@ -285,18 +285,16 @@ if [ -n "$DB_BACKUP_DIR" ] && [ -d "$DB_BACKUP_DIR/db" ]; then
     rm -rf "$DB_BACKUP_DIR"
 fi
 
-# .github/prompts 폴더 복사 (있으면)
-if [ -d "$TEMP_DIR/prompts" ]; then
-    if find "$TEMP_DIR/prompts" -mindepth 1 -maxdepth 1 -print -quit | read -r; then
-        mkdir -p ".github/prompts"
-        cp -r "$TEMP_DIR/prompts/." ".github/prompts/"
-    fi
-fi
-
 # .github/agents 폴더 복사 (있으면)
 if [ -d "$TEMP_DIR/.github/agents" ]; then
     mkdir -p ".github/agents"
     cp -r "$TEMP_DIR/.github/agents/." ".github/agents/"
+fi
+
+# .github/skills 폴더 복사 (있으면)
+if [ -d "$TEMP_DIR/.github/skills" ]; then
+    mkdir -p ".github/skills"
+    cp -r "$TEMP_DIR/.github/skills/." ".github/skills/"
 fi
 
 # flow.ps1 복사 (있으면)
@@ -310,53 +308,22 @@ if [ -f "$TEMP_DIR/flow" ]; then
     chmod +x "./flow"
 fi
 
-# 필수 디렉토리 사전 생성
-mkdir -p ".github/prompts"
+# 필수 디렉토리 생성
 mkdir -p ".github/agents"
-mkdir -p "docs"
-mkdir -p "docs/flow"
-mkdir -p "docs/flow/backlogs"
-mkdir -p "docs/flow/implements"
-mkdir -p "docs/flow/meta"
+mkdir -p ".github/skills"
+mkdir -p "docs/specs"
 
-# skill-creator 스킬이 없으면 GitHub에서 다운로드
-SKILL_CREATOR_DIR=".github/skills/skill-creator"
-if [ ! -f "$SKILL_CREATOR_DIR/SKILL.md" ]; then
-    step "skill-creator 스킬 다운로드 중..."
-    SKILL_ZIP_URL="https://github.com/anthropics/skills/archive/refs/heads/main.zip"
-    SKILL_TEMP_ZIP=$(mktemp /tmp/skill-creator-XXXXXX.zip)
-    SKILL_TEMP_DIR=$(mktemp -d /tmp/skill-creator-extract-XXXXXX)
-    skill_cleanup() {
-        rm -f "$SKILL_TEMP_ZIP"
-        rm -rf "$SKILL_TEMP_DIR"
-    }
-    trap skill_cleanup EXIT
-
-    if command -v curl &> /dev/null; then
-        curl -fsSL -o "$SKILL_TEMP_ZIP" "$SKILL_ZIP_URL"
-    elif command -v wget &> /dev/null; then
-        wget -qO "$SKILL_TEMP_ZIP" "$SKILL_ZIP_URL"
+# VS Code 확장 설치 (code CLI가 있을 때)
+VSIX_FILE=$(find "$FLOW_DIR" -maxdepth 1 -name "*.vsix" | head -1)
+if [ -n "$VSIX_FILE" ]; then
+    if command -v code &> /dev/null; then
+        step "VS Code 확장 업데이트 중..."
+        code --install-extension "$VSIX_FILE" --force > /dev/null 2>&1 && \
+            success "VS Code 확장 업데이트 완료" || \
+            warn "VS Code 확장 설치 실패 (수동 설치: Extensions 탭에서 .vsix 파일 선택)"
     else
-        warn "curl 또는 wget이 필요합니다."
+        warn "VS Code CLI(code)를 찾을 수 없습니다. 수동으로 $VSIX_FILE 설치하세요."
     fi
-
-    if command -v unzip &> /dev/null; then
-        unzip -q "$SKILL_TEMP_ZIP" -d "$SKILL_TEMP_DIR"
-        SKILL_SOURCE="$SKILL_TEMP_DIR/skills-main/skills/skill-creator"
-        if [ -d "$SKILL_SOURCE" ]; then
-            mkdir -p ".github/skills"
-            rm -rf "$SKILL_CREATOR_DIR"
-            cp -r "$SKILL_SOURCE" "$SKILL_CREATOR_DIR"
-            success "skill-creator 스킬 다운로드 완료"
-        else
-            warn "skill-creator 경로를 찾을 수 없습니다."
-        fi
-    else
-        warn "unzip이 필요합니다."
-    fi
-
-    trap - EXIT
-    skill_cleanup
 fi
 
 setup_vlm_python_environment || true

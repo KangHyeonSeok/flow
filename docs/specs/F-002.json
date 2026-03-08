@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "JSON 기반 통합 명령 요청/응답",
   "description": "flow CLI의 모든 기능이 분리된 positional/option 인자 조합 대신 공통 JSON 요청 계약을 기본 입력으로 받아 처리하도록 표준화하고, 실행 결과와 오류도 동일한 JSON 응답 계약으로 출력하는 기능. build/spec/db/test/runner/config 등 기존 명령군은 내부적으로 공통 요청 DTO와 응답 DTO를 사용하도록 수렴하며, stdin/file/direct string 입력과 기계 친화적 오류 보고를 지원한다.",
-  "status": "needs-review",
+  "status": "queued",
   "parent": "F-001",
   "dependencies": [],
   "conditions": [
@@ -12,12 +12,10 @@
       "id": "F-002-C1",
       "nodeType": "condition",
       "description": "Given flow CLI 호출, When 사용자가 JSON 요청 본문(stdin, 파일, 또는 직접 문자열)으로 command, subcommand, arguments, options를 전달, Then 런타임이 공통 요청 계약으로 역직렬화하고 대상 명령 핸들러로 라우팅한다",
-      "status": "needs-review",
+      "status": "working",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/FlowApp.cs",
-        "tools/flow-cli/Commands/JsonCommand.cs",
-        "tools/flow-cli/Models/FlowRequest.cs"
+        "tools/flow-cli/FlowApp.cs"
       ],
       "evidence": [],
       "tests": []
@@ -26,9 +24,8 @@
       "id": "F-002-C2",
       "nodeType": "condition",
       "description": "Given build/spec/db/test/runner/config 등 기존 최상위 명령군, When JSON 요청을 실행, Then 각 명령은 분리된 CLI 인자 없이도 중첩 payload를 바인딩해 동일 기능을 수행한다",
-      "status": "needs-review",
+      "status": "working",
       "codeRefs": [
-        "tools/flow-cli/Commands/JsonCommand.cs",
         "tools/flow-cli/Commands/BuildCommand.cs",
         "tools/flow-cli/Commands/SpecCommand.cs",
         "tools/flow-cli/Commands/DbAddCommand.cs",
@@ -45,10 +42,8 @@
       "id": "F-002-C3",
       "nodeType": "condition",
       "description": "Given 명령 실행 성공, When JSON 출력 모드가 활성화되거나 JSON 요청 경로로 호출, Then 응답은 최소 success, command, data, message, metadata 필드를 포함하는 표준 JSON 객체로 출력된다",
-      "status": "needs-review",
+      "status": "working",
       "codeRefs": [
-        "tools/flow-cli/Utils/JsonOutput.cs",
-        "tools/flow-cli/Models/CommandResult.cs",
         "tools/flow-cli/Commands/BuildCommand.cs",
         "tools/flow-cli/Commands/SpecCommand.cs",
         "tools/flow-cli/Commands/DbQueryCommand.cs",
@@ -61,13 +56,10 @@
       "id": "F-002-C4",
       "nodeType": "condition",
       "description": "Given 요청 스키마 오류 또는 명령 실행 오류, When flow가 실패를 반환, Then 응답은 success=false, error.code, error.message, error.details, exitCode를 포함하는 JSON 객체로 정규화된다",
-      "status": "needs-review",
+      "status": "working",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/Commands/JsonCommand.cs",
-        "tools/flow-cli/Models/CommandResult.cs",
-        "tools/flow-cli/Models/ErrorInfo.cs",
-        "tools/flow-cli/Utils/JsonOutput.cs"
+        "tools/flow-cli/FlowApp.cs"
       ],
       "evidence": [],
       "tests": []
@@ -76,12 +68,10 @@
       "id": "F-002-C5",
       "nodeType": "condition",
       "description": "Given 기존 분리형 CLI 인자 호출 경로, When 마이그레이션 기간 동안 legacy 인자로 명령을 실행, Then 내부적으로 동일한 JSON 요청 모델로 변환되어 동작하고 JSON 출력 모드를 통해 동일한 응답 계약을 제공하며 deprecation 경고를 노출할 수 있다",
-      "status": "needs-review",
+      "status": "working",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/FlowApp.cs",
-        "tools/flow-cli/Services/LegacyArgsAdapter.cs",
-        "tools/flow-cli/Services/DeprecationPolicy.cs"
+        "tools/flow-cli/FlowApp.cs"
       ],
       "evidence": [],
       "tests": []
@@ -112,52 +102,64 @@
   "mutatedBy": [],
   "changeLog": [],
   "metadata": {
-    "runnerInstanceId": "runner-58008-133901",
-    "runnerStartedAt": "2026-03-08T13:39:02.1539701Z",
+    "runnerInstanceId": "runner-54356-143035",
+    "runnerStartedAt": "2026-03-08T15:04:58.2737932Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-002: JSON 기반 통합 명령 요청/응답' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T13:39:02.1539800Z"
+      "startedAt": "2026-03-08T15:04:58.2737944Z"
     },
-    "lastCompletedAt": "2026-03-08T09:34:09.4455071Z",
-    "lastCompletedBy": "runner-47000-092924",
+    "lastCompletedAt": "2026-03-08T14:43:52.9210813Z",
+    "lastCompletedBy": "runner-54356-143035",
     "review": {
       "source": "copilot-cli-review",
-      "reviewedAt": "2026-03-08T09:36:03.3979939Z",
-      "reviewedBy": "runner-47000-092924",
-      "summary": "자동 검토 결과: 재작업 필요",
+      "reviewedAt": "2026-03-08T14:50:50.8373818Z",
+      "reviewedBy": "runner-54356-143035",
+      "summary": "JSON 기반 요청/응답 계약은 구현 의도가 충실하지만 오류 코드 표준화와 마이그레이션 정책이 명확하지 않아 재작업이 필요합니다.",
       "failureReasons": [
-        "자동 검토 출력이 요구된 스키마에 정확히 맞지 않아 spec-append-review 명령이 거부되었습니다.",
-        "검토 프로세스가 구현 로그와 변경 파일을 충분히 수집하지 못해 실패 원인을 자동으로 판별할 수 없습니다."
+        "오류 응답의 표준 error.code 목록과 exitCode 매핑이 명세에 없음",
+        "레거시 CLI 인자 → JSON 변환의 우선순위와 deprecation 사용자 통지가 불명확",
+        "end-to-end 테스트(파일/stdin/direct string 경로 포함) 및 언어별 클라이언트 호환성 검증이 누락"
       ],
       "alternatives": [
-        "구현 로그와 변경 파일을 수동으로 검토한 뒤 구조화된 리뷰 JSON을 생성하여 재시도합니다.",
-        "검토 도구의 직렬화/출력 로직을 개선하여 다음 시도에서 자동으로 올바른 JSON을 생성하도록 합니다."
+        "오류 코드 레지스트리와 exitCode 매핑을 별도 문서로 정의",
+        "마이그레이션 기간 동안 JSON/legacy 병행 모드를 명시하고 경고 메시지 표준을 추가",
+        "우선적으로 핵심 명령(build/spec/test)에 대해 E2E 테스트를 작성 후 확장"
       ],
       "suggestedAttempts": [
-        "런타임과 구현 로그(implementation output, runner 출력)를 수집하여 실패 원인 분석을 수행합니다.",
-        "자동 검토 프롬프트를 보완하거나 수동으로 검토 요약을 JSON 스키마에 맞춰 작성한 뒤 다시 제출합니다.",
-        "queued 상태에서 재작업을 시작하기 전에 관련 변경 파일 목록과 최신 커밋을 확인합니다."
+        "error.code 목록과 exitCode 규칙을 스펙에 추가하고 코드Refs에서 일치하는지 확인",
+        "legacy 인자 변환 로직의 우선순위와 deprecation 메시지를 명세에 명시",
+        "stdin/file/direct string 입력 경로를 포함한 E2E 테스트 시나리오를 작성하여 실행"
       ],
-      "additionalInformationRequests": []
+      "additionalInformationRequests": [],
+      "questions": []
     },
-    "questions": [],
-    "reviewDisposition": "needs-user-decision",
+    "questions": [
+      {
+        "id": "review-request-1",
+        "type": "missing-info",
+        "question": "권장되는 deprecation 기간(예: 1개월, 3개월, 6개월)",
+        "status": "answered",
+        "answer": "json 모드를 기본으로 하자.",
+        "answeredAt": "2026-03-08T14:51:42.344Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
     "plannerState": "standby",
-    "lastReviewAt": "2026-03-08T09:36:03.3979939Z",
-    "lastReviewBy": "runner-47000-092924",
+    "lastReviewAt": "2026-03-08T14:50:50.8373818Z",
+    "lastReviewBy": "runner-54356-143035",
     "selectionReason": {
-      "selectedAt": "2026-03-08T13:39:02.0433450Z",
+      "selectedAt": "2026-03-08T15:04:58.2726579Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
       "totalCandidates": 10
     },
-    "lastAnsweredAt": "2026-03-08T10:24:00.000Z",
+    "lastAnsweredAt": "2026-03-08T14:51:42.344Z",
     "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-002",
     "worktreeBranch": "runner/F-002",
-    "implementationAttempts": 2
+    "implementationAttempts": 1
   },
   "createdAt": "2026-03-07T04:02:46.6346598Z",
-  "updatedAt": "2026-03-08T13:48:29.3399426Z"
+  "updatedAt": "2026-03-08T15:10:52.716Z"
 }
