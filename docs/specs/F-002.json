@@ -12,10 +12,12 @@
       "id": "F-002-C1",
       "nodeType": "condition",
       "description": "Given flow CLI 호출, When 사용자가 JSON 요청 본문(stdin, 파일, 또는 직접 문자열)으로 command, subcommand, arguments, options를 전달, Then 런타임이 공통 요청 계약으로 역직렬화하고 대상 명령 핸들러로 라우팅한다",
-      "status": "working",
+      "status": "needs-review",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/FlowApp.cs"
+        "tools/flow-cli/FlowApp.cs",
+        "tools/flow-cli/Commands/JsonCommand.cs",
+        "tools/flow-cli/Models/FlowRequest.cs"
       ],
       "evidence": [],
       "tests": []
@@ -24,8 +26,9 @@
       "id": "F-002-C2",
       "nodeType": "condition",
       "description": "Given build/spec/db/test/runner/config 등 기존 최상위 명령군, When JSON 요청을 실행, Then 각 명령은 분리된 CLI 인자 없이도 중첩 payload를 바인딩해 동일 기능을 수행한다",
-      "status": "working",
+      "status": "needs-review",
       "codeRefs": [
+        "tools/flow-cli/Commands/JsonCommand.cs",
         "tools/flow-cli/Commands/BuildCommand.cs",
         "tools/flow-cli/Commands/SpecCommand.cs",
         "tools/flow-cli/Commands/DbAddCommand.cs",
@@ -42,8 +45,10 @@
       "id": "F-002-C3",
       "nodeType": "condition",
       "description": "Given 명령 실행 성공, When JSON 출력 모드가 활성화되거나 JSON 요청 경로로 호출, Then 응답은 최소 success, command, data, message, metadata 필드를 포함하는 표준 JSON 객체로 출력된다",
-      "status": "working",
+      "status": "needs-review",
       "codeRefs": [
+        "tools/flow-cli/Utils/JsonOutput.cs",
+        "tools/flow-cli/Models/CommandResult.cs",
         "tools/flow-cli/Commands/BuildCommand.cs",
         "tools/flow-cli/Commands/SpecCommand.cs",
         "tools/flow-cli/Commands/DbQueryCommand.cs",
@@ -56,10 +61,13 @@
       "id": "F-002-C4",
       "nodeType": "condition",
       "description": "Given 요청 스키마 오류 또는 명령 실행 오류, When flow가 실패를 반환, Then 응답은 success=false, error.code, error.message, error.details, exitCode를 포함하는 JSON 객체로 정규화된다",
-      "status": "working",
+      "status": "needs-review",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/FlowApp.cs"
+        "tools/flow-cli/Commands/JsonCommand.cs",
+        "tools/flow-cli/Models/CommandResult.cs",
+        "tools/flow-cli/Models/ErrorInfo.cs",
+        "tools/flow-cli/Utils/JsonOutput.cs"
       ],
       "evidence": [],
       "tests": []
@@ -68,10 +76,12 @@
       "id": "F-002-C5",
       "nodeType": "condition",
       "description": "Given 기존 분리형 CLI 인자 호출 경로, When 마이그레이션 기간 동안 legacy 인자로 명령을 실행, Then 내부적으로 동일한 JSON 요청 모델로 변환되어 동작하고 JSON 출력 모드를 통해 동일한 응답 계약을 제공하며 deprecation 경고를 노출할 수 있다",
-      "status": "working",
+      "status": "needs-review",
       "codeRefs": [
         "tools/flow-cli/Program.cs",
-        "tools/flow-cli/FlowApp.cs"
+        "tools/flow-cli/FlowApp.cs",
+        "tools/flow-cli/Services/LegacyArgsAdapter.cs",
+        "tools/flow-cli/Services/DeprecationPolicy.cs"
       ],
       "evidence": [],
       "tests": []
@@ -146,9 +156,7 @@
     "lastAnsweredAt": "2026-03-08T10:24:00.000Z",
     "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-002",
     "worktreeBranch": "runner/F-002",
-    "lastError": "머지 실패",
-    "lastErrorAt": "2026-03-08T13:48:29.3387996Z",
-    "implementationAttempts": 1
+    "implementationAttempts": 2
   },
   "createdAt": "2026-03-07T04:02:46.6346598Z",
   "updatedAt": "2026-03-08T13:48:29.3399426Z"
