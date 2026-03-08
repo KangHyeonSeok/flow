@@ -44,12 +44,6 @@ public class RunnerConfig
     /// <summary>메인 브랜치 이름</summary>
     public string MainBranch { get; set; } = "main";
 
-    /// <summary>스펙 저장소 git URL (필수). 예: https://github.com/user/flow-spec.git</summary>
-    public string? SpecRepository { get; set; }
-
-    /// <summary>스펙 저장소 브랜치 (기본: main)</summary>
-    public string SpecBranch { get; set; } = "main";
-
     // ── GitHub 이슈 연동 (F-070-C11~C15) ─────────────────
 
     /// <summary>GitHub 이슈 폴링 주기 (분)</summary>

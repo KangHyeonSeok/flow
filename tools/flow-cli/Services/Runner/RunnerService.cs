@@ -19,13 +19,11 @@ public class RunnerService
     private readonly string _flowRoot;
     private readonly RunnerConfig _config;
     private readonly SpecStore _specStore;
-    private readonly SpecRepoService? _specRepo;
     private readonly GitWorktreeService _git;
     private readonly CopilotService _copilot;
     private readonly RunnerLogService _log;
     private readonly GitHubIssueService? _githubIssue;
     private readonly BrokenSpecDiagService _diagService;
-    private readonly SemaphoreSlim _specRepoGate = new(1, 1);
     private readonly string _instanceId;
     private readonly string _pidFilePath;
     private DateTime _lastIssuePollAt = DateTime.MinValue;
@@ -113,7 +111,7 @@ public class RunnerService
         }
     }
 
-    public RunnerService(string projectRoot, RunnerConfig config, string specCacheDir)
+    public RunnerService(string projectRoot, RunnerConfig config)
     {
         _projectRoot = projectRoot;
         _flowRoot = Path.Combine(projectRoot, ".flow");
@@ -124,25 +122,12 @@ public class RunnerService
 
         _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId);
 
-        // specRepository가 설정된 경우: 원격 spec-repo 사용 (F-080-C3, C4)
-        // 미설정인 경우: 로컬 docs/specs/ 직접 사용 (로컬 모드)
-        if (!string.IsNullOrWhiteSpace(_config.SpecRepository))
-        {
-            _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, specCacheDir, _log);
-            _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
-            _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {specCacheDir}");
-        }
-        else
-        {
-            _specRepo = null;
-            _specStore = new SpecStore(projectRoot);  // docs/specs/ 로컬 모드
-            _log.Info("init", $"로컬 스펙 모드: {_specStore.SpecsDir} (specRepository 미설정)");
-        }
+        // 로컬 docs/specs/ 직접 사용
+        _specStore = new SpecStore(projectRoot);
+        _log.Info("init", $"로컬 스펙 모드: {_specStore.SpecsDir}");
 
         // F-025: 손상 스펙 진단 서비스 초기화
-        // 로컬 모드에서는 .flow/ 에 진단 캐시 저장, 원격 모드에서는 spec-cache/ 에 저장
-        var diagCacheDir = _specRepo != null ? specCacheDir : _flowRoot;
-        _diagService = new BrokenSpecDiagService(diagCacheDir, _log);
+        _diagService = new BrokenSpecDiagService(_flowRoot, _log);
         _specStore.SetDiagService(_diagService);
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
@@ -176,21 +161,8 @@ public class RunnerService
 
         _log.Info("cycle", "=== Runner 사이클 시작 ===");
 
-        // 0. 스펙 저장소 동기화 (크래시 복구보다 먼저 실행 — 최신 스펙 상태 기반 복구)
-        _log.Info("sync", "스펙 저장소 동기화 시작");
-        var synced = await SyncSpecRepoAsync();
-        if (!synced)
-        {
-            _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
-            return results;
-        }
-
-        // 1. 이전 크래시 복구 (sync 후 실행 — 로컬 변경 없이 pull된 최신 상태에서 복구)
-        var crashRecovered = RecoverFromCrash();
-        if (crashRecovered > 0 && _specRepo != null)
-        {
-            await CommitSpecRepoAsync("[runner] Recover crashed specs to needs-review");
-        }
+        // 1. 이전 크래시 복구
+        RecoverFromCrash();
 
         // 1.5. 검토 대기 스펙 자동 검증
         var autoVerified = await AutoVerifyReviewedSpecsAsync();
@@ -263,11 +235,6 @@ public class RunnerService
                     $"{issueResults.Count(r => r.Action == "created")} 생성, " +
                     $"{issueResults.Count(r => r.Action == "error")} 오류");
 
-                // 이슈 처리로 스펙이 변경되었으면 push
-                if (issueResults.Any(r => r.Success && r.Action is "linked" or "created") && _specRepo != null)
-                {
-                    await CommitSpecRepoAsync("[runner] Update specs from GitHub issues");
-                }
             }
         }
         catch (Exception ex)
@@ -636,12 +603,6 @@ public class RunnerService
 
             // 7. 프로젝트 변경사항 push
             await _git.PushAsync(_config.RemoteName, _config.MainBranch);
-
-            // 8. 스펙 저장소 변경사항 push (별도 저장소인 경우)
-            if (_specRepo != null)
-            {
-                await CommitSpecRepoAsync($"[runner] Update {spec.Id} status to {spec.Status}");
-            }
 
             result.Success = true;
             result.TriggeredReschedule = true; // F-031-C1: working → needs-review/verified 전환
@@ -1093,14 +1054,6 @@ public class RunnerService
             });
         }
 
-        if (results.Count > 0 && _specRepo != null)
-        {
-            var summary = results.Count <= 3
-                ? string.Join(", ", results.Select(result => result.SpecId))
-                : $"{results.Count} specs";
-            await CommitSpecRepoAsync($"[runner] Auto-verify {summary}");
-        }
-
         return results;
     }
 
@@ -1147,12 +1100,6 @@ public class RunnerService
 
             var repairResult = await AttemptRepairAsync(record);
             results.Add(repairResult);
-        }
-
-        // 복구로 인한 스펙 저장소 변경 push
-        if (results.Any(r => r.Success && r.Action == "repair") && _specRepo != null)
-        {
-            await CommitSpecRepoAsync("[runner] Repair broken spec JSON files");
         }
 
         return results;
@@ -1421,55 +1368,8 @@ public class RunnerService
         }
     }
 
-    private async Task<bool> SyncSpecRepoAsync(CancellationToken cancellationToken = default)
-    {
-        if (_specRepo == null)
-        {
-            return true;
-        }
-
-        await _specRepoGate.WaitAsync(cancellationToken);
-        try
-        {
-            return await _specRepo.SyncAsync();
-        }
-        finally
-        {
-            _specRepoGate.Release();
-        }
-    }
-
-    private async Task CommitSpecRepoAsync(string message, CancellationToken cancellationToken = default)
-    {
-        if (_specRepo == null)
-        {
-            return;
-        }
-
-        await _specRepoGate.WaitAsync(cancellationToken);
-        try
-        {
-            await _specRepo.CommitAndPushAsync(message);
-        }
-        finally
-        {
-            _specRepoGate.Release();
-        }
-    }
-
     private async Task<SpecWorkResult?> ReviewNextSpecAsync(CancellationToken cancellationToken)
     {
-        // 로컬 모드(_specRepo == null)에서도 리뷰 루프가 동작하도록 sync는 optional로 처리한다.
-        if (_specRepo != null)
-        {
-            var synced = await SyncSpecRepoAsync(cancellationToken);
-            if (!synced)
-            {
-                _log.Warn("review-loop", "검토 루프용 스펙 저장소 동기화 실패");
-                return null;
-            }
-        }
-
         var candidate = FindNextReviewCandidate();
         if (candidate == null)
         {
@@ -1510,11 +1410,6 @@ public class RunnerService
         {
             await CleanupWorktreeFromMetadataAsync(reviewedSpec);
         }
-
-        var commitMsg = HasOpenQuestions(reviewedSpec!)
-            ? $"[runner] Review {candidate.Id}: waiting for user input"
-            : $"[runner] Review {candidate.Id} and requeue";
-        await CommitSpecRepoAsync(commitMsg, cancellationToken);
 
         result.Success = true;
         result.TriggeredReschedule = !HasOpenQuestions(reviewedSpec!);

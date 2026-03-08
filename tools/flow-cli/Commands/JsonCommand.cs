@@ -137,7 +137,6 @@ public partial class FlowApp
             case "config":
                 Config(
                     log: GetOption<string?>(opts, "log", null),
-                    specRepo: GetOption<string?>(opts, "spec-repo", null),
                     pretty: pretty);
                 break;
 

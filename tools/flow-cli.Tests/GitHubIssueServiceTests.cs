@@ -32,31 +32,15 @@ public class GitHubIssueServiceTests : IDisposable
     [Fact]
     public void ParseGitHubRepo_ExplicitGitHubRepo_ReturnsParsed()
     {
-        var (owner, repo) = GitHubIssueService.ParseGitHubRepo("myorg/myrepo", null);
+        var (owner, repo) = GitHubIssueService.ParseGitHubRepo("myorg/myrepo");
         owner.Should().Be("myorg");
         repo.Should().Be("myrepo");
     }
 
     [Fact]
-    public void ParseGitHubRepo_FromSpecRepository_Https()
-    {
-        var (owner, repo) = GitHubIssueService.ParseGitHubRepo(null, "https://github.com/user/flow-spec.git");
-        owner.Should().Be("user");
-        repo.Should().Be("flow-spec");
-    }
-
-    [Fact]
-    public void ParseGitHubRepo_FromSpecRepository_SshUrl()
-    {
-        var (owner, repo) = GitHubIssueService.ParseGitHubRepo(null, "git@github.com:org/my-specs.git");
-        owner.Should().Be("org");
-        repo.Should().Be("my-specs");
-    }
-
-    [Fact]
     public void ParseGitHubRepo_NoConfig_Throws()
     {
-        var act = () => GitHubIssueService.ParseGitHubRepo(null, null);
+        var act = () => GitHubIssueService.ParseGitHubRepo(null);
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -256,7 +240,6 @@ public class GitHubIssueServiceTests : IDisposable
     {
         var config = new RunnerConfig
         {
-            SpecRepository = "https://github.com/test/test-spec.git",
             GitHubRepo = "test/test-repo",
             GitHubToken = "fake-token",
             GitHubIssuesEnabled = true,

@@ -4,21 +4,11 @@ namespace FlowCLI.Models;
 
 /// <summary>
 /// .flow/config.json 설정 모델.
-/// specRepository, Runner 동작에 필요한 모든 설정을 포함한다.
+/// Runner 동작에 필요한 모든 설정을 포함한다.
 /// (runner-config.json은 config.json으로 통합됨)
 /// </summary>
 public class FlowConfig
 {
-    // ── 스펙 저장소 ─────────────────────────────────────────────
-
-    /// <summary>스펙 저장소 git URL. 예: https://github.com/user/flow-spec.git</summary>
-    [JsonPropertyName("specRepository")]
-    public string? SpecRepository { get; set; }
-
-    /// <summary>스펙 저장소 브랜치 (기본: main)</summary>
-    [JsonPropertyName("specBranch")]
-    public string SpecBranch { get; set; } = "main";
-
     // ── Runner 동작 설정 ─────────────────────────────────────────
 
     /// <summary>스펙 그래프 pull 주기 (분)</summary>
@@ -79,7 +69,7 @@ public class FlowConfig
     [JsonPropertyName("issuePollIntervalMinutes")]
     public int IssuePollIntervalMinutes { get; set; } = 10;
 
-    /// <summary>GitHub 저장소 (owner/repo 형식). 미설정 시 specRepository에서 추출.</summary>
+    /// <summary>GitHub 저장소 (owner/repo 형식).</summary>
     [JsonPropertyName("githubRepo")]
     public string? GitHubRepo { get; set; }
 

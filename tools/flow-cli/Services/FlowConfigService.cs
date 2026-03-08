@@ -7,7 +7,6 @@ namespace FlowCLI.Services;
 
 /// <summary>
 /// .flow/config.json 설정 파일을 읽고 쓰는 서비스.
-/// specRepository 및 Runner 동작 설정을 관리한다.
 /// </summary>
 public class FlowConfigService
 {
@@ -65,18 +64,4 @@ public class FlowConfigService
         File.WriteAllText(_configPath, json);
     }
 
-    /// <summary>
-    /// specRepository를 읽어 반환한다.
-    /// </summary>
-    public string? GetSpecRepository() => Load().SpecRepository;
-
-    /// <summary>
-    /// specRepository URL을 config.json에 저장한다.
-    /// </summary>
-    public void SetSpecRepository(string url)
-    {
-        var config = Load();
-        config.SpecRepository = url;
-        Save(config);
-    }
 }

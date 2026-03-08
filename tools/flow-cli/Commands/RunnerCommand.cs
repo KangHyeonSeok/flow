@@ -9,59 +9,6 @@ public partial class FlowApp
     private RunnerConfig? _runnerConfig;
     private RunnerConfig RunnerConfig => _runnerConfig ??= LoadRunnerConfig();
 
-    [Command("spec-sync", Description = "원격 specRepository를 .flow/spec-cache/로 동기화합니다.")]
-    public void SpecSync(
-        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
-    {
-        try
-        {
-            var config = RunnerConfig;
-            if (string.IsNullOrWhiteSpace(config.SpecRepository))
-            {
-                JsonOutput.Write(JsonOutput.Success("spec-sync", new
-                {
-                    synced = false,
-                    reason = "specRepository-not-configured"
-                }, "specRepository가 설정되어 있지 않아 로컬 스펙만 사용합니다."), pretty);
-                return;
-            }
-
-            var log = new RunnerLogService(
-                PathResolver.FlowRoot,
-                config.LogDir,
-                $"spec-sync-{Environment.ProcessId}-{DateTime.UtcNow:HHmmss}");
-
-            var repo = new SpecRepoService(
-                config.SpecRepository,
-                config.SpecBranch,
-                PathResolver.SpecCacheDir,
-                log);
-
-            var synced = repo.SyncAsync().GetAwaiter().GetResult();
-            if (!synced)
-            {
-                JsonOutput.Write(JsonOutput.Error("spec-sync",
-                    $"스펙 저장소 동기화 실패: {config.SpecRepository}"), pretty);
-                Environment.ExitCode = 1;
-                return;
-            }
-
-            JsonOutput.Write(JsonOutput.Success("spec-sync", new
-            {
-                synced = true,
-                repository = config.SpecRepository,
-                branch = config.SpecBranch,
-                localPath = repo.LocalPath,
-                specsDir = repo.SpecsDir,
-            }, "스펙 저장소 동기화 완료"), pretty);
-        }
-        catch (Exception ex)
-        {
-            JsonOutput.Write(JsonOutput.Error("spec-sync", ex.Message), pretty);
-            Environment.ExitCode = 1;
-        }
-    }
-
     [Command("runner-start", Description = "Flow Runner를 시작한다. 스펙 그래프를 폴링하여 미구현 스펙을 자동 구현한다.")]
     public void RunnerStart(
         [Option("daemon", Description = "백그라운드 데몬 모드로 실행")] bool daemon = false,
@@ -86,8 +33,7 @@ public partial class FlowApp
                 return;
             }
 
-            // .flow/spec-cache/ 경로 전달 (F-080-C3, C4)
-            var runner = new RunnerService(PathResolver.ProjectRoot, config, PathResolver.SpecCacheDir);
+            var runner = new RunnerService(PathResolver.ProjectRoot, config);
 
             if (daemon)
             {
@@ -303,8 +249,6 @@ public partial class FlowApp
 
         return new RunnerConfig
         {
-            SpecRepository        = flowConfig.SpecRepository,
-            SpecBranch            = flowConfig.SpecBranch,
             PollIntervalMinutes   = flowConfig.PollIntervalMinutes,
             ReviewPollIntervalSeconds = flowConfig.ReviewPollIntervalSeconds,
             MaxConcurrentSpecs    = flowConfig.MaxConcurrentSpecs,

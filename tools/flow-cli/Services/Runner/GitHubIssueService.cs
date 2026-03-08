@@ -49,7 +49,7 @@ public class GitHubIssueService
         _log = log;
 
         // GitHub repo 파싱 (owner/repo)
-        var (owner, repo) = ParseGitHubRepo(config.GitHubRepo, config.SpecRepository);
+        var (owner, repo) = ParseGitHubRepo(config.GitHubRepo);
         _owner = owner;
         _repo = repo;
 
@@ -87,7 +87,7 @@ public class GitHubIssueService
         _copilot = copilot;
         _log = log;
 
-        var (owner, repo) = ParseGitHubRepo(config.GitHubRepo, config.SpecRepository);
+        var (owner, repo) = ParseGitHubRepo(config.GitHubRepo);
         _owner = owner;
         _repo = repo;
         _http = httpClient;
@@ -792,31 +792,19 @@ public class GitHubIssueService
     }
 
     /// <summary>
-    /// GitHubRepo 또는 SpecRepository에서 owner/repo를 파싱한다.
+    /// githubRepo 설정에서 owner/repo를 파싱한다.
     /// </summary>
-    internal static (string Owner, string Repo) ParseGitHubRepo(string? githubRepo, string? specRepository)
+    internal static (string Owner, string Repo) ParseGitHubRepo(string? githubRepo)
     {
-        // 명시적 설정 우선
         if (!string.IsNullOrEmpty(githubRepo) && githubRepo.Contains('/'))
         {
             var parts = githubRepo.Split('/');
             return (parts[0], parts[1]);
         }
 
-        // specRepository에서 추출
-        if (!string.IsNullOrEmpty(specRepository))
-        {
-            // https://github.com/owner/repo.git → owner, repo
-            var match = Regex.Match(specRepository, @"github\.com[:/]([^/]+)/([^/.]+)");
-            if (match.Success)
-            {
-                return (match.Groups[1].Value, match.Groups[2].Value);
-            }
-        }
-
         throw new InvalidOperationException(
             "GitHub 저장소 정보를 확인할 수 없습니다. " +
-            "config.json에 githubRepo(owner/repo) 또는 specRepository(GitHub URL)를 설정하세요.");
+            "config.json에 githubRepo(owner/repo 형식)를 설정하세요.");
     }
 
     /// <summary>마지막 이슈 확인 시각 로드</summary>
