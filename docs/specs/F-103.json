@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "F-103",
+  "nodeType": "task",
+  "title": "freshness-aware query 및 stale 신호 노출",
+  "description": "`db-query` 결과가 semantic similarity만 보여주는 상태를 넘어 created_at, updated_at, document type, canonical 여부 같은 freshness 신호를 함께 노출하고, 가능하면 ranking에도 최신 canonical summary 우선 정책을 반영하는 일회성 구현 작업. 목표는 검색 결과를 LLM이 현재 truth처럼 오인하지 않게 만드는 것이다.",
+  "status": "queued",
+  "parent": "F-101",
+  "dependencies": [
+    "F-101",
+    "F-030"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "docs/rag-freshness-policy.md",
+    "tools/flow-cli/Commands/DbQueryCommand.cs",
+    "tools/flow-cli/Services/DatabaseService.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "rag",
+    "freshness",
+    "query",
+    "stale",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:55:33.7650600Z",
+      "author": "planner",
+      "summary": "스펙 'F-103' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:56:30Z",
+      "author": "planner",
+      "summary": "검색 결과에 freshness 신호와 stale-aware 우선순위를 노출하는 queued task로 구조화",
+      "relatedIds": [
+        "F-101",
+        "F-030"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:55:33.7650600Z",
+  "updatedAt": "2026-03-08T01:56:30Z"
+}

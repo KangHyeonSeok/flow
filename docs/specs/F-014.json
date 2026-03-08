@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 2,
+  "id": "F-014",
+  "nodeType": "feature",
+  "title": "테스트 연결 및 CI 동기화",
+  "description": "테스트 실행 결과를 스펙 JSON과 동기화하고, 테스트 건강도 리포트를 생성하는 기능. xUnit/Jest/pytest 결과를 파싱하여 스펙의 tests/e2eScenarios에 매핑하고, healthScore·flakyScore·trend 등 지표를 자동 계산한다.",
+  "status": "needs-review",
+  "parent": "F-001",
+  "dependencies": [
+    "F-010"
+  ],
+  "conditions": [
+    {
+      "id": "F-014-C1",
+      "nodeType": "condition",
+      "description": "Given 테스트 결과 JSON, When spec-test-sync --from {file} 실행, Then 어노테이션([Trait(\"Spec\",\"...\")]/@pytest.mark.spec) 기반으로 스펙 조건에 테스트 결과 매핑",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-014-C2",
+      "nodeType": "condition",
+      "description": "Given 동기화된 테스트 데이터, When spec-test-report 실행, Then 스펙별 Health/Failed/Unresolved 테이블 출력",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-014-C3",
+      "nodeType": "condition",
+      "description": "Given 테스트 이력, When healthScore 계산, Then (passed - flakyPenalty) / total 공식으로 0.0~1.0 점수 산출",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-014-C4",
+      "nodeType": "condition",
+      "description": "Given flakyScore >= 0.1인 테스트, When 연속 5회 flaky 감지, Then quarantine 태그 자동 부여 및 별도 job 분리 권고",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-014-C5",
+      "nodeType": "condition",
+      "description": "Given spec-validate --strict --check-tests 실행, When 조건에 연결된 테스트 없음, Then 경고 출력 및 exit 1",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [
+    "test",
+    "ci",
+    "sync",
+    "health"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "runnerInstanceId": "runner-53444-100859",
+    "runnerStartedAt": "2026-03-08T10:09:06.1038372Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-014: 테스트 연결 및 CI 동기화' 구현을 시작합니다.",
+      "startedAt": "2026-03-08T10:09:06.1038580Z"
+    },
+    "lastCompletedAt": "2026-03-08T10:10:47.5923840Z",
+    "lastCompletedBy": "runner-53444-100859",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T10:12:05.7557861Z",
+      "reviewedBy": "runner-53444-100859",
+      "summary": "자동 리뷰 출력 불일치와 조건·샘플 미비로 구현이 어렵습니다; 재작업이 필요합니다.",
+      "failureReasons": [
+        "자동 리뷰가 구조화된 JSON 출력을 보장하지 않아 파이프라인이 실패했습니다.",
+        "모든 conditions가 draft 상태이고 evidence/tests/codeRefs가 비어 있어 구현 방향과 매핑 규칙이 불명확합니다.",
+        "테스트 결과 샘플과 매핑 규약이 제공되지 않아 매핑 로직을 검증할 수 없습니다.",
+        "flakyScore·quarantine 정책의 세부값이 확정되지 않았습니다."
+      ],
+      "alternatives": [
+        "리뷰 출력 계약을 JSON 스키마로 고정하고 실패 시 구조화된 오류를 반환하도록 수정합니다.",
+        "우선 xUnit 또는 pytest 한 포맷으로 PoC를 만들어 매핑·계산을 검증합니다.",
+        "조건별로 메타데이터·샘플을 추가해 AI Runner가 재시도하도록 유도합니다.",
+        "정책을 단순화(예: quarantine은 태그 부여 및 경고만)하여 우선 구현합니다."
+      ],
+      "suggestedAttempts": [
+        "리뷰 출력 스키마와 예시를 문서화하여 통합 테스트를 실행합니다.",
+        "대표 xUnit/Jest/pytest 샘플(성공/실패/플aky 포함)을 제공해 로컬에서 매핑을 검증합니다.",
+        "Health/flaky 계산에 대한 단위 테스트를 작성해 수식과 임계값을 검증합니다.",
+        "각 condition에 어노테이션 예시와 기대 리포트를 추가하고 다시 검토합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-014-Q1",
+        "type": "user-decision",
+        "question": "flakyScore 경고값 0.1과 '연속 5회 flaky' 조건을 기준으로 quarantine 처리(태그 부여 및 CI job 분리)를 항상 자동화할까요?",
+        "why": "자동 처리 여부는 운영 정책과 CI 비용에 직접 영향을 주므로 명확한 사용자 결정이 필요합니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "기본 정책은 자동화로 두되, quarantine 태그 부여와 별도 CI job 분리까지만 자동 적용하고 메인 파이프라인을 즉시 실패시키는 hard block은 하지 않습니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q2",
+        "type": "missing-info",
+        "question": "테스트-스펙 매핑에 실제로 사용하는 메타데이터 규칙(어노테이션 이름, 스펙 ID 표기, 파일/경로 규칙)을 어떻게 둘까요?",
+        "why": "매핑 규칙이 확정돼야 자동 연결 구현과 테스트 커버리지를 설계할 수 있습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "조건 ID 단위로 매핑합니다. xUnit은 [Trait(\"Spec\", \"F-014-C1\")], pytest는 @pytest.mark.spec(\"F-014-C1\"), Jest는 테스트명 또는 describe에 [spec:F-014-C1] 토큰을 넣는 규칙으로 통일합니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q3",
+        "type": "clarification",
+        "question": "healthScore 계산에서 flakyPenalty를 어떻게 산정할지 정의해주실 수 있나요? 예를 들어 실패 횟수 기반인지, 최근 N회 비율 기반인지가 필요합니다.",
+        "why": "점수 계산 방식에 따라 리포트 결과와 경고 판단이 달라지므로 공식이 필요합니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "최근 20회 실행 기준으로 flakyRate를 계산하고, flakyPenalty는 total * flakyRate * 0.5 로 둡니다. 최종 healthScore는 max(0, (passed - flakyPenalty) / total) 로 계산합니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q5",
+        "type": "missing-info",
+        "question": "대표 테스트 결과 샘플 파일(xUnit/JUnit XML, Jest JSON, pytest JSON)을 어떤 기준으로 준비할까요?",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "각 포맷마다 최소 2개 샘플을 준비합니다. 하나는 정상 성공 케이스, 하나는 실패 또는 flaky가 포함된 케이스로 fixtures에 저장하는 방향으로 갑니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q6",
+        "type": "missing-info",
+        "question": "현재 저장소에서 테스트-스펙 연결에 사용하는 어노테이션이나 컨벤션 규칙(예: Trait, @pytest.mark.spec)을 어떻게 통일할까요?",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "기본 컨벤션은 xUnit Trait, pytest mark.spec, Jest 이름 토큰 방식으로 통일하고, 모두 feature ID가 아니라 condition ID까지 포함한 값으로 연결합니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q7",
+        "type": "missing-info",
+        "question": "healthScore 공식 (passed - flakyPenalty) / total 에서 flakyPenalty 계산 방식을 어떻게 둘까요?",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "대체 공식은 사용하지 않고, 최근 20회 기준 flakyRate 기반 penalty 공식을 사용합니다. 구현과 리포트가 단순하고 테스트하기 쉽기 때문입니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q8",
+        "type": "missing-info",
+        "question": "flakiness 경고 임계값(현재 0.1)과 quarantine 처리 범위를 어떻게 둘까요?",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "임계값 0.1은 유지하고 자동화는 활성화합니다. 다만 자동화 범위는 태그 부여, 별도 job 이동, 경고 리포트 생성까지로 제한합니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      },
+      {
+        "id": "F-014-Q9",
+        "type": "missing-info",
+        "question": "원하는 리포트 출력 형식을 어떻게 둘까요? 예: CLI 표, JSON 리포트, 대시보드 연동",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:22:48.4384936Z",
+        "requestedBy": "runner-9752-021805",
+        "answer": "기본 출력은 CLI 표와 JSON 리포트 두 가지를 모두 지원합니다. CLI 표는 사람이 읽기 쉽고, JSON은 CI 후처리와 대시보드 확장에 유리합니다.",
+        "answeredAt": "2026-03-08T09:07:30.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T10:12:05.7557861Z",
+    "lastReviewBy": "runner-53444-100859",
+    "selectionReason": {
+      "selectedAt": "2026-03-08T10:09:06.0868433Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 1
+    },
+    "lastAnsweredAt": "2026-03-08T10:25:00.000Z",
+    "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-014",
+    "worktreeBranch": "runner/F-014"
+  },
+  "createdAt": "2026-03-01T00:00:00Z",
+  "updatedAt": "2026-03-08T10:25:00.000Z"
+}

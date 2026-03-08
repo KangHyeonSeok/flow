@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "id": "F-019",
+  "nodeType": "feature",
+  "title": "Spec Planner 자동 queued 승격",
+  "description": "Spec Planner가 draft 스펙 초안을 충분히 구체화했고 추가 사용자 판단이나 외부 정보 요청이 남아 있지 않을 때, 사람의 수동 상태 변경 없이도 draft를 queued로 승격할 수 있게 하는 규칙. 단순 standby 전환과 달리 실제 runner 작업 대상으로 올리는 전환이므로 최소 완성 요건, 금지 조건, 승격 근거 기록이 명확해야 하며, 기존 스펙을 대체하거나 의미를 크게 바꾸는 초안은 자동 승격 대상에서 제외되어야 한다.",
+  "status": "queued",
+  "parent": "F-094",
+  "dependencies": [
+    "F-008",
+    "F-094"
+  ],
+  "conditions": [
+    {
+      "id": "F-019-C1",
+      "nodeType": "condition",
+      "description": "Given Spec Planner가 draft 스펙 생성 또는 수정 작업을 마침, When description, conditions 또는 task 목적, dependencies, 관련 codeRefs 초안이 비어 있지 않고 open 상태 질문과 미해결 결정 항목이 0개임을 확인, Then planner는 해당 스펙을 automatic queue promotion 후보로 평가할 수 있다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+        "tools/flow-cli/Services/SpecGraph/SpecStore.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-019-C2",
+      "nodeType": "condition",
+      "description": "Given draft 스펙이 사용자 선택지 비교, 승인 필요, 외부 사실 확인, 영향 범위 불명확, 또는 기존 스펙 대체·변형 여부 미확정 상태를 포함, When planner가 auto-promotion 가능 여부를 평가, Then status는 draft를 유지하고 metadata.plannerState='waiting-user-input' 또는 active 로 남기며 자동 queued 승격을 수행하지 않는다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs",
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-019-C3",
+      "nodeType": "condition",
+      "description": "Given auto-promotion 조건을 만족한 draft 스펙, When planner가 queued로 승격, Then metadata.promotion.source='planner-auto', metadata.promotion.reason, metadata.promotion.promotedAt, metadata.promotion.confidence, unresolvedQuestions=0 같은 근거가 기록되고 plannerState는 standby 또는 active 재평가 결과와 함께 저장된다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+        "tools/flow-ext/src/detailViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-019-C4",
+      "nodeType": "condition",
+      "description": "Given auto-promotion으로 queued가 된 스펙, When 사용자가 이후 보충 요구사항이나 반대 의견을 제시, Then planner는 queued 상태를 다시 draft 또는 waiting-user-input 성격의 메타데이터로 되돌릴 수 있어야 하며 자동 승격 이력은 삭제하지 않고 남겨 추적 가능해야 한다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecStore.cs",
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-019-C5",
+      "nodeType": "condition",
+      "description": "Given 기존 스펙을 실질적으로 대체하거나 의미를 크게 바꾸는 draft가 생성됨, When planner가 queued 자동 승격을 시도, Then supersedes 또는 mutation review 정보가 확정되기 전에는 자동 승격을 금지하고 변경 관리 규칙에 따라 기존 스펙과의 관계를 먼저 기록해야 한다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+        "tools/flow-cli/Services/SpecGraph/SpecValidator.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecStore.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecValidator.cs",
+    "tools/flow-cli/Services/Runner/RunnerService.cs",
+    "tools/flow-ext/src/detailViewProvider.ts"
+  ],
+  "evidence": [],
+  "tags": [
+    "planner",
+    "workflow",
+    "queued",
+    "automation"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "autoQueuePolicy": {
+      "requiresOpenQuestions": 0,
+      "blocksOnSpecMutationReview": true,
+      "promotionMetadataField": "promotion"
+    },
+    "selectionReason": {
+      "selectedAt": "2026-03-07T19:27:42.9246690Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 10
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T19:27:42.9266040Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-019: Spec Planner 자동 queued 승격' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T19:27:42.9266070Z"
+    },
+    "lastCompletedAt": "2026-03-07T19:41:12.2521050Z",
+    "lastCompletedBy": "runner-82653-165628",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:54:50.9139542Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 결과를 구조화하지 못해 재시도 대기열로 되돌립니다.",
+      "failureReasons": [
+        "Copilot 검토 결과를 JSON으로 해석하지 못했습니다."
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:54:50.9139542Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T12:33:20.7082506Z",
+  "updatedAt": "2026-03-08T01:54:50.9142959Z"
+}

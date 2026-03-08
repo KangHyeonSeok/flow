@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "id": "F-095",
+  "nodeType": "feature",
+  "title": "Hidden Spec 후보 탐지 및 SoT 수렴",
+  "description": "spec을 SoT로 유지하기 위해 code에 먼저 반영된 hidden spec 후보를 탐지하고, 지속되는 계약만 효율적으로 spec graph에 수렴시키는 governance 기능. 이 스펙은 모든 코드 변경을 전수 검토하는 대신 외부 계약 변화 가능성이 높은 변경 표면을 우선 탐지하고, implementation detail과 accidental behavior를 분류한 뒤 기존 feature 흡수, 새 feature 승격, task 기록 중 하나로 처리하는 운영 규칙을 정의한다.",
+  "status": "draft",
+  "parent": "F-010",
+  "dependencies": [
+    "F-012",
+    "F-014",
+    "F-021",
+    "F-090"
+  ],
+  "conditions": [
+    {
+      "id": "F-095-C1",
+      "nodeType": "condition",
+      "description": "Given 코드 변경량이 많아 모든 diff를 전수 검토하기 어려움, When hidden spec 탐지 게이트를 실행, Then CLI 옵션·출력 포맷·API/파일 포맷·상태값·자동화 의사결정 규칙·README/운영 문서·spec annotation이 붙은 테스트 같은 계약 변화 표면을 우선 후보로 수집하고 일반 리팩터링·private helper 분리·내부 배선 변경은 기본적으로 후보에서 제외하거나 낮은 우선순위로 둔다.",
+      "status": "draft",
+      "codeRefs": [
+        "docs/hidden-spec-policy.md"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-095-C2",
+      "nodeType": "condition",
+      "description": "Given hidden spec 후보가 탐지됨, When 분류 단계를 수행, Then 변경은 지속되는 외부 계약, implementation detail, accidental behavior 중 하나로 분류되고 지속되는 계약만 feature condition 또는 새 feature로 승격되며 accidental behavior는 유지 여부를 먼저 결정하고 판단이 남아 있으면 task와 decision pending 성격의 메모로 추적된다.",
+      "status": "draft",
+      "codeRefs": [
+        "docs/hidden-spec-policy.md"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-095-C3",
+      "nodeType": "condition",
+      "description": "Given 계약 변화로 분류된 후보, When 완료 가능 여부를 평가, Then 기존 feature에 condition을 추가하거나 새 feature/task를 생성해 spec graph에 편입하고 codeRefs, 관련 테스트 또는 evidence를 연결하기 전에는 verified 또는 done으로 닫지 않으며 specless completion을 허용하지 않는다.",
+      "status": "draft",
+      "codeRefs": [
+        "docs/hidden-spec-policy.md"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-095-C4",
+      "nodeType": "condition",
+      "description": "Given CI 또는 리뷰 자동화가 hidden spec 후보를 올려야 함, When 변경 검사를 수행, Then spec-validate/spec-check-refs/test mapping 같은 기존 무결성 신호와 변경 파일 힌트, 새 상태값·출력 포맷·에러 규칙·prompt/운영 규칙 문서 변경, spec condition과 연결되지 않은 테스트 추가 여부를 조합해 후보를 경고로 제시하고 최종 판단은 리뷰어 또는 planner가 수행한다.",
+      "status": "draft",
+      "codeRefs": [
+        "docs/hidden-spec-policy.md"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-095-C5",
+      "nodeType": "condition",
+      "description": "Given SoT 유지 원칙을 문서화해야 함, When governance 문서를 정의, Then product spec, governance spec, process/task 문서는 층위를 분리해 관리하고 hidden spec 처리 규칙, spec 작성 규칙, 상태 전이 규칙, review/CI 게이트 규칙, agent 운영 원칙은 governance spec 영역으로 유지한다.",
+      "status": "draft",
+      "codeRefs": [
+        "docs/hidden-spec-policy.md"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "docs/hidden-spec-policy.md"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "governance",
+    "workflow",
+    "ci",
+    "review"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:41:22.7934983Z",
+      "author": "planner",
+      "summary": "스펙 'F-095' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:42:00Z",
+      "author": "planner",
+      "summary": "hidden spec 정책 문서를 실무형 governance feature 스펙으로 구조화하고 탐지·분류·수렴 조건을 추가",
+      "relatedIds": [
+        "F-012",
+        "F-014",
+        "F-021",
+        "F-090"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:41:22.7934983Z",
+  "updatedAt": "2026-03-08T01:42:00Z"
+}

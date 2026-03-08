@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 2,
+  "id": "F-013",
+  "nodeType": "feature",
+  "title": "구현 순서 결정",
+  "description": "의존성 그래프 기반으로 스펙 구현 순서를 자동 결정하는 기능. 위상 정렬(Kahn 알고리즘)로 기계적 순서를 산출하고, 선택적으로 AI가 기술 위험도·비즈니스 가치 등을 고려하여 최적화된 순서를 제안한다.",
+  "status": "queued",
+  "parent": "F-001",
+  "dependencies": [
+    "F-010"
+  ],
+  "conditions": [
+    {
+      "id": "F-013-C1",
+      "nodeType": "condition",
+      "description": "Given 의존성 그래프, When spec-order 실행, Then 위상 정렬 기반 구현 순서(Phase별) JSON 출력",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecOrderer.cs",
+        "tools/flow-cli/Commands/SpecCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-013-C2",
+      "nodeType": "condition",
+      "description": "Given 동일 depth 스펙들, When priority 정렬 적용, Then P1 > P2 > P3 순서로 정렬되고 priority 동일 시 conditions 수 오름차순",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecOrderer.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-013-C3",
+      "nodeType": "condition",
+      "description": "Given 구현 순서, When spec-order --ai 실행, Then LLM이 기술 위험도·비즈니스 가치를 고려한 최적화 순서와 근거(reasoning) 반환",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Commands/SpecCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-013-C4",
+      "nodeType": "condition",
+      "description": "Given AI 최적화 순서, When 의존성 제약 위반 감지, Then 해당 제안 자동 거부 및 경고 출력",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecOrderer.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-013-C5",
+      "nodeType": "condition",
+      "description": "Given 특정 스펙 ID, When spec-order --from {id} 실행, Then 해당 스펙 기준 부분 순서 산출",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecOrderer.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/SpecOrderer.cs",
+    "tools/flow-cli/Commands/SpecCommand.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "ordering",
+    "topological-sort"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "runnerInstanceId": "runner-4380-023636",
+    "runnerStartedAt": "2026-03-08T02:48:05.6361855Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-013: 구현 순서 결정' 구현을 시작합니다.",
+      "startedAt": "2026-03-08T02:48:05.6361866Z"
+    },
+    "lastCompletedAt": "2026-03-08T02:49:24.0476191Z",
+    "lastCompletedBy": "runner-4380-023636",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T02:50:40.5947287Z",
+      "reviewedBy": "runner-4380-023636",
+      "summary": "자동 검토 결과가 JSON 구조로 해석되지 않아 재작업이 필요합니다; AI의 최적화 근거가 불충분합니다.",
+      "failureReasons": [
+        "Copilot 검토 결과를 JSON으로 파싱하지 못해 리뷰를 구조화하지 못함",
+        "AI 최적화 제안에 대한 근거(reasoning)가 출력되지 않아 신뢰성 판단 불가"
+      ],
+      "alternatives": [
+        "프롬프트를 수정하여 AI가 근거(Reasoning)를 명시적으로 출력하도록 재실행",
+        "수동 규칙 기반 우선순위(예: priority, conditions 수)를 먼저 적용",
+        "우선순위 평가 기준을 단순화한 뒤 재검토"
+      ],
+      "suggestedAttempts": [
+        "Copilot 프롬프트에 reasoning 필드를 강제하고 재실행",
+        "AI 프롬프트에 '출력에 reasoning 필드를 포함하라'는 지시를 추가하고 재시도",
+        "queued 상태에서 수동 검토자의 검토를 요청하고 병행하여 AI 재실행"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-013-Q1",
+        "type": "user-decision",
+        "question": "AI가 제안한 최적화 순서를 신뢰하여 자동 적용할까요, 아니면 수동 검토를 먼저 진행할까요?",
+        "why": "현재 AI 제안의 근거 출력이 누락되어 자동 적용 시 의존성 또는 품질 위험이 존재합니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:50:40.5947287Z",
+        "requestedBy": "runner-4380-023636",
+        "answer": "수동 검토를 먼저 진행합니다. reasoning 필드와 의존성 검증이 보장되기 전까지 AI 최적화 순서는 추천안으로만 사용하고 자동 적용은 하지 않습니다.",
+        "answeredAt": "2026-03-08T10:24:00.000Z"
+      },
+      {
+        "id": "F-013-Q4",
+        "type": "missing-info",
+        "question": "우선순위 결정에 사용할 기술위험도/비즈니스가치의 기본 가중치",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:50:40.5947287Z",
+        "requestedBy": "runner-4380-023636",
+        "answer": "기본 가중치는 기술위험도 0.5, 의존성 해소 효과 0.3, 비즈니스 가치 0.2로 둡니다. 이 저장소는 구현 순서가 품질과 unblock 효과에 더 민감하므로 기술 축을 우선합니다.",
+        "answeredAt": "2026-03-08T10:24:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T02:50:40.5947287Z",
+    "lastReviewBy": "runner-4380-023636",
+    "selectionReason": {
+      "selectedAt": "2026-03-08T02:48:05.6354627Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 30
+    },
+    "lastAnsweredAt": "2026-03-08T10:24:00.000Z"
+  },
+  "createdAt": "2026-03-01T00:00:00Z",
+  "updatedAt": "2026-03-08T10:24:00.000Z"
+}

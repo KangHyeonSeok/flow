@@ -20,7 +20,17 @@ export class SpecLoader {
     private _onDidChange = new vscode.EventEmitter<void>();
     readonly onDidChange = this._onDidChange.event;
 
+    private _onDidStateChange = new vscode.EventEmitter<void>();
+    readonly onDidStateChange = this._onDidStateChange.event;
+
     private watcher: vscode.FileSystemWatcher | undefined;
+    private watcherDebounceTimer: NodeJS.Timeout | undefined;
+
+    /** 마지막 loadSnapshot에서 status만 바뀌었는지 여부 */
+    private _lastLoadStatusOnly = false;
+
+    /** 마지막으로 로드된 스펙들의 status 맵 (status-only 변경 감지용) */
+    private specJsonStatuses = new Map<string, SpecStatus>();
 
     constructor(private workspaceRoot: string) {
         this.specsDir = this.resolveSpecsDir(workspaceRoot);
@@ -28,66 +38,11 @@ export class SpecLoader {
     }
 
     /**
-     * specRepository 설정이 있으면 .flow/spec-cache/specs/ (runner와 동일 경로)를 우선 반환한다.
-     * 설정은 .flow/config.json 에서 읽는다. (runner-config.json은 config.json으로 통합됨)
-     * 로컬 docs/specs/에 파일이 있으면 그것을 우선 사용한다.
+     * 확장은 항상 워크스페이스의 docs/specs/를 기준으로 스펙을 로드한다.
      */
     private resolveSpecsDir(workspaceRoot: string): string {
         const localSpecsDir = path.join(workspaceRoot, 'docs', 'specs');
-        if (fs.existsSync(localSpecsDir)) {
-            const jsonFiles = fs.readdirSync(localSpecsDir).filter(f => f.endsWith('.json'));
-            if (jsonFiles.length > 0) {
-                return localSpecsDir;
-            }
-        }
-
-        const specRepository = this.readSpecRepository(workspaceRoot);
-        if (specRepository) {
-            const specCacheSpecsDir = path.join(workspaceRoot, '.flow', 'spec-cache', 'specs');
-            if (fs.existsSync(specCacheSpecsDir)) {
-                return specCacheSpecsDir;
-            }
-
-            const repoName = this.extractRepoName(specRepository);
-            const userHome = process.env.HOME
-                || process.env.USERPROFILE
-                || require('os').homedir();
-            const repoDir = path.join(userHome, '.flow', 'specs', repoName);
-            if (fs.existsSync(repoDir)) {
-                const subDir = path.join(repoDir, 'specs');
-                return fs.existsSync(subDir) ? subDir : repoDir;
-            }
-        }
-
         return localSpecsDir;
-    }
-
-    /**
-     * .flow/config.json 에서 specRepository를 읽는다.
-     * (runner-config.json은 config.json으로 통합됨)
-     */
-    private readSpecRepository(workspaceRoot: string): string | undefined {
-        const configPath = path.join(workspaceRoot, '.flow', 'config.json');
-        if (fs.existsSync(configPath)) {
-            try {
-                const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                if (config.specRepository) { return config.specRepository as string; }
-            } catch { /* 파싱 실패 시 무시 */ }
-        }
-        return undefined;
-    }
-
-    /**
-     * git URL에서 저장소 이름을 추출한다.
-     * 예: "https://github.com/user/flow-spec.git" → "flow-spec"
-     */
-    private extractRepoName(gitUrl: string): string {
-        let url = gitUrl.trimEnd();
-        if (url.endsWith('/')) { url = url.slice(0, -1); }
-        if (url.toLowerCase().endsWith('.git')) { url = url.slice(0, -4); }
-        const lastSep = Math.max(url.lastIndexOf('/'), url.lastIndexOf('\\'), url.lastIndexOf(':'));
-        const name = lastSep >= 0 ? url.slice(lastSep + 1) : url;
-        return name || 'spec-repo';
     }
 
     /** 현재 사용 중인 스펙 디렉토리 경로 */
@@ -98,9 +53,13 @@ export class SpecLoader {
     private setupWatcher(): void {
         const pattern = new vscode.RelativePattern(this.specsDir, '*.json');
         this.watcher = vscode.workspace.createFileSystemWatcher(pattern);
-        this.watcher.onDidChange(() => void this.reload());
-        this.watcher.onDidCreate(() => void this.reload());
-        this.watcher.onDidDelete(() => void this.reload());
+        const debouncedReload = () => {
+            if (this.watcherDebounceTimer) { clearTimeout(this.watcherDebounceTimer); }
+            this.watcherDebounceTimer = setTimeout(() => void this.reload(), 1500);
+        };
+        this.watcher.onDidChange(debouncedReload);
+        this.watcher.onDidCreate(debouncedReload);
+        this.watcher.onDidDelete(debouncedReload);
     }
 
     private refreshSpecsDir(): void {
@@ -193,7 +152,11 @@ export class SpecLoader {
                 this.reloadQueued = false;
                 this.refreshSpecsDir();
                 await this.load();
-                this._onDidChange.fire();
+                if (this._lastLoadStatusOnly) {
+                    this._onDidStateChange.fire();
+                } else {
+                    this._onDidChange.fire();
+                }
             } while (this.reloadQueued);
         })();
 
@@ -255,9 +218,31 @@ export class SpecLoader {
 
         const nextGraph = this.buildGraph(nextSpecs);
         if (revision >= this.appliedRevision) {
+            // status-only 변경 감지: 이전 스펙과 비교 (스펙 수 동일, status 외 내용 동일한 경우)
+            const prevSpecs = this.specs;
+            let statusOnly = prevSpecs.length > 0 && prevSpecs.length === nextSpecs.length;
+            if (statusOnly) {
+                const prevMap = new Map(prevSpecs.map(s => [s.id, s]));
+                for (const next of nextSpecs) {
+                    const prev = prevMap.get(next.id);
+                    if (!prev) { statusOnly = false; break; }
+                    // status를 제외한 나머지 필드 비교 (얕은 비교)
+                    const prevCopy = { ...prev, status: '' };
+                    const nextCopy = { ...next, status: '' };
+                    if (JSON.stringify(prevCopy) !== JSON.stringify(nextCopy)) {
+                        statusOnly = false;
+                        break;
+                    }
+                }
+            }
+
             this.specs = nextSpecs;
             this.graph = nextGraph;
             this.appliedRevision = revision;
+            this._lastLoadStatusOnly = statusOnly;
+            // 새 status 맵 업데이트
+            this.specJsonStatuses.clear();
+            for (const s of nextSpecs) { this.specJsonStatuses.set(s.id, s.status); }
             return nextGraph;
         }
 
@@ -408,7 +393,9 @@ export class SpecLoader {
     }
 
     dispose(): void {
+        if (this.watcherDebounceTimer) { clearTimeout(this.watcherDebounceTimer); }
         this.watcher?.dispose();
         this._onDidChange.dispose();
+        this._onDidStateChange.dispose();
     }
 }

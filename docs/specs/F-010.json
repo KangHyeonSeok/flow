@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "id": "F-010",
+  "nodeType": "feature",
+  "title": "스펙 그래프 관리",
+  "description": "기능 스펙을 JSON으로 관리하고 의존성 그래프를 생성·분석하는 기능",
+  "status": "verified",
+  "parent": "F-001",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-010-C1",
+      "nodeType": "condition",
+      "description": "Given 스펙 JSON, When spec-create 실행, Then 파일 생성 및 ID 자동 채번",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecStore.cs"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "F-010-C2",
+      "nodeType": "condition",
+      "description": "Given 스펙 목록, When spec-validate 실행, Then 참조 무결성 검증",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecValidator.cs"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "F-010-C3",
+      "nodeType": "condition",
+      "description": "Given 스펙 그래프, When Kahn 알고리즘 실행, Then 순환 참조 감지",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/GraphBuilder.cs"
+      ],
+      "evidence": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Commands/SpecCommand.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecModels.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "graph",
+    "validation"
+  ],
+  "metadata": {
+    "runnerInstanceId": "runner-26716-121928",
+    "runnerStartedAt": "2026-03-07T12:31:31.8380745Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-010: 스펙 그래프 관리' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T12:31:31.8380780Z"
+    },
+    "lastCompletedAt": "2026-03-07T12:37:09.0441511Z",
+    "lastCompletedBy": "runner-26716-121928",
+    "lastVerifiedAt": "2026-03-07T12:37:09.0441592Z",
+    "lastVerifiedBy": "runner-26716-121928",
+    "verificationSource": "runner-completion"
+  },
+  "createdAt": "2026-02-28T00:00:00Z",
+  "updatedAt": "2026-03-07T12:37:09.0441933Z"
+}

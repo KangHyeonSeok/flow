@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 2,
+  "id": "F-001",
+  "nodeType": "feature",
+  "title": "Flow CLI 기반 시스템",
+  "description": "AI Agent 도구 CLI 시스템. 빌드, RAG, 스펙그래프, 테스트 기능을 제공. 워크플로우는 스킬로 분리.",
+  "status": "verified",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-001-C1",
+      "nodeType": "condition",
+      "description": "Given CLI 바이너리, When flow 명령어 실행, Then 도움말 출력",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Program.cs"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "F-001-C2",
+      "nodeType": "condition",
+      "description": "Given .flow 디렉토리 존재, When 프로젝트 루트 탐색, Then 정상 인식",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Services/PathResolver.cs#L1-L70"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "F-001-C3",
+      "nodeType": "condition",
+      "description": "Given 설정 파일, When config 명령 실행, Then 설정 읽기/쓰기 가능",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Commands/ConfigCommand.cs"
+      ],
+      "evidence": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Program.cs",
+    "tools/flow-cli/FlowApp.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "core",
+    "cli"
+  ],
+  "metadata": {
+    "runnerInstanceId": "runner-31748-114301",
+    "runnerStartedAt": "2026-03-07T11:43:02.4804009Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-001: Flow CLI 기반 시스템' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T11:43:02.4804164Z"
+    },
+    "lastCompletedAt": "2026-03-07T11:44:02.0093347Z",
+    "lastCompletedBy": "runner-31748-114301",
+    "lastVerifiedAt": "2026-03-07T12:19:29.3411668Z",
+    "lastVerifiedBy": "runner-26716-121928",
+    "verificationSource": "runner-review-pass"
+  },
+  "createdAt": "2026-01-15T00:00:00Z",
+  "updatedAt": "2026-03-07T12:19:29.3413353Z"
+}

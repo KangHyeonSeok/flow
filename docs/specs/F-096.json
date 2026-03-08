@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "F-096",
+  "nodeType": "task",
+  "title": "계약 변화 표면 탐지 게이트",
+  "description": "Hidden spec 전수 검토를 피하기 위해 계약 변화 가능성이 높은 변경 표면만 우선 감지하는 일회성 구현 작업. CLI 옵션·출력 포맷·상태값·에러 규칙·README/운영 문서·prompt/agent 규칙 관련 파일을 변경 힌트로 수집하고, 일반 리팩터링과 내부 helper 변경은 기본 제외 또는 저우선 경고로 분류하는 최소 게이트를 추가한다. 이 작업은 반복 운영 규칙 자체가 아니라 그 규칙을 구현하는 일회성 작업이므로 task로 관리한다.",
+  "status": "queued",
+  "parent": "F-095",
+  "dependencies": [
+    "F-095",
+    "F-012",
+    "F-090"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "docs/hidden-spec-policy.md"
+  ],
+  "evidence": [],
+  "tags": [
+    "hidden-spec",
+    "governance",
+    "ci",
+    "review",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:45:10.8510879Z",
+      "author": "planner",
+      "summary": "스펙 'F-096' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:46:00Z",
+      "author": "planner",
+      "summary": "계약 변화 표면 기반 hidden spec 후보 탐지 task로 구조화하고 queued 상태로 준비",
+      "relatedIds": [
+        "F-095",
+        "F-012",
+        "F-090"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:45:10.8510879Z",
+  "updatedAt": "2026-03-08T01:46:00Z"
+}

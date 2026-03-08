@@ -20,6 +20,7 @@ export class SpecTreeProvider implements vscode.TreeDataProvider<SpecTreeItem> {
 
     constructor(private loader: SpecLoader) {
         loader.onDidChange(() => this.refresh());
+        loader.onDidStateChange(() => this.refresh());
     }
 
     refresh(): void {
@@ -135,10 +136,7 @@ export class SpecTreeItem extends vscode.TreeItem {
             const questionBadge = feedback.openQuestionCount > 0
                 ? ` ❓${feedback.openQuestionCount}`
                 : '';
-            const userInputMark = feedback.requiresUserInput && feedback.openQuestionCount === 0
-                ? ' ❓'
-                : '';
-            this.description = `[${status}]${spec.tags.length > 0 ? ' ' + spec.tags.join(', ') : ''}${questionBadge}${userInputMark}`;
+            this.description = `[${status}]${spec.tags.length > 0 ? ' ' + spec.tags.join(', ') : ''}${questionBadge}`;
         } else if (condition) {
             this.description = `[${status}]`;
             this.tooltip = new vscode.MarkdownString(condition.description);
@@ -146,7 +144,7 @@ export class SpecTreeItem extends vscode.TreeItem {
 
         // 상태 아이콘 (C2: 사용자 입력 대기 시 별도 아이콘)
         const isWaitingUserInput = spec
-            ? (() => { const fb = getUserFeedbackState(spec); return fb.requiresUserInput || fb.openQuestionCount > 0; })()
+            ? (() => { const fb = getUserFeedbackState(spec); return fb.openQuestionCount > 0; })()
             : false;
 
         if (isWaitingUserInput) {

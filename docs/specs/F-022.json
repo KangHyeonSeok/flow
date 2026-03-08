@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "id": "F-022",
+  "nodeType": "task",
+  "title": "스펙 관계 메타데이터 정의",
+  "description": "기존 스펙 수정, 부분 변형, 실질적 대체를 구분하기 위해 metadata.supersedes, supersededBy, mutates, mutatedBy, changeLog 같은 관계 필드와 기록 규칙을 확정하는 작업. in-place 수정과 신규 스펙 생성 경계를 기계적으로 판정할 수 있을 정도로 필드 의미, 허용 값, 양방향 연결 규칙, 최소 기록 항목을 정리해야 한다.",
+  "status": "done",
+  "parent": "F-021",
+  "dependencies": [
+    "F-011"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecStore.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecValidator.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "metadata",
+    "change-management",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "taskGoal": "관계 필드와 change log 스키마 확정",
+    "deliverable": "spec mutation relation metadata contract",
+    "runnerInstanceId": "runner-37856-132733",
+    "runnerStartedAt": "2026-03-07T15:50:40.4593893Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-022: 스펙 관계 메타데이터 정의' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T15:50:40.4593909Z"
+    },
+    "lastCompletedAt": "2026-03-07T15:55:32.6075999Z",
+    "lastCompletedBy": "runner-37856-132733",
+    "lastDoneAt": "2026-03-08T01:10:52.9014045Z",
+    "lastDoneBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T12:38:36.7820646Z",
+  "updatedAt": "2026-03-08T01:10:52.9014650Z"
+}

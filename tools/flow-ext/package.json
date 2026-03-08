@@ -2,7 +2,7 @@
   "name": "flow-ext",
   "displayName": "Flow",
   "description": "Flow 통합 확장 - 스펙 그래프 시각화, 칸반 보드, Flow Runner 데몬 관리",
-  "version": "0.1.71",
+  "version": "0.1.72",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
@@ -36,12 +36,6 @@
         {
           "id": "specTree",
           "name": "스펙 트리",
-          "icon": "resources/icon.svg"
-        },
-        {
-          "id": "specDetail",
-          "type": "webview",
-          "name": "스펙 상세",
           "icon": "resources/icon.svg"
         }
       ]
@@ -167,11 +161,6 @@
           "group": "navigation"
         },
         {
-          "command": "specGraph.openGraphPreview",
-          "when": "view == specTree",
-          "group": "navigation"
-        },
-        {
           "command": "specGraph.openSpecView",
           "when": "view == specTree",
           "group": "navigation"
@@ -182,34 +171,9 @@
           "group": "navigation"
         },
         {
-          "command": "specGraph.debugInfo",
-          "when": "view == specTree",
-          "group": "navigation"
-        },
-        {
-          "command": "specGraph.pushSpecs",
-          "when": "view == specTree",
-          "group": "navigation"
-        },
-        {
           "command": "specGraph.openKanban",
           "when": "view == specTree",
           "group": "navigation"
-        },
-        {
-          "command": "flowExt.testA_noCSP",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testB_cspSource",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testC_nonceOnly",
-          "when": "view == specTree",
-          "group": "navigation@99"
         },
         {
           "command": "flowExt.reloadWindow",

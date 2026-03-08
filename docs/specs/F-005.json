@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 2,
+  "id": "F-005",
+  "nodeType": "feature",
+  "title": "표준 JSON 응답 및 오류 포맷 통합",
+  "description": "모든 flow 명령의 성공/실패 응답을 동일한 JSON 스키마로 통합한다. 공통 응답 래퍼, 오류 코드 체계, validation/execution 오류 세부 정보, exit code 매핑을 정의하고 각 명령군에 일관되게 적용하는 작업이다.",
+  "status": "queued",
+  "parent": "F-002",
+  "dependencies": [
+    "F-003"
+  ],
+  "conditions": [
+    {
+      "id": "F-005-C1",
+      "nodeType": "condition",
+      "description": "Given 명령 실행 성공, When JSON 응답을 생성, Then 모든 명령은 success, command, data, message, metadata를 포함하는 공통 envelope를 사용한다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Program.cs",
+        "tools/flow-cli/Commands/BuildCommand.cs",
+        "tools/flow-cli/Commands/SpecCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-005-C2",
+      "nodeType": "condition",
+      "description": "Given validation 오류 또는 실행 예외, When 실패 응답을 생성, Then success=false, error.code, error.message, error.details, exitCode 필드가 일관되게 채워진다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Program.cs",
+        "tools/flow-cli/FlowApp.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-005-C3",
+      "nodeType": "condition",
+      "description": "Given 상이한 명령 결과 모델, When 공통 응답 포맷으로 직렬화, Then 개별 명령 데이터는 data 아래에 보존되고 상위 envelope 형식은 동일하게 유지된다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Commands/DbQueryCommand.cs",
+        "tools/flow-cli/Commands/TestCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Program.cs",
+    "tools/flow-cli/Commands/BuildCommand.cs",
+    "tools/flow-cli/Commands/SpecCommand.cs",
+    "tools/flow-cli/Commands/DbQueryCommand.cs",
+    "tools/flow-cli/Commands/TestCommand.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "cli",
+    "json",
+    "output",
+    "error-handling",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "workItemType": "task",
+    "runnerInstanceId": "runner-37856-132733",
+    "runnerStartedAt": "2026-03-07T14:26:00.7726190Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-005: 표준 JSON 응답 및 오류 포맷 통합' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T14:26:00.7726200Z"
+    },
+    "lastCompletedAt": "2026-03-07T14:32:40.6804996Z",
+    "lastCompletedBy": "runner-37856-132733",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:26:12.3443867Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 결과를 구조화하지 못해 재시도 대기열로 되돌립니다.",
+      "failureReasons": [
+        "Copilot 검토 결과를 JSON으로 해석하지 못했습니다."
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:26:12.3443867Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T04:04:25.8042383Z",
+  "updatedAt": "2026-03-08T01:26:12.3444482Z"
+}

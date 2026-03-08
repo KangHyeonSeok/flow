@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "id": "F-032",
+  "nodeType": "feature",
+  "title": "독립 스펙 병렬 구현",
+  "description": "Runner가 의존성 준비도와 영향 범위를 이용해 서로 충돌하지 않는 스펙을 식별하고, 격리된 worktree와 worker slot 안에서 병렬로 구현하되 병합·검증 안전장치를 유지하도록 정의한다.",
+  "status": "queued",
+  "parent": "F-070",
+  "dependencies": [
+    "F-011",
+    "F-013",
+    "F-090"
+  ],
+  "conditions": [
+    {
+      "id": "F-032-C1",
+      "nodeType": "condition",
+      "description": "Given queued 상태의 스펙 후보 집합이 존재함, When runner가 병렬 처리 배치를 구성, Then dependency가 모두 충족되고 open 질문이 없으며 상호 dependency, parent-child 선행 관계, 또는 명시된 supersedes or mutates 충돌이 없는 스펙만 같은 배치에 포함한다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    },
+    {
+      "id": "F-032-C2",
+      "nodeType": "condition",
+      "description": "Given 둘 이상의 스펙이 준비 상태임, When runner가 병렬 실행 가능 여부를 판단, Then spec-impact 또는 동등한 영향 분석으로 downstream 충돌 가능성을 평가하고 동일 파일군, 동일 상위 변경 대상, 동일 스펙 변형 체인처럼 병합 충돌 위험이 높은 조합은 같은 배치에서 제외한다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    },
+    {
+      "id": "F-032-C3",
+      "nodeType": "condition",
+      "description": "Given 병렬 배치가 확정됨, When runner가 구현을 시작, Then 각 스펙은 독립 worktree, 고유 branch, worker slot 식별자와 함께 working 상태로 전환되고 배치 구성 근거와 제외된 후보 사유가 로그 및 metadata.parallelExecution에 기록된다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    },
+    {
+      "id": "F-032-C4",
+      "nodeType": "condition",
+      "description": "Given 병렬 실행 중 한 스펙이 실패, 질문 생성, needs-review 전환, 또는 충돌 위험 증가로 중단됨, When 나머지 worker가 계속 동작, Then 해당 스펙만 개별적으로 queued 또는 review 흐름으로 이동하고 unrelated worker는 불필요하게 중단되지 않는다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    },
+    {
+      "id": "F-032-C5",
+      "nodeType": "condition",
+      "description": "Given 병렬 구현이 끝난 스펙들이 메인 브랜치 반영 단계에 도달함, When runner가 merge 또는 검증을 수행, Then 최종 반영은 최신 기준 브랜치 재검증과 충돌 탐지 후 순차 또는 안전한 순서대로 진행되어 병렬 구현 때문에 검증 무결성이 약화되지 않아야 한다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    },
+    {
+      "id": "F-032-C6",
+      "nodeType": "condition",
+      "description": "Given 병렬 worker 수가 설정 상한에 도달했거나 독립 후보가 더 이상 없음, When runner가 다음 대상을 선택, Then 남은 스펙은 기존 우선순위 정책을 유지한 채 다음 slot 해제 시점까지 대기하며 starvation 없이 후속 배치 후보로 재평가된다.",
+      "status": "queued",
+      "codeRefs": [],
+      "evidence": []
+    }
+  ],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "parallelism",
+    "scheduling",
+    "dependency"
+  ],
+  "createdAt": "2026-03-07T13:48:31.5489596Z",
+  "updatedAt": "2026-03-07T13:52:00.0000000Z"
+}

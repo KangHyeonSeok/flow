@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 2,
+  "id": "F-093",
+  "nodeType": "feature",
+  "title": "칸반 카드 클릭 상세 연동 단순화",
+  "description": "VS Code 칸반 보드에서 스펙 카드를 눌렀을 때 별도 상세보기 버튼 없이 즉시 스펙 상세 화면이 열리도록 하는 상호작용 단순화 기능. 카드 전체를 기본 진입점으로 사용하고, 이미 열린 상세 패널은 새 선택 대상으로 즉시 갱신한다. 기존 상세보기 버튼은 제거해 중복 액션과 시각적 잡음을 없앤다.",
+  "status": "queued",
+  "parent": "F-060",
+  "dependencies": [
+    "F-060"
+  ],
+  "conditions": [
+    {
+      "id": "F-093-C1",
+      "nodeType": "condition",
+      "description": "Given 칸반 보드에 스펙 카드가 렌더링됨, When 사용자가 카드 본문·제목·빈 영역을 클릭하고 status select나 컨텍스트 메뉴 같은 별도 컨트롤을 누른 것이 아님, Then 해당 스펙의 상세 화면이 즉시 열린다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-ext/src/kanbanPanel.ts",
+        "tools/flow-ext/src/detailViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-093-C2",
+      "nodeType": "condition",
+      "description": "Given 상세 화면이 이미 열려 있음, When 사용자가 다른 칸반 카드를 클릭, Then 같은 상세 패널 인스턴스가 새 스펙 정보로 갱신되고 현재 선택된 카드가 시각적으로 표시된다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-ext/src/kanbanPanel.ts",
+        "tools/flow-ext/src/specViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-093-C3",
+      "nodeType": "condition",
+      "description": "Given 키보드로 칸반 카드를 탐색하는 사용자, When 카드에 포커스된 상태에서 Enter 또는 Space를 입력, Then 마우스 클릭과 동일하게 상세 화면이 열린다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-ext/src/kanbanPanel.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-093-C4",
+      "nodeType": "condition",
+      "description": "Given 칸반 카드 액션 UI를 렌더링, When 상세 진입 경로를 구성, Then 전용 상세보기 버튼 또는 중복 링크는 렌더링하지 않고 카드 클릭 자체를 단일 진입점으로 사용한다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-ext/src/kanbanPanel.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-ext/src/kanbanPanel.ts",
+    "tools/flow-ext/src/detailViewProvider.ts",
+    "tools/flow-ext/src/specViewProvider.ts"
+  ],
+  "evidence": [],
+  "tags": [
+    "vscode",
+    "kanban",
+    "detail",
+    "ui"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "interactionModel": {
+      "openDetailOnCardClick": true,
+      "removeDedicatedDetailButton": true
+    },
+    "selectionReason": {
+      "selectedAt": "2026-03-07T18:18:05.9985540Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 14
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T18:18:05.9996750Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-093: 칸반 카드 클릭 상세 연동 단순화' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T18:18:05.9996790Z"
+    },
+    "lastCompletedAt": "2026-03-07T18:24:11.5826840Z",
+    "lastCompletedBy": "runner-82653-165628",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:45:42.6728048Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 결과를 구조화하지 못해 재시도 대기열로 되돌립니다.",
+      "failureReasons": [
+        "Copilot 검토 결과를 JSON으로 해석하지 못했습니다."
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:45:42.6728048Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T12:04:23.5302350Z",
+  "updatedAt": "2026-03-08T01:45:42.6728744Z"
+}

@@ -37,6 +37,7 @@ export class SpecViewProvider {
         );
 
         this.loader.onDidChange(() => this.update());
+        this.loader.onDidStateChange(() => this.patchStatuses());
     }
 
     /** 싱글톤 패널 생성 또는 포커스 */
@@ -103,6 +104,17 @@ export class SpecViewProvider {
         } catch (e) {
             this.panel.webview.html = this.getErrorHtml(`스펙 로드 실패: ${String(e)}`);
         }
+    }
+
+    /** 상태 배지만 패치 (HTML 전체 재빌드 없이 스펙 상태 변경 반영) */
+    private patchStatuses(): void {
+        if (!this.panel.visible) { return; }
+        const specs = this.loader.getSpecs();
+        const statuses: Record<string, { status: string; color: string }> = {};
+        for (const spec of specs) {
+            statuses[spec.id] = { status: spec.status, color: STATUS_COLORS[spec.status] || '#888' };
+        }
+        void this.panel.webview.postMessage({ type: 'patchStatuses', statuses });
     }
 
     /** 선택된 스펙 + 부모(1단계) + 하위 스펙 추출 */
@@ -590,9 +602,33 @@ export class SpecViewProvider {
         }
 
         /* 코드 참조 */
+        .code-refs-details {
+            margin: 4px 0;
+        }
+        .code-refs-summary {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--fg-secondary);
+            cursor: pointer;
+            user-select: none;
+            padding: 4px 0;
+            border-bottom: 1px dashed var(--border-color);
+            list-style: none;
+        }
+        .code-refs-summary::-webkit-details-marker { display: none; }
+        .code-refs-summary::before {
+            content: '▶ ';
+            font-size: 9px;
+            vertical-align: middle;
+        }
+        .code-refs-details[open] .code-refs-summary::before {
+            content: '▼ ';
+        }
         .code-refs {
             list-style: none;
-            padding: 0;
+            padding: 4px 0 0 0;
         }
         .code-refs li {
             padding: 2px 0;
@@ -774,7 +810,20 @@ export class SpecViewProvider {
             });
         });
 
-        // 제안 답변 버튼 클릭 → textarea에 삽입
+        // textarea 입력 시 draft 저장
+        function sendDraftAnswer(input) {
+            const qId = input.dataset.qId;
+            const specCard = input.closest('[data-spec-id]');
+            const specId = specCard?.dataset.specId;
+            if (specId && qId) {
+                vscode.postMessage({ type: 'draftAnswer', specId, questionId: qId, text: input.value });
+            }
+        }
+        document.querySelectorAll('.feedback-answer-input').forEach(el => {
+            el.addEventListener('input', () => sendDraftAnswer(el));
+        });
+
+        // 제안 답변 버튼 클릭 → textarea에 삽입 + draft 저장
         document.querySelectorAll('.feedback-suggestion-btn').forEach(el => {
             el.addEventListener('click', () => {
                 const area = el.closest('.feedback-answer-area') || el.closest('.feedback-question')?.querySelector('.feedback-answer-area');
@@ -782,8 +831,23 @@ export class SpecViewProvider {
                 if (input) {
                     input.value = el.dataset.answer || '';
                     input.focus();
+                    sendDraftAnswer(input);
                 }
             });
+        });
+
+        // 상태 패치 메시지 수신 (HTML 재빌드 없이 상태 배지만 업데이트)
+        window.addEventListener('message', event => {
+            const msg = event.data;
+            if (msg.type === 'patchStatuses') {
+                for (const [specId, info] of Object.entries(msg.statuses)) {
+                    const badge = document.querySelector('[data-status-badge-for="' + specId + '"]');
+                    if (badge) {
+                        badge.textContent = info.status;
+                        badge.style.background = info.color;
+                    }
+                }
+            }
         });
 
         // 답변 저장 버튼
@@ -929,7 +993,7 @@ export class SpecViewProvider {
         }
 
         let feedbackHtml = '';
-        if (feedback.requiresUserInput || feedback.openQuestionCount > 0) {
+        if (feedback.openQuestionCount > 0) {
             const lastAnsweredRow = feedback.lastAnsweredAt
                 ? `<div class="feedback-last-answered">🕐 마지막 답변: ${esc(feedback.lastAnsweredAt)}</div>`
                 : '';
@@ -946,7 +1010,7 @@ export class SpecViewProvider {
                     ${whyHtml}
                     ${suggestionsHtml}
                     <div class="feedback-answer-area">
-                        <textarea class="feedback-answer-input" data-q-id="${escAttr(qId)}" data-question="${escAttr(q.question)}" placeholder="여기서 바로 답변을 입력하거나 제안 답변을 선택하세요.">${esc(q.answer ?? '')}</textarea>
+                        <textarea class="feedback-answer-input" data-q-id="${escAttr(qId)}" data-question="${escAttr(q.question)}" placeholder="여기서 바로 답변을 입력하거나 제안 답변을 선택하세요.">${esc(drafts?.get(qId) ?? q.answer ?? '')}</textarea>
                         <div class="feedback-actions"><button class="feedback-save-btn" data-spec-id="${escAttr(spec.id)}" data-q-id="${escAttr(qId)}" data-question="${escAttr(q.question)}">${saveLabel}</button></div>
                     </div>
                 </div>`;
@@ -963,12 +1027,14 @@ export class SpecViewProvider {
         let codeRefsHtml = '';
         if (spec.codeRefs.length > 0) {
             codeRefsHtml = `
-            <div class="section-title">코드 참조</div>
-            <ul class="code-refs">
-                ${spec.codeRefs.map(r =>
-                    `<li><a class="code-ref-link" data-code-ref="${escAttr(r)}">📄 ${esc(r)}</a></li>`
-                ).join('')}
-            </ul>`;
+            <details class="code-refs-details">
+                <summary class="code-refs-summary">코드 참조 (${spec.codeRefs.length})</summary>
+                <ul class="code-refs">
+                    ${spec.codeRefs.map(r =>
+                        `<li><a class="code-ref-link" data-code-ref="${escAttr(r)}">📄 ${esc(r)}</a></li>`
+                    ).join('')}
+                </ul>
+            </details>`;
         }
 
         // GitHub Refs
@@ -1010,14 +1076,14 @@ export class SpecViewProvider {
         const tagsHtml = spec.tags.map(t => `<span class="tag">${esc(t)}</span>`).join(' ');
 
         return `
-        <div class="spec-card${focusedClass}" id="spec-${esc(spec.id)}">
+        <div class="spec-card${focusedClass}" id="spec-${esc(spec.id)}" data-spec-id="${escAttr(spec.id)}">
             ${parentHtml}
             <div class="spec-header">
                 <span class="spec-id" data-open-spec="${escAttr(spec.id)}">${esc(spec.id)}</span>
                 <${headingTag} class="spec-title">${esc(spec.title)}</${headingTag}>
             </div>
             <div class="spec-meta">
-                <span class="status-badge" style="background:${color}">${spec.status}</span>
+                <span class="status-badge" style="background:${color}" data-status-badge-for="${escAttr(spec.id)}">${spec.status}</span>
                 ${tagsHtml}
                 ${updatedAt ? `<span class="meta-date">업데이트: ${updatedAt}</span>` : ''}
             </div>

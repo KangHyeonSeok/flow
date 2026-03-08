@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "id": "F-027",
+  "nodeType": "task",
+  "title": "Runner JSON 복구 우선순위화",
+  "description": "runner가 손상 스펙 JSON 진단 캐시를 읽고 일반 구현 큐보다 복구 작업을 먼저 선택하도록 우선순위 규칙과 로그/메타데이터 기록을 추가하는 일회성 구현 작업.",
+  "status": "queued",
+  "parent": "F-025",
+  "dependencies": [
+    "F-015",
+    "F-080",
+    "F-090"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-cli/Services/Runner/RunnerService.cs",
+    "tools/flow-cli/Services/Runner/RunnerModels.cs",
+    "tools/flow-cli/Services/Runner/SpecRepoService.cs",
+    "tools/flow-cli/Services/Runner/RunnerLogService.cs",
+    "tools/flow-cli/Services/PathResolver.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "json",
+    "repair",
+    "priority",
+    "queue",
+    "task"
+  ],
+  "priority": "P1",
+  "createdAt": "2026-03-07T12:47:29.3321808Z",
+  "updatedAt": "2026-03-07T12:47:29.3321808Z"
+}

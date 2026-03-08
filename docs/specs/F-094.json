@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "id": "F-094",
+  "nodeType": "feature",
+  "title": "Spec Planner 자동 standby 전환",
+  "description": "Spec Planner가 스펙 생성 또는 수정 직후 사용자의 추가 판단, 보충 정보, 승인 입력이 더 이상 필요 없는 경우 곧바로 standby 상태로 전환하는 계획 종료 규칙. 사용자 입력 대기가 필요한 경우와 planner 자신의 유휴 상태를 구분해 기록하며, standby 전환만으로 스펙 status를 임의 변경하지 않는다.",
+  "status": "queued",
+  "parent": "F-090",
+  "dependencies": [
+    "F-008"
+  ],
+  "conditions": [
+    {
+      "id": "F-094-C1",
+      "nodeType": "condition",
+      "description": "Given Spec Planner가 스펙 생성 또는 수정 작업을 마침, When open 상태 질문·미해결 결정 항목·추가 자료 요청이 존재하지 않음을 확인, Then planner는 metadata.plannerState='standby' 를 기록하고 추가 질의 없이 대기 상태로 전환할 수 있다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+        "tools/flow-ext/src/detailViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-094-C2",
+      "nodeType": "condition",
+      "description": "Given 스펙의 구현 준비 상태와 planner의 유휴 상태는 서로 다른 의미, When planner가 standby로 전환, Then 스펙 status는 사용자가 지정한 draft 또는 queued 상태를 유지하고 standby 전환만으로 변경되지 않는다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-094-C3",
+      "nodeType": "condition",
+      "description": "Given 스펙 생성 후에도 사용자 판단, 승인, 추가 컨텍스트가 필요한 질문이 남아 있음, When planner가 후속 상태를 평가, Then metadata.plannerState='waiting-user-input' 을 유지하고 standby 로 이동하지 않는다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs",
+        "tools/flow-cli/Services/SpecGraph/SpecModels.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-094-C4",
+      "nodeType": "condition",
+      "description": "Given standby 상태의 planner에 대해 사용자가 새 요구사항이나 보충 답변을 제공, When planner가 다음 계획 주기를 시작, Then metadata.plannerState 는 active 또는 waiting-user-input 으로 재평가되어 이전 standby 값이 그대로 고정되지 않는다",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecStore.cs",
+        "tools/flow-ext/src/detailViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/SpecModels.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecStore.cs",
+    "tools/flow-cli/Services/Runner/RunnerService.cs",
+    "tools/flow-ext/src/detailViewProvider.ts"
+  ],
+  "evidence": [],
+  "tags": [
+    "planner",
+    "workflow",
+    "standby",
+    "automation"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "plannerStateFlow": [
+      "active",
+      "waiting-user-input",
+      "standby"
+    ],
+    "standbyRequires": {
+      "openQuestions": 0
+    },
+    "selectionReason": {
+      "selectedAt": "2026-03-07T18:29:14.1374710Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 13
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T18:29:14.1380290Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-094: Spec Planner 자동 standby 전환' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T18:29:14.1380310Z"
+    },
+    "lastError": "머지 실패",
+    "lastErrorAt": "2026-03-07T18:42:57.0401410Z",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:48:16.3817992Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 파싱 실패. 마지막 오류: 머지 실패",
+      "failureReasons": [
+        "마지막 오류: 머지 실패"
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:48:16.3817992Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T12:04:23.8779561Z",
+  "updatedAt": "2026-03-08T01:48:16.3818445Z"
+}

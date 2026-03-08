@@ -13,7 +13,6 @@ import * as cp from 'child_process';
 import { SpecLoader } from './specLoader';
 import { SpecTreeProvider } from './specTreeProvider';
 import { GraphPanel } from './graphPanel';
-import { DetailViewProvider } from './detailViewProvider';
 import { SpecViewProvider } from './specViewProvider';
 import { KanbanPanel } from './kanbanPanel';
 import { SpecStatus } from './types';
@@ -93,7 +92,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     let treeProvider: SpecTreeProvider | undefined;
-    let detailProvider: DetailViewProvider | undefined;
 
     if (specLoader && workspaceRoot) {
         try {
@@ -106,23 +104,6 @@ export function activate(context: vscode.ExtensionContext): void {
         } catch (err) {
             output.appendLine(`[activate] specTree init failed: ${String(err)}`);
             vscode.window.showWarningMessage(`Flow 트리 초기화 실패: ${String(err)}`);
-        }
-
-        try {
-            detailProvider = new DetailViewProvider(
-                context.extensionUri,
-                specLoader,
-                workspaceRoot,
-            );
-            context.subscriptions.push(
-                vscode.window.registerWebviewViewProvider(
-                    DetailViewProvider.viewType,
-                    detailProvider,
-                ),
-            );
-        } catch (err) {
-            output.appendLine(`[activate] specDetail init failed: ${String(err)}`);
-            vscode.window.showWarningMessage(`Flow 상세 패널 초기화 실패: ${String(err)}`);
         }
     }
 
@@ -223,7 +204,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
-    // 노드 포커스 (트리 클릭 → 그래프 포커스 + 상세 패널)
+    // 노드 포커스 (트리 클릭 → 그래프 포커스)
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.focusNode', (nodeId: string) => {
             if (!specLoader) {
@@ -233,14 +214,6 @@ export function activate(context: vscode.ExtensionContext): void {
             if (GraphPanel.currentPanel) {
                 GraphPanel.currentPanel.focusNode(nodeId);
             }
-            void detailProvider?.showNode(nodeId);
-        }),
-    );
-
-    // 상세 표시 (그래프에서 호출)
-    context.subscriptions.push(
-        vscode.commands.registerCommand('specGraph.showDetail', (nodeId: string) => {
-            void detailProvider?.showNode(nodeId);
         }),
     );
 

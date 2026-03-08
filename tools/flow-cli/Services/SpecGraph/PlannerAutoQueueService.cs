@@ -35,10 +35,6 @@ public class PlannerAutoQueueService
                 "변경 관리 규칙에 따라 관계를 먼저 changeLog에 기록하세요.",
                 0, "waiting-user-input");
 
-        // C2: metadata.requiresUserInput=true 이면 차단
-        if (IsRequiresUserInput(spec))
-            return Ineligible("metadata.requiresUserInput=true — 사용자 입력 대기 중", 0, "waiting-user-input");
-
         // C2: plannerState='waiting-user-input' 이면 차단
         if (HasPlannerStateWaiting(spec))
             return Ineligible("metadata.plannerState='waiting-user-input' — 사용자 판단 대기 중", 0, "waiting-user-input");
@@ -100,9 +96,6 @@ public class PlannerAutoQueueService
         };
         spec.Metadata["plannerState"] = eligibility.PlannerState;
 
-        // requiresUserInput 플래그 해제
-        spec.Metadata.Remove("requiresUserInput");
-
         return _store.Update(spec);
     }
 
@@ -128,7 +121,6 @@ public class PlannerAutoQueueService
             spec.Metadata["promotion"] = BuildRevertedPromotion(existingPromotion, revertReason);
 
         spec.Metadata["plannerState"] = "waiting-user-input";
-        spec.Metadata["requiresUserInput"] = true;
 
         return _store.Update(spec);
     }
@@ -156,15 +148,6 @@ public class PlannerAutoQueueService
         }
 
         return false;
-    }
-
-    private static bool IsRequiresUserInput(SpecNode spec)
-    {
-        if (spec.Metadata == null) return false;
-        if (!spec.Metadata.TryGetValue("requiresUserInput", out var val)) return false;
-        if (val is JsonElement je) return je.ValueKind == JsonValueKind.True;
-        if (val is bool b) return b;
-        return bool.TryParse(val?.ToString(), out var bp) && bp;
     }
 
     private static bool HasPlannerStateWaiting(SpecNode spec)

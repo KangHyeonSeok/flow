@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "id": "F-099",
+  "nodeType": "feature",
+  "title": "손상 스펙 인지 ID 할당 및 예약",
+  "description": "손상 스펙 인지 ID 할당 및 예약",
+  "status": "draft",
+  "dependencies": [],
+  "conditions": [],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:47:49.7232867Z",
+      "author": "planner",
+      "summary": "스펙 'F-099' 생성",
+      "relatedIds": []
+    }
+  ],
+  "createdAt": "2026-03-08T01:47:49.7232867Z",
+  "updatedAt": "2026-03-08T01:47:49.7232867Z"
+}

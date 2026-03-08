@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 2,
+  "id": "F-100",
+  "nodeType": "feature",
+  "title": "스펙 작성 프리플라이트 및 구조 정규화",
+  "description": "스펙 작성 프리플라이트 및 구조 정규화",
+  "status": "draft",
+  "dependencies": [],
+  "conditions": [],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:47:50.0277668Z",
+      "author": "planner",
+      "summary": "스펙 'F-100' 생성",
+      "relatedIds": []
+    }
+  ],
+  "createdAt": "2026-03-08T01:47:50.0277668Z",
+  "updatedAt": "2026-03-08T01:47:50.0277668Z"
+}

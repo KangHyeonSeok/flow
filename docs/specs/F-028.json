@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "F-028",
+  "nodeType": "task",
+  "title": "검토 단계 모호성 재질의 및 queued 복귀",
+  "description": "Runner가 needs-review 또는 완료 후보 스펙을 terminal 상태로 올리기 전에 Copilot CLI로 모호한 요구사항을 재탐색하고, 무엇이 부족한지, 왜 확정할 수 없는지, 해결 방법이 무엇인지 metadata.review 및 metadata.questions에 남긴 뒤 unresolved 항목이 남으면 queued + waiting-user-input 조합으로 되돌리는 일회성 구현 작업.",
+  "status": "done",
+  "parent": "F-008",
+  "dependencies": [
+    "F-007",
+    "F-090"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-cli/Services/Runner/SpecReviewEvaluator.cs",
+    "tools/flow-cli/Services/Runner/RunnerService.cs",
+    "tools/flow-cli/Services/Runner/CopilotService.cs",
+    "tools/flow-cli/Services/Runner/RunnerModels.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "review",
+    "question",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "selectionReason": {
+      "selectedAt": "2026-03-07T20:12:36.9999050Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 8
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T20:12:37.0008000Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-028: 검토 단계 모호성 재질의 및 queued 복귀' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T20:12:37.0008010Z"
+    },
+    "lastDoneAt": "2026-03-08T01:10:52.9028625Z",
+    "lastDoneBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T13:14:17.8637944Z",
+  "updatedAt": "2026-03-08T01:10:52.9029082Z"
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "id": "F-023",
+  "nodeType": "task",
+  "title": "스펙 대체 전환 안전장치",
+  "description": "새 스펙이 기존 스펙을 대체할 때 즉시 deprecated 처리하지 않고 영향 분석, 승인 여부, 현재 상태, downstream 참조 여부를 기준으로 안전한 전환 순서를 정하는 작업. blocked review 또는 deferred deprecation 같은 중간 판단을 메타데이터로 남기고, working 또는 needs-review 스펙의 조기 폐기를 막는 규칙을 확정해야 한다.",
+  "status": "draft",
+  "parent": "F-021",
+  "dependencies": [
+    "F-022"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/StatusPropagator.cs",
+    "tools/flow-cli/Services/SpecGraph/SpecValidator.cs",
+    "tools/flow-cli/Commands/SpecCommand.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "transition",
+    "safety",
+    "task"
+  ],
+  "metadata": {
+    "taskGoal": "대체 전환 시점과 금지 규칙 정의",
+    "deliverable": "safe supersession and deprecation transition policy"
+  },
+  "createdAt": "2026-03-07T12:38:37.1358105Z",
+  "updatedAt": "2026-03-07T12:38:37.1358105Z"
+}

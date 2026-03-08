@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 2,
+  "id": "F-092",
+  "nodeType": "feature",
+  "title": "유휴 상태 worktree 점검 및 정리",
+  "description": "Runner가 처리할 queued 스펙, 비정상 종료 후 queued로 복귀한 복구 대상 스펙, 검토 재시도 대상이 없어 대기해야 할 때 남아 있는 runner 전용 git worktree를 점검하고 안전하게 비우는 기능. idle 주기마다 git worktree 목록을 조회해 runner가 만든 worktree를 수집하고, 현재 활성 작업과 무관한 잔여 worktree만 정리한다. 단, 미커밋 변경, 머지 충돌, 복구 대상 스펙 연계 등 사람이 확인해야 하는 흔적이 있으면 자동 삭제하지 않고 로그와 메타데이터에 남긴다.",
+  "status": "queued",
+  "parent": "F-070",
+  "dependencies": [
+    "F-090"
+  ],
+  "conditions": [
+    {
+      "id": "F-092-C1",
+      "nodeType": "condition",
+      "description": "Given Runner가 이번 주기에 처리할 queued 스펙, 비정상 종료 후 queued로 복귀한 복구 대상 스펙, 재머지/재시도 대상이 없어 유휴 상태로 진입, When idle cleanup 단계를 시작, Then git worktree list 기준으로 runner가 생성한 worktree와 브랜치, 경로, 연결 스펙 ID를 수집한다",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-092-C2",
+      "nodeType": "condition",
+      "description": "Given 수집된 runner worktree가 현재 활성 작업과 무관하고 연결 스펙이 verified, done, deprecated 이거나 스펙 연결 정보가 사라진 잔여 상태, When 정리 가능 여부를 평가, Then worktree가 clean 상태일 때만 git worktree remove와 관련 runner 브랜치 정리를 수행한다",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-092-C3",
+      "nodeType": "condition",
+      "description": "Given runner worktree에 미커밋 변경, 머지 충돌, 비정상 종료 후 queued로 복귀한 복구 대상 스펙 연결, 또는 현재 실행 중 인스턴스의 활성 작업 흔적이 존재, When idle cleanup이 해당 worktree를 평가, Then 자동 삭제하지 않고 skipped 사유를 로그와 metadata.lastIdleCleanup.skipped 항목에 기록한다",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-092-C4",
+      "nodeType": "condition",
+      "description": "Given runner worktree 경로가 이미 사라졌거나 git worktree 등록만 남은 고아 엔트리가 존재, When idle cleanup을 실행, Then 손상된 엔트리를 정리하고 경로, 브랜치, 정리 결과를 로그에 남긴다",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-092-C5",
+      "nodeType": "condition",
+      "description": "Given idle cleanup 단계가 종료, When 삭제 또는 skip 결과가 존재하거나 정리 대상이 전혀 없음, Then removed/skipped/remaining 개수와 각 사유를 metadata.lastIdleCleanup 및 runner 로그에 기록하고 Runner는 오류 없이 대기 상태를 유지한다",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "worktree",
+    "idle",
+    "cleanup"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "idleCleanup": {
+      "worktreeBranchPrefix": "runner/",
+      "requireCleanStatus": true,
+      "summaryField": "lastIdleCleanup"
+    },
+    "selectionReason": {
+      "selectedAt": "2026-03-07T17:57:01.7828180Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 15
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T17:57:01.7839530Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-092: 유휴 상태 worktree 점검 및 정리' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T17:57:01.7839570Z"
+    },
+    "lastError": "머지 실패",
+    "lastErrorAt": "2026-03-07T18:13:05.1895710Z",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:43:44.7615418Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 파싱 실패. 마지막 오류: 머지 실패",
+      "failureReasons": [
+        "마지막 오류: 머지 실패"
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:43:44.7615418Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T11:57:00.6222569Z",
+  "updatedAt": "2026-03-08T01:43:44.7615777Z"
+}

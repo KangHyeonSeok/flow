@@ -11,13 +11,12 @@ namespace FlowCLI.Services.Runner;
 /// </summary>
 public class SpecRepoService
 {
+    // 로컬 변경분(local) 중 원격이 건드리지 않은 경우에만 복구할 필드 목록.
+    // working 상태/runner 휘발성 필드는 더 이상 spec JSON에 기록되지 않으므로 제거됨.
     private static readonly string[][] SafeRestorePaths =
     [
         ["status"],
         ["metadata", "userPriorityHint"],
-        ["metadata", "runnerInstanceId"],
-        ["metadata", "runnerStartedAt"],
-        ["metadata", "implementationPlan"],
         ["metadata", "lastError"],
         ["metadata", "lastErrorAt"],
         ["metadata", "lastCompletedAt"],
@@ -25,7 +24,14 @@ public class SpecRepoService
         ["metadata", "lastVerifiedAt"],
         ["metadata", "lastVerifiedBy"],
         ["metadata", "verificationSource"],
-        ["metadata", "selectionReason"]
+        // 사용자 답변 보존 필드: feedbackStore가 로컬에서 수정하므로 git pull 시 덮어쓰기 방지
+        ["metadata", "questions"],
+        ["metadata", "lastAnsweredAt"],
+        ["metadata", "reviewDisposition"],
+        ["metadata", "plannerState"],
+        ["metadata", "questionStatus"],
+        ["metadata", "review", "questions"],
+        ["metadata", "review", "additionalInformationRequests"],
     ];
 
     private readonly RunnerLogService _log;

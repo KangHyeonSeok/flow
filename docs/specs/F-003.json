@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 2,
+  "id": "F-003",
+  "nodeType": "feature",
+  "title": "공통 JSON 요청 스키마 및 디스패처 도입",
+  "description": "모든 flow 명령이 공유할 JSON 요청 envelope와 내부 디스패처를 정의한다. 명령 식별자, 서브커맨드, payload, 옵션, 실행 컨텍스트를 공통 모델로 표준화하고, 단일 진입점에서 적절한 명령 핸들러로 위임하는 기반 작업이다.",
+  "status": "queued",
+  "parent": "F-002",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-003-C1",
+      "nodeType": "condition",
+      "description": "Given flow CLI 진입점, When 사용자가 JSON 요청을 stdin, 파일, 또는 문자열로 전달, Then 공통 envelope 모델(command, subcommand, payload, options, metadata)로 역직렬화된다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Program.cs",
+        "tools/flow-cli/FlowApp.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-003-C2",
+      "nodeType": "condition",
+      "description": "Given 공통 JSON 요청 모델, When command/subcommand 조합이 해석되면, Then 내부 디스패처가 대상 명령 핸들러와 payload 타입을 결정해 위임한다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/FlowApp.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-003-C3",
+      "nodeType": "condition",
+      "description": "Given 유효하지 않은 command, payload 스키마, 또는 필수 필드 누락, When 디스패처가 요청을 검증, Then 실행 전에 구조화된 validation 오류를 반환하고 실제 명령 핸들러는 호출되지 않는다",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Program.cs",
+        "tools/flow-cli/FlowApp.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Program.cs",
+    "tools/flow-cli/FlowApp.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "cli",
+    "json",
+    "dispatcher",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "workItemType": "task",
+    "runnerInstanceId": "runner-30896-021108",
+    "runnerStartedAt": "2026-03-08T02:14:52.3929419Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-003: 공통 JSON 요청 스키마 및 디스패처 도입' 구현을 시작합니다.",
+      "startedAt": "2026-03-08T02:14:52.3929434Z"
+    },
+    "lastCompletedAt": "2026-03-08T02:15:53.5883448Z",
+    "lastCompletedBy": "runner-30896-021108",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T02:37:41.2927880Z",
+      "reviewedBy": "runner-4380-023636",
+      "summary": "자동 검토가 Copilot 출력의 구조화된 JSON을 해석하지 못해 재작업이 필요합니다.",
+      "failureReasons": [
+        "자동 리뷰 결과를 JSON으로 파싱하지 못함",
+        "구현 로그 및 검증 증거 부족으로 실패 원인 재현 불가"
+      ],
+      "alternatives": [
+        "검토 출력 스키마와 직렬화 경로를 점검한 뒤 재시도",
+        "수동 검토로 구체적 실패 원인을 기록하고 재요청"
+      ],
+      "suggestedAttempts": [
+        "spec-append-review 입력 스키마와 생성 경로를 다시 점검한 뒤 재실행",
+        "검증 테스트와 샘플 JSON 페이로드를 추가하여 검증 케이스를 확보"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-003-Q1",
+        "type": "user-decision",
+        "question": "자동 파싱 실패 시 수동 검토를 진행할까요?",
+        "why": "자동 검토만으로는 실패 원인을 재현하고 정확한 조치를 결정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:37:41.2927880Z",
+        "requestedBy": "runner-4380-023636",
+        "answer": "예. 자동 파싱이 한 번이라도 실패하면 우선 구현 로그와 변경 파일, 샘플 payload를 기준으로 수동 검토를 진행하고 review JSON 경로를 안정화한 뒤 자동 검토를 다시 붙입니다.",
+        "answeredAt": "2026-03-08T10:24:00.000Z"
+      },
+      {
+        "id": "F-003-Q4",
+        "type": "missing-info",
+        "question": "샘플 요청 JSON 페이로드",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:37:41.2927880Z",
+        "requestedBy": "runner-4380-023636",
+        "answer": "기본 샘플은 {\"command\":\"spec\",\"subcommand\":\"list\",\"arguments\":[],\"options\":{\"status\":\"queued\",\"json\":true},\"payload\":{},\"metadata\":{\"source\":\"runner\"}} 형태로 두고, build/test 계열은 payload에 중첩 옵션을 넣는 방식으로 확장합니다.",
+        "answeredAt": "2026-03-08T10:24:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T02:37:41.2927880Z",
+    "lastReviewBy": "runner-4380-023636",
+    "selectionReason": {
+      "selectedAt": "2026-03-08T02:14:52.3921746Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 27
+    },
+    "lastAnsweredAt": "2026-03-08T10:24:00.000Z"
+  },
+  "createdAt": "2026-03-07T04:04:25.0823518Z",
+  "updatedAt": "2026-03-08T10:24:00.000Z"
+}

@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 2,
+  "id": "F-101",
+  "nodeType": "feature",
+  "title": "RAG 최신성 관리 및 canonical summary 운영",
+  "description": "문서와 스펙 수가 많아질 때 RAG를 긴 문서군의 압축 인덱스로 활용하되 stale 정보가 현재 truth처럼 회수되지 않도록 관리하는 기능. 현재 기준 정보는 canonical summary로 upsert하고, 과거 작업 기록은 historical log로 분리하며, db-query는 freshness 신호와 문서 유형을 함께 노출해 LLM과 사용자가 현재 기준과 과거 판단 근거를 구분할 수 있어야 한다.",
+  "status": "draft",
+  "parent": "F-030",
+  "dependencies": [
+    "F-030"
+  ],
+  "conditions": [
+    {
+      "id": "F-101-C1",
+      "nodeType": "condition",
+      "description": "Given 현재 기준이 필요한 질문, When RAG에서 스펙 또는 운영 기준 정보를 조회, Then 동일 대상을 대표하는 canonical summary는 stable key 기준으로 upsert되어 historical log보다 우선 회수되고 최신 spec graph와 충돌하면 현재 스펙 기준이 우선임이 드러나야 한다.",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Commands/SpecCommand.cs",
+        "tools/flow-cli/Services/DatabaseService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-101-C2",
+      "nodeType": "condition",
+      "description": "Given 작업 완료 기록과 planning note가 계속 추가됨, When 문서를 RAG에 적재, Then canonical summary, historical log, ephemeral note 같은 문서 유형이 metadata 또는 동등한 필드로 구분되어 append-only 로그가 현재 기준 문서와 같은 신뢰도로 해석되지 않아야 한다.",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Commands/DbAddCommand.cs",
+        "tools/flow-cli/Services/DatabaseService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-101-C3",
+      "nodeType": "condition",
+      "description": "Given 사용자가 RAG 검색 결과를 바탕으로 판단하려 함, When db-query를 실행, Then 결과에는 최소한 created_at, updated_at, canonical 여부 또는 sourceType, feature key 같은 freshness 신호가 포함되어 stale 가능성과 현재성 여부를 파악할 수 있어야 한다.",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Commands/DbQueryCommand.cs",
+        "tools/flow-cli/Services/DatabaseService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-101-C4",
+      "nodeType": "condition",
+      "description": "Given 스펙 또는 운영 기준 문서가 변경됨, When 관련 인덱싱을 수행, Then 기존 canonical summary는 같은 stable key로 갱신되고 이전 임베딩은 무효화되어 재색인되며 오래된 summary가 병렬로 누적되지 않아야 한다.",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Commands/SpecCommand.cs",
+        "tools/flow-cli/Services/DatabaseService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-101-C5",
+      "nodeType": "condition",
+      "description": "Given semantic similarity가 높은 오래된 로그와 덜 유사하지만 최신 canonical summary가 함께 검색됨, When 결과 순위를 계산, Then freshness와 document type이 semantic 점수와 함께 반영되어 최신 canonical summary가 기본적으로 우선되고 historical log는 보강 근거로 뒤따라야 한다.",
+      "status": "draft",
+      "codeRefs": [
+        "tools/flow-cli/Services/DatabaseService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "docs/rag-freshness-policy.md",
+    "tools/flow-cli/Commands/DbAddCommand.cs",
+    "tools/flow-cli/Commands/DbQueryCommand.cs",
+    "tools/flow-cli/Commands/SpecCommand.cs",
+    "tools/flow-cli/Services/DatabaseService.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "rag",
+    "freshness",
+    "search",
+    "governance",
+    "summary"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:55:32.9449642Z",
+      "author": "planner",
+      "summary": "스펙 'F-101' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:56:30Z",
+      "author": "planner",
+      "summary": "RAG stale 방지 운영 원칙과 canonical summary 전략을 feature 스펙으로 구조화",
+      "relatedIds": [
+        "F-030"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:55:32.9449642Z",
+  "updatedAt": "2026-03-08T01:56:30Z"
+}

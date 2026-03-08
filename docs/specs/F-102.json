@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 2,
+  "id": "F-102",
+  "nodeType": "task",
+  "title": "canonical summary upsert 채널",
+  "description": "스펙과 feature별 최신 planning/governance summary를 append-only 로그와 분리해 stable key 기준으로 upsert하는 일회성 구현 작업. `spec-index`가 이미 제공하는 spec upsert 패턴을 일반화해 최신 요약본은 덮어쓰고, historical log는 별도로 유지하는 채널을 만든다.",
+  "status": "queued",
+  "parent": "F-101",
+  "dependencies": [
+    "F-101",
+    "F-030"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "docs/rag-freshness-policy.md",
+    "tools/flow-cli/Commands/SpecCommand.cs",
+    "tools/flow-cli/Services/DatabaseService.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "rag",
+    "freshness",
+    "summary",
+    "upsert",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:55:33.4018365Z",
+      "author": "planner",
+      "summary": "스펙 'F-102' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:56:30Z",
+      "author": "planner",
+      "summary": "canonical summary를 stable key 기준으로 갱신하는 queued task로 구조화",
+      "relatedIds": [
+        "F-101",
+        "F-030"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:55:33.4018365Z",
+  "updatedAt": "2026-03-08T01:56:30Z"
+}

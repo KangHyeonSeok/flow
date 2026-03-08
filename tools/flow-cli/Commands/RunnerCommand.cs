@@ -76,17 +76,6 @@ public partial class FlowApp
             if (interval > 0) config.PollIntervalMinutes = interval;
             if (!string.IsNullOrEmpty(model)) config.CopilotModel = model;
 
-            // specRepository 필수 검증 (F-080-C5)
-            if (string.IsNullOrWhiteSpace(config.SpecRepository))
-            {
-                JsonOutput.Write(JsonOutput.Error("runner-start",
-                    "specRepository가 설정되지 않았습니다. " +
-                    "'.flow/config.json'에 specRepository(git URL)를 설정하세요. " +
-                    "예: flow config --spec-repo https://github.com/user/flow-spec.git"), pretty);
-                Environment.ExitCode = 1;
-                return;
-            }
-
             // 이미 실행 중인 인스턴스 확인
             var existing = RunnerService.GetRunningInstance(PathResolver.FlowRoot, config.PidFile);
             if (existing?.Status == "running")

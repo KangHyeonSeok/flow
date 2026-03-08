@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 2,
+  "id": "F-040",
+  "nodeType": "feature",
+  "title": "E2E \uD14C\uC2A4\uD2B8 \uD504\uB808\uC784\uC6CC\uD06C",
+  "description": "\uC2DC\uB098\uB9AC\uC624 \uAE30\uBC18 E2E \uD14C\uC2A4\uD2B8\uB97C \uC2E4\uD589\uD558\uB294 Python \uD504\uB808\uC784\uC6CC\uD06C. YAML \uC2DC\uB098\uB9AC\uC624 \uC815\uC758, Flutter/Unity \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130, \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9\u00B7\uC2E4\uD589\u00B7\uAC80\uC99D\u00B7\uB9AC\uD3EC\uD305 \uD30C\uC774\uD504\uB77C\uC778\uC744 \uC81C\uACF5\uD55C\uB2E4. flow test e2e \uBA85\uB839\uC73C\uB85C CLI\uC5D0\uC11C \uC2E4\uD589.",
+  "status": "queued",
+  "parent": "F-001",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-040-C1",
+      "nodeType": "condition",
+      "description": "Given YAML \uC2DC\uB098\uB9AC\uC624 \uD30C\uC77C, When flow test e2e \uC2E4\uD589, Then PythonBridge\uB97C \uD1B5\uD574 \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9\u00B7\uC2E4\uD589\u00B7\uACB0\uACFC \uC218\uC9D1",
+      "status": "verified",
+      "codeRefs": [
+        "tools/flow-cli/Commands/TestCommand.cs",
+        "tools/flow-cli/Services/PythonBridge.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-040-C2",
+      "nodeType": "condition",
+      "description": "Given Flutter/Unity \uD504\uB85C\uC81D\uD2B8, When \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130 \uB85C\uB4DC, Then \uAC01 \uD50C\uB7AB\uD3FC\uBCC4 E2E \uD14C\uC2A4\uD2B8 \uD658\uACBD \uAD6C\uC131",
+      "status": "working",
+      "codeRefs": [
+        "tools/e2e-test/adapters/",
+        "tools/e2e-test/e2e_test/"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-040-C3",
+      "nodeType": "condition",
+      "description": "Given \uD14C\uC2A4\uD2B8 \uACB0\uACFC, When \uB9AC\uD3EC\uD305 \uBAA8\uB4C8 \uC2E4\uD589, Then \uC131\uACF5/\uC2E4\uD328/\uC2A4\uD0B5 \uC694\uC57D \uCD9C\uB825",
+      "status": "working",
+      "codeRefs": [
+        "tools/e2e-test/e2e_test/"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-040-C4",
+      "nodeType": "condition",
+      "description": "Given \uC2DC\uB098\uB9AC\uC624 \uB514\uB809\uD1A0\uB9AC, When \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9(discovery), Then YAML \uD30C\uC77C \uC790\uB3D9 \uBC1C\uACAC \uBC0F \uD30C\uC2F1",
+      "status": "working",
+      "codeRefs": [
+        "tools/e2e-test/scenarios/"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Commands/TestCommand.cs",
+    "tools/flow-cli/Services/PythonBridge.cs",
+    "tools/e2e-test/"
+  ],
+  "evidence": [],
+  "tags": [
+    "e2e",
+    "test",
+    "python",
+    "scenario"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "runnerInstanceId": "runner-26808-043410",
+    "runnerStartedAt": "2026-03-08T02:21:39.5099421Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner\uAC00 \u0027F-040: E2E \uD14C\uC2A4\uD2B8 \uD504\uB808\uC784\uC6CC\uD06C\u0027 \uAD6C\uD604\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.",
+      "startedAt": "2026-03-08T02:21:39.5099433Z"
+    },
+    "lastCompletedAt": "2026-03-08T01:48:16.0041410Z",
+    "lastCompletedBy": "runner-7472-011050",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T04:45:27.9258811Z",
+      "reviewedBy": "runner-40844-044047",
+      "summary": "Runner \uC778\uC2A4\uD134\uC2A4 \uBE44\uC815\uC0C1 \uC885\uB8CC\uB85C E2E \uC2E4\uD589\uC774 \uC911\uB2E8\uB418\uC5B4 \uC7AC\uC791\uC5C5\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.",
+      "failureReasons": [
+        "Runner \uC778\uC2A4\uD134\uC2A4\uAC00 \uBE44\uC815\uC0C1\uC801\uC73C\uB85C \uC885\uB8CC\uB418\uC5B4 \uC2DC\uB098\uB9AC\uC624 \uC2E4\uD589\uC774 \uC911\uB2E8\uB428",
+        "\uC790\uB3D9 \uAC80\uD1A0 \uACB0\uACFC\uAC00 \uAD6C\uC870\uD654\uB41C JSON\uC73C\uB85C \uD574\uC11D\uB418\uC9C0 \uC54A\uC544 \uC7AC\uC2DC\uB3C4\uAC00 \uD544\uC694\uD568"
+      ],
+      "alternatives": [
+        "\uC2E4\uD589 \uB85C\uADF8\uC640 runner \uC0C1\uD0DC\uB97C \uBD84\uC11D\uD558\uC5EC \uC6D0\uC778 \uD30C\uC545 \uD6C4 \uC7AC\uC2DC\uC791\uD558\uC5EC \uC7AC\uC2DC\uB3C4",
+        "\uB85C\uCEEC \uB610\uB294 \uACA9\uB9AC\uB41C \uD658\uACBD\uC5D0\uC11C \uC218\uB3D9\uC73C\uB85C \uC2DC\uB098\uB9AC\uC624\uB97C \uC2E4\uD589\uD574 \uBB38\uC81C\uB97C \uC7AC\uD604 \uBC0F \uB514\uBC84\uAE45"
+      ],
+      "suggestedAttempts": [
+        "runner \uC885\uB8CC \uC6D0\uC778\uC744 \uBD84\uC11D\uD55C \uB4A4 \uC7AC\uC2DC\uC791",
+        "PythonBridge\uC640 \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130 \uB4F1 \uC758\uC874 \uC11C\uBE44\uC2A4 \uC0C1\uD0DC \uC810\uAC80 \uD6C4 queued \uC0C1\uD0DC\uC5D0\uC11C \uC7AC\uC2E4\uD589",
+        "\uC790\uB3D9 \uAC80\uD1A0 \uD504\uB86C\uD504\uD2B8\uB97C \uC7AC\uC2E4\uD589\uD558\uC5EC \uCD9C\uB825\uC774 JSON \uC2A4\uD0A4\uB9C8\uC640 \uC77C\uCE58\uD558\uB294\uC9C0 \uD655\uC778"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-040-Q2",
+        "type": "user-decision",
+        "question": "\uC790\uB3D9 \uC7AC\uC2DC\uC791 \uD6C4 \uC7AC\uC2DC\uB3C4\uD560\uAE4C\uC694, \uC544\uB2C8\uBA74 \uC6B0\uC120 \uC218\uB3D9 \uB514\uBC84\uAE45\uC744 \uC9C4\uD589\uD560\uAE4C\uC694?",
+        "why": "\uC7AC\uC2DC\uC791-\uC7AC\uC2DC\uB3C4\uB294 \uBE60\uB978 \uD68C\uBCF5\uC5D0 \uC720\uB9AC\uD558\uC9C0\uB9CC \uADFC\uBCF8 \uC6D0\uC778\uC744 \uB193\uCE60 \uC218 \uC788\uACE0, \uC218\uB3D9 \uB514\uBC84\uAE45\uC740 \uC2DC\uAC04\uC774 \uAC78\uB9AC\uB098 \uBB38\uC81C\uC758 \uADFC\uBCF8 \uD574\uACB0\uC5D0 \uB3C4\uC6C0\uC774 \uB429\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:45:27.9258811Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "우선 수동 디버깅으로 종료 원인을 확인한 뒤 대상 시나리오만 다시 실행합니다. runner 비정상 종료는 환경 또는 프로세스 문제일 수 있어서 무조건 자동 재시도보다 원인 확인이 우선입니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-040-Q4",
+        "type": "missing-info",
+        "question": "\uC2E4\uD589 \uB2F9\uC2DC\uC758 \uB9AC\uC18C\uC2A4(\uBA54\uBAA8\uB9AC/CPU) \uC0AC\uC6A9\uB7C9 \uC2A4\uB0C5\uC0F7",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:45:27.9258811Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "이번 실패 건의 스냅샷은 남아 있지 않으므로 unknown으로 처리합니다. 다음 재실행부터는 runner 시작/종료 시점의 working set, peak memory, process CPU time을 로그에 남기는 기준으로 진행합니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-040-Q5",
+        "type": "missing-info",
+        "question": "\uD574\uB2F9 \uC2DC\uB098\uB9AC\uC624\uC5D0\uC11C \uC0AC\uC6A9\uB41C \uD50C\uB7AB\uD3FC(adapters) \uC124\uC815 \uBC0F \uBC84\uC804 \uC815\uBCF4",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:45:27.9258811Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "기본 재현 프로파일은 현재 Windows 호스트에서 Python 3.12 계열 환경과 저장소 기본 의존성을 사용하는 구성으로 둡니다. 플랫폼 어댑터는 Unity를 우선 대상으로 두고 Flutter는 동일 프레임워크로 후속 검증합니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T04:45:27.9258811Z",
+    "lastReviewBy": "runner-40844-044047",
+    "selectionReason": {
+      "selectedAt": "2026-03-08T02:21:39.5092615Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 25
+    },
+    "lastError": "Runner \uC778\uC2A4\uD134\uC2A4 \uBE44\uC815\uC0C1 \uC885\uB8CC (\uC774\uC804 \uC778\uC2A4\uD134\uC2A4: runner-9752-021805)",
+    "lastErrorAt": "2026-03-08T04:34:11.5186260Z",
+    "lastAnsweredAt": "2026-03-08T10:25:00.000Z"
+  },
+  "createdAt": "2026-02-01T00:00:00Z",
+  "updatedAt": "2026-03-08T10:25:00.000Z"
+}

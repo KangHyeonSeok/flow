@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 2,
+  "id": "F-020",
+  "nodeType": "feature",
+  "title": "빌드 시스템",
+  "description": "멀티 플랫폼 빌드를 관리하는 기능",
+  "status": "verified",
+  "parent": "F-001",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-020-C1",
+      "nodeType": "condition",
+      "description": "Given 빌드 매니페스트, When build 명령 실행, Then 플랫폼별 빌드 수행",
+      "status": "verified",
+      "codeRefs": ["tools/flow-cli/Commands/BuildCommand.cs"],
+      "evidence": []
+    },
+    {
+      "id": "F-020-C2",
+      "nodeType": "condition",
+      "description": "Given 빌드 모듈, When 빌드 오케스트레이터 실행, Then 순서대로 빌드 실행",
+      "status": "verified",
+      "codeRefs": ["tools/flow-cli/Services/BuildOrchestrator.cs"],
+      "evidence": []
+    },
+    {
+      "id": "F-020-C3",
+      "nodeType": "condition",
+      "description": "Given 빌드 결과, When 빌드 완료, Then JSON 결과 출력",
+      "status": "verified",
+      "codeRefs": ["tools/flow-cli/Models/BuildResult.cs"],
+      "evidence": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Commands/BuildCommand.cs",
+    "tools/flow-cli/Services/BuildOrchestrator.cs",
+    "tools/flow-cli/Services/BuildModuleManager.cs"
+  ],
+  "evidence": [],
+  "tags": ["build", "platform"],
+  "metadata": {},
+  "createdAt": "2026-01-15T00:00:00Z",
+  "updatedAt": "2026-02-28T12:00:00Z"
+}

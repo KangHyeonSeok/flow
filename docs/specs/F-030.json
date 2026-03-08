@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "id": "F-030",
+  "nodeType": "feature",
+  "title": "임베딩 및 RAG 검색",
+  "description": "문서 임베딩 생성 및 벡터 검색 기반 RAG 기능",
+  "status": "queued",
+  "parent": "F-001",
+  "dependencies": [],
+  "conditions": [
+    {
+      "id": "F-030-C1",
+      "nodeType": "condition",
+      "description": "Given 문서 텍스트, When 임베딩 생성, Then 벡터 DB에 저장",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/EmbeddingBridge.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-030-C2",
+      "nodeType": "condition",
+      "description": "Given 검색 쿼리, When db-query 실행, Then 유사 문서 반환",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Commands/DbQueryCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-030-C3",
+      "nodeType": "condition",
+      "description": "Given 새 문서, When db-add 실행, Then 임베딩 생성 후 DB 추가",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Commands/DbAddCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/DatabaseService.cs",
+    "tools/flow-cli/Services/EmbeddingBridge.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "embedding",
+    "rag",
+    "search"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "runnerInstanceId": "runner-9752-021805",
+    "runnerStartedAt": "2026-03-08T02:18:12.7849600Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-030: 임베딩 및 RAG 검색' 구현을 시작합니다.",
+      "startedAt": "2026-03-08T02:18:12.7849626Z"
+    },
+    "lastCompletedAt": "2026-03-08T02:21:35.2912203Z",
+    "lastCompletedBy": "runner-9752-021805",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T02:40:53.7390578Z",
+      "reviewedBy": "runner-4380-023636",
+      "summary": "자동 검토 결과가 JSON으로 파싱되지 않아 재작업이 필요합니다.",
+      "failureReasons": [
+        "Copilot 자동검토 출력이 구조화된 JSON으로 변환되지 않음",
+        "검증에 필요한 실행 로그와 증거(evidence)가 부족함"
+      ],
+      "alternatives": [
+        "자동검토 출력 계약과 실행 경로를 점검하여 문제를 파악",
+        "검토를 보류하고 실행 환경을 재정비한 뒤 다시 시도"
+      ],
+      "suggestedAttempts": [
+        "로컬에서 동일한 runner 명령을 실행해 실패 원인 파악",
+        "로컬에서 동일한 runner 명령을 실행해 실패 원인 파악",
+        "자동검토 프롬프트를 수정해 출력이 JSON으로 나오도록 재실행"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-030-Q1",
+        "type": "user-decision",
+        "question": "자동 재시도를 계속 진행하길 원합니까, 아니면 원인 분석 후 수동 재실행을 원합니까?",
+        "why": "자동 재시도는 잠재적 일시적 실패를 해결할 수 있으나, 근본 원인을 파악하려면 먼저 분석이 필요합니다.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T02:40:53.7390578Z",
+        "requestedBy": "runner-4380-023636",
+        "answer": "원인 분석 후 수동 재실행을 우선합니다. RAG와 임베딩 경로는 모델/환경 영향이 커서 실패 로그 없이 자동 재시도만 반복하지 않는 정책으로 갑니다.",
+        "answeredAt": "2026-03-08T10:24:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T02:40:53.7390578Z",
+    "lastReviewBy": "runner-4380-023636",
+    "selectionReason": {
+      "selectedAt": "2026-03-08T02:18:12.7838657Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 25
+    },
+    "lastAnsweredAt": "2026-03-08T10:24:00.000Z"
+  },
+  "createdAt": "2026-02-01T00:00:00Z",
+  "updatedAt": "2026-03-08T10:24:00.000Z"
+}

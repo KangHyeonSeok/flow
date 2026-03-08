@@ -190,12 +190,7 @@ export function getUserFeedbackState(holder: { metadata?: Record<string, unknown
     ]);
     const openQuestions = questions.filter(q => q.status === 'open');
     const lastAnsweredAt = readString(metadata.lastAnsweredAt) ?? getLatestAnsweredAt(questions) ?? null;
-    const requiresUserInput = readBoolean(metadata.requiresUserInput) === true
-        || readBoolean(reviewMetadata?.requiresUserInput) === true
-        || questionStatus === 'waiting-user-input'
-        || plannerState === 'waiting-user-input'
-        || reviewDisposition === 'needs-user-decision'
-        || openQuestions.length > 0;
+    const requiresUserInput = openQuestions.length > 0;
 
     return {
         requiresUserInput,

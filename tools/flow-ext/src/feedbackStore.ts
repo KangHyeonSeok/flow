@@ -57,9 +57,9 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
     const nextFeedback = getUserFeedbackState({ metadata });
     const stillNeedsInput = nextFeedback.openQuestionCount > 0;
 
-    metadata.requiresUserInput = stillNeedsInput;
     metadata.reviewDisposition = stillNeedsInput ? 'needs-user-decision' : 'retry-queued';
     metadata.plannerState = stillNeedsInput ? 'waiting-user-input' : 'standby';
+    delete metadata.requiresUserInput;
 
     if (stillNeedsInput) {
         metadata.questionStatus = 'waiting-user-input';
@@ -68,7 +68,7 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
     }
 
     if (reviewMetadata) {
-        reviewMetadata.requiresUserInput = stillNeedsInput;
+        delete reviewMetadata.requiresUserInput;
     }
 
     spec.updatedAt = answeredAt;

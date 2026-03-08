@@ -126,7 +126,7 @@ body {
 
         // C3: 사용자 피드백 필요 패널 - open 질문 목록, 컨텍스트 수집 방법, 최근 답변 시각, 답변 입력
         let feedbackHtml = '';
-        if (feedback && (feedback.requiresUserInput || feedback.openQuestionCount > 0)) {
+        if (feedback && feedback.openQuestionCount > 0) {
             const lastAnsweredRow = feedback.lastAnsweredAt
                 ? `<div class="feedback-last-answered">🕐 마지막 답변: ${this.escapeHtml(feedback.lastAnsweredAt)}</div>`
                 : '';

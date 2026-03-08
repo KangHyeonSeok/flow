@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 2,
+  "id": "F-034",
+  "nodeType": "task",
+  "title": "칸반 카드 우선순위 드롭다운",
+  "description": "칸반 보드 카드에서 기존 상태 변경 드롭다운 옆에 사용자 권고 우선순위 드롭다운을 추가하고, 선택값을 스펙 metadata.userPriorityHint에 즉시 저장해 runner의 선택 근거로 활용할 수 있게 하는 일회성 구현 작업.",
+  "status": "done",
+  "parent": "F-009",
+  "dependencies": [
+    "F-009",
+    "F-033"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-ext/src/kanbanPanel.ts",
+    "tools/flow-ext/src/types.ts",
+    "tools/flow-ext/src/specLoader.ts",
+    "tools/flow-ext/src/extension.ts"
+  ],
+  "evidence": [],
+  "tags": [
+    "vscode",
+    "kanban",
+    "priority",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "selectionReason": {
+      "selectedAt": "2026-03-07T21:09:32.1071120Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 5
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T21:09:32.1098500Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-034: 칸반 카드 우선순위 드롭다운' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T21:09:32.1098510Z"
+    },
+    "lastCompletedAt": "2026-03-07T21:13:08.9894020Z",
+    "lastCompletedBy": "runner-82653-165628",
+    "lastDoneAt": "2026-03-08T01:10:52.9056719Z",
+    "lastDoneBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T13:53:21.6762147Z",
+  "updatedAt": "2026-03-08T01:10:52.9057034Z"
+}

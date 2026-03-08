@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "id": "F-016",
+  "nodeType": "task",
+  "title": "Runner 이슈 스냅샷 선반영",
+  "description": "Runner 사이클에서 queued 스펙을 찾기 전에 GitHub 오픈 이슈 동기화 또는 최근 이슈 스냅샷 복원을 먼저 수행하도록 선택 순서를 바꾸는 작업. 같은 사이클에서 새로 연결된 이슈와 최신 updatedAt 정보를 후보 선택에 반영할 수 있어야 하며, GitHub 연동이 꺼져 있거나 폴링 주기가 아직 아니더라도 이전 스냅샷의 신뢰 가능 시각을 읽어 fallback 판단이 가능해야 한다.",
+  "status": "done",
+  "parent": "F-015",
+  "dependencies": [
+    "F-090"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-cli/Services/Runner/RunnerService.cs",
+    "tools/flow-cli/Services/Runner/GitHubIssueService.cs",
+    "tools/flow-cli/Commands/RunnerCommand.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "issues",
+    "queue",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "taskGoal": "selection 전에 usable issue snapshot 확보",
+    "deliverable": "same-cycle issue refresh 또는 snapshot restore 경로 정의",
+    "runnerInstanceId": "runner-37856-132733",
+    "runnerStartedAt": "2026-03-07T15:38:22.9294946Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-016: Runner 이슈 스냅샷 선반영' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T15:38:22.9294961Z"
+    },
+    "lastCompletedAt": "2026-03-07T15:45:35.4110536Z",
+    "lastCompletedBy": "runner-37856-132733",
+    "lastDoneAt": "2026-03-08T01:10:52.8947994Z",
+    "lastDoneBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-07T12:27:38.1245870Z",
+  "updatedAt": "2026-03-08T01:10:52.8949705Z"
+}

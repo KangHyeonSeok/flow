@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 2,
+  "id": "F-060",
+  "nodeType": "feature",
+  "title": "VSCode \uD655\uC7A5 - \uC2A4\uD399 \uADF8\uB798\uD504 \uC2DC\uAC01\uD654",
+  "description": "VSCode Webview\uC5D0\uC11C \uC2A4\uD399 \uADF8\uB798\uD504\uB97C \uC2DC\uAC01\uD654\uD558\uACE0 \uD3B8\uC9D1\uD558\uB294 \uD655\uC7A5. \uD2B8\uB9AC\uBDF0(TreeView API), \uADF8\uB798\uD504\uBDF0(Cytoscape.js), \uC0C1\uC138 \uD328\uB110\uC744 \uC81C\uACF5\uD558\uBA70, \uB178\uB4DC \uCD94\uAC00/\uC218\uC815/\uC0AD\uC81C, \uC758\uC874\uC131 \uB4DC\uB798\uADF8\u0026\uB4DC\uB86D \uC5F0\uACB0, \uD3B8\uC9D1 \uC138\uC158(Undo/Redo) \uB4F1 \uADF8\uB798\uD504 \uD3B8\uC9D1 \uAE30\uB2A5\uC744 \uD3EC\uD568\uD55C\uB2E4.",
+  "status": "queued",
+  "parent": "F-001",
+  "dependencies": [
+    "F-010",
+    "F-011",
+    "F-012"
+  ],
+  "conditions": [
+    {
+      "id": "F-060-C1",
+      "nodeType": "condition",
+      "description": "Given \uC2A4\uD399 JSON \uD30C\uC77C\uB4E4, When VSCode \uD655\uC7A5 \uD65C\uC131\uD654, Then \uD2B8\uB9AC\uBDF0\uC5D0 \uC2A4\uD399 \uACC4\uCE35 \uAD6C\uC870 \uD45C\uC2DC",
+      "status": "verified",
+      "codeRefs": [
+        "tools/spec-graph-ext/src/specTreeProvider.ts",
+        "tools/spec-graph-ext/src/specLoader.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-060-C2",
+      "nodeType": "condition",
+      "description": "Given \uC2A4\uD399 \uADF8\uB798\uD504 \uB370\uC774\uD130, When Webview \uD328\uB110 \uC5F4\uAE30, Then Cytoscape.js\uB85C \uC758\uC874\uC131 DAG \uC2DC\uAC01\uD654",
+      "status": "verified",
+      "codeRefs": [
+        "tools/spec-graph-ext/src/graphPanel.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-060-C3",
+      "nodeType": "condition",
+      "description": "Given \uB178\uB4DC \uD074\uB9AD, When \uC0C1\uC138 \uD328\uB110 \uD45C\uC2DC, Then \uC2A4\uD399 \uC815\uBCF4(\uC870\uAC74, codeRefs, evidence) \uB80C\uB354\uB9C1 \uBC0F \uCF54\uB4DC \uB9C1\uD06C \uD074\uB9AD \uC2DC \uC5D0\uB514\uD130 \uC774\uB3D9",
+      "status": "verified",
+      "codeRefs": [
+        "tools/spec-graph-ext/src/detailViewProvider.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-060-C4",
+      "nodeType": "condition",
+      "description": "Given \uD3B8\uC9D1 \uBAA8\uB4DC, When \uB178\uB4DC \uCD94\uAC00/\uC218\uC815/\uC0AD\uC81C \uBC0F \uC758\uC874\uC131 \uB4DC\uB798\uADF8\u0026\uB4DC\uB86D, Then draft \uC0C1\uD0DC\uB85C \uBA54\uBAA8\uB9AC\uC5D0 \uC720\uC9C0\uD558\uACE0 \uC800\uC7A5 \uC2DC \uC77C\uAD04 \uAE30\uB85D \u002B \uC720\uD6A8\uC131 \uAC80\uC0AC",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-060-C5",
+      "nodeType": "condition",
+      "description": "Given \uD3B8\uC9D1 \uC138\uC158, When Ctrl\u002BZ/Ctrl\u002BY \uC785\uB825, Then Command \uC2A4\uD0DD \uAE30\uBC18 Undo/Redo \uB3D9\uC791",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-060-C6",
+      "nodeType": "condition",
+      "description": "Given \uB300\uADDC\uBAA8 \uADF8\uB798\uD504(500\u002B\uB178\uB4DC), When \uB80C\uB354\uB9C1, Then \uAC00\uC0C1\uD654\u00B7\uCCAD\uD06C \uB85C\uB529\uC73C\uB85C \uCD08\uAE30 \uB80C\uB354 2\uCD08 \uC774\uB0B4 \uBC0F \uC778\uD130\uB799\uC158 \uC751\uB2F5 100ms \uC774\uB0B4",
+      "status": "draft",
+      "codeRefs": [],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/spec-graph-ext/src/extension.ts",
+    "tools/spec-graph-ext/src/graphPanel.ts",
+    "tools/spec-graph-ext/src/specTreeProvider.ts",
+    "tools/spec-graph-ext/src/detailViewProvider.ts",
+    "tools/spec-graph-ext/src/specLoader.ts"
+  ],
+  "evidence": [],
+  "tags": [
+    "vscode",
+    "extension",
+    "webview",
+    "graph",
+    "ui"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "selectionReason": {
+      "selectedAt": "2026-03-08T04:12:05.7701167Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 1
+    },
+    "runnerInstanceId": "runner-28888-041204",
+    "runnerStartedAt": "2026-03-08T04:12:05.7866762Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner\uAC00 \u0027F-060: VSCode \uD655\uC7A5 - \uC2A4\uD399 \uADF8\uB798\uD504 \uC2DC\uAC01\uD654\u0027 \uAD6C\uD604\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.",
+      "startedAt": "2026-03-08T04:12:05.7866933Z"
+    },
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T04:43:23.6883692Z",
+      "reviewedBy": "runner-40844-044047",
+      "summary": "\uD3B8\uC9D1 \uAD00\uB828 \uC870\uAC74\uB4E4\uC774 \uC544\uC9C1 draft \uC0C1\uD0DC\uC5EC\uC11C \uC790\uB3D9 \uAC80\uD1A0\uB9CC\uC73C\uB85C \uC644\uB8CC \uD310\uB2E8\uC774 \uBD88\uAC00\uB2A5\uD558\uBBC0\uB85C \uC7AC\uC791\uC5C5\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.",
+      "failureReasons": [
+        "\uD3B8\uC9D1(\uB178\uB4DC \uCD94\uAC00/\uC218\uC815/\uC0AD\uC81C) \uBC0F \uC131\uB2A5 \uAD00\uB828 \uC870\uAC74(F-060-C4~C6)\uC774 draft\uC774\uBA70 \uAD6C\uD604\u00B7\uC99D\uBE59\uC774 \uC5C6\uC74C",
+        "\uAD00\uB828 codeRefs\uAC00 \uBE44\uC5B4 \uC788\uC5B4 \uD3B8\uC9D1\u00B7\uC800\uC7A5 \uB85C\uC9C1\uC758 \uCC38\uC870\uAC00 \uC5C6\uC74C",
+        "\uB300\uADDC\uBAA8 \uADF8\uB798\uD504 \uC131\uB2A5 \uBAA9\uD45C\uC5D0 \uB300\uD55C \uBCA4\uCE58\uB9C8\uD06C\uB098 \uD14C\uC2A4\uD2B8\uAC00 \uC81C\uACF5\uB418\uC9C0 \uC54A\uC74C"
+      ],
+      "alternatives": [
+        "\uD3B8\uC9D1 \uAE30\uB2A5\uC744 \uBCC4\uB3C4 task\uB85C \uBD84\uB9AC\uD558\uC5EC \uB2E8\uACC4\uC801\uC73C\uB85C \uAD6C\uD604",
+        "\uC6B0\uC120 C4(\uD3B8\uC9D1 \uBAA8\uB4DC)\uB9CC \uC6B0\uC120 \uAD6C\uD604 \uD6C4 C5/C6\uC740 \uC774\uD6C4\uC5D0 \uAD6C\uD604",
+        "\uC131\uB2A5 \uBAA9\uD45C\uB97C \uD604\uC2E4\uC801\uC73C\uB85C \uC870\uC815\uD558\uC5EC \uC2A4\uD399\uC744 \uC218\uC815"
+      ],
+      "suggestedAttempts": [
+        "\uD3B8\uC9D1 \uAE30\uB2A5 \uAD00\uB828 \uCF54\uB4DC \uB610\uB294 \uC124\uACC4 \uBB38\uC11C\uB97C \uCD94\uAC00\uD558\uACE0 evidence/tests\uB97C \uD3EC\uD568\uD558\uC5EC \uC870\uAC74\uC744 verified\uB85C \uC5C5\uB370\uC774\uD2B8",
+        "\uC18C\uADDC\uBAA8 \uBC0F \uB300\uADDC\uBAA8 \uADF8\uB798\uD504 \uC2DC\uB098\uB9AC\uC624\uC5D0\uC11C \uC131\uB2A5 \uCE21\uC815\uC744 \uC704\uD55C \uBCA4\uCE58\uB9C8\uD06C \uC2A4\uD06C\uB9BD\uD2B8 \uBC0F \uACB0\uACFC\uB97C \uCCA8\uBD80",
+        "\uC6B0\uC120\uC21C\uC704\uC640 \uBC94\uC704\uB97C \uACB0\uC815\uD55C \uB4A4 queued \uC0C1\uD0DC\uB85C \uB418\uB3CC\uB824 Runner\uC5D0\uAC8C \uAD6C\uD604 \uC7AC\uC2DC\uB3C4 \uC9C0\uC2DC"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-060-Q1",
+        "type": "user-decision",
+        "question": "\uD3B8\uC9D1 \uAE30\uB2A5(F-060-C4~C6)\uC744 \uC9C0\uAE08 \uC6B0\uC120 \uAD6C\uD604\uD560\uAE4C\uC694, \uC544\uB2C8\uBA74 \uAE30\uB2A5\uC744 \uBD84\uB9AC\uD558\uC5EC \uB2E8\uACC4\uC801\uC73C\uB85C \uB3C4\uC785\uD560\uAE4C\uC694?",
+        "why": "\uC6B0\uC120\uC21C\uC704\uAC00 \uACC4\uD68D\u00B7\uC2E4\uD589 \uBC29\uC2DD\uC5D0 \uC9C1\uC811\uC801\uC778 \uC601\uD5A5\uC744 \uBBF8\uCE58\uBBC0\uB85C Runner\uAC00 \uB2E4\uC74C \uC791\uC5C5\uC744 \uACB0\uC815\uD558\uB824\uBA74 \uD544\uC694\uD569\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:43:23.6883692Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "기능을 분리해 단계적으로 도입합니다. 우선 draft 편집 세션과 저장/검증까지 구현하고, Undo/Redo와 대규모 성능 최적화는 후속 단계로 분리하는 편이 현재 확장 구조와 검증 비용에 맞습니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-060-Q2",
+        "type": "clarification",
+        "question": "\uB300\uADDC\uBAA8 \uADF8\uB798\uD504 \uC131\uB2A5 \uBAA9\uD45C(\uCD08/\uC751\uB2F5ms)\uAC00 \uD604\uC2E4\uC801\uC778\uAC00\uC694?",
+        "why": "\uBAA9\uD45C\uAC00 \uB108\uBB34 \uACF5\uACA9\uC801\uC774\uBA74 \uAD6C\uD604\u00B7\uD14C\uC2A4\uD2B8 \uC804\uB7B5\uC774 \uB2EC\uB77C\uC9D1\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:43:23.6883692Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "초기 렌더 2초 목표는 유지하되, 500+ 노드에서 모든 상호작용 100ms 이내는 1차 구현 기준으로는 과도합니다. 1차 목표는 초기 렌더 2초 이내, 선택/패닝/확장 반응 p95 200ms 이내로 둡니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-060-Q3",
+        "type": "missing-info",
+        "question": "\uD3B8\uC9D1 \uAE30\uB2A5 \uAD6C\uD604 \uBC94\uC704(\uC608: \uC989\uC2DC \uD30C\uC77C \uC4F0\uAE30 vs \uC784\uC2DC \uC800\uC7A5 \uD6C4 \uC77C\uAD04 \uC801\uC6A9)",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:43:23.6883692Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "편집은 메모리 내 draft 세션으로 유지하고 저장 시 한 번에 파일에 기록하면서 유효성 검사를 수행합니다. 즉시 파일 쓰기는 충돌과 부분 저장 위험이 커서 이번 단계에서는 제외합니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-060-Q4",
+        "type": "missing-info",
+        "question": "\uD5C8\uC6A9 \uAC00\uB2A5\uD55C \uC131\uB2A5 \uBAA9\uD45C(\uC608: \uCD08\uAE30 \uB80C\uB354 2\uCD08, \uC778\uD130\uB799\uC158 \uC751\uB2F5 100ms\uAC00 \uD655\uC815\uC778\uC9C0 \uC5EC\uBD80)",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:43:23.6883692Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "허용 목표는 초기 렌더 2초 이내를 유지하고, 1차 릴리스에서는 인터랙션 p95 200ms 이내를 수용합니다. 100ms 목표는 벤치마크가 확보된 후 최적화 단계에서 다시 검토합니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T04:43:23.6883692Z",
+    "lastReviewBy": "runner-40844-044047",
+    "lastCompletedAt": "2026-03-08T04:17:17.6950520Z",
+    "lastCompletedBy": "runner-28888-041204",
+    "lastAnsweredAt": "2026-03-08T10:25:00.000Z"
+  },
+  "createdAt": "2026-02-15T00:00:00Z",
+  "updatedAt": "2026-03-08T10:25:00.000Z"
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 2,
+  "id": "F-024",
+  "nodeType": "task",
+  "title": "스펙 변경 관계 시각화 및 안내",
+  "description": "사용자가 스펙 상세와 그래프에서 어떤 스펙이 기존 기준인지, 무엇이 대체안인지, 어떤 후속 조치가 필요한지 혼동하지 않도록 관계 시각화와 안내 문구를 정의하는 작업. relation metadata를 기반으로 supersedes, mutates, deprecated 예정, 영향 범위 요약을 표시할 최소 UI 표현과 데이터 공급 규칙을 정해야 한다.",
+  "status": "draft",
+  "parent": "F-021",
+  "dependencies": [
+    "F-022",
+    "F-023"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "tools/flow-ext/src/detailViewProvider.ts",
+    "tools/flow-ext/src/graphPanel.ts",
+    "tools/flow-cli/Services/SpecGraph/GraphBuilder.cs"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "ui",
+    "graph",
+    "task"
+  ],
+  "metadata": {
+    "taskGoal": "관계 기반 UI 표현과 안내 기준 확정",
+    "deliverable": "mutation and supersession visibility rules"
+  },
+  "createdAt": "2026-03-07T12:38:37.4814938Z",
+  "updatedAt": "2026-03-07T12:38:37.4814938Z"
+}

@@ -82,7 +82,7 @@ public class RunnerReviewWorkflowTests
         }
 
     [Fact]
-    public void ApplyReviewAnalysis_WhenQuestionsExist_RequeuesAndFlagsUserInput()
+    public void ApplyReviewAnalysis_WhenQuestionsExist_RequeuesAndTracksOpenQuestions()
     {
         var spec = new SpecNode
         {
@@ -110,9 +110,10 @@ public class RunnerReviewWorkflowTests
 
         RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
 
-        // requiresUserInput=true → "needs-review" 유지 (사용자 입력 대기, 자동 재처리 금지)
+        // open 질문이 남아 있으면 "needs-review" 유지 (사용자 입력 대기, 자동 재처리 금지)
         spec.Status.Should().Be("needs-review");
-        spec.Metadata!["requiresUserInput"].Should().Be(true);
+        spec.Metadata.Should().NotContainKey("requiresUserInput");
+        ((Dictionary<string, object>)spec.Metadata!["review"]).Should().NotContainKey("requiresUserInput");
         spec.Metadata["questionStatus"].Should().Be("waiting-user-input");
         spec.Metadata["reviewDisposition"].Should().Be("needs-user-decision");
     }
@@ -142,7 +143,7 @@ public class RunnerReviewWorkflowTests
         RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
 
         spec.Status.Should().Be("queued");
-        spec.Metadata!["requiresUserInput"].Should().Be(false);
+        spec.Metadata.Should().NotContainKey("requiresUserInput");
         spec.Metadata.Should().NotContainKey("questionStatus");
         spec.Metadata["reviewDisposition"].Should().Be("retry-queued");
     }

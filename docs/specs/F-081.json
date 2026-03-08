@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "id": "F-081",
+  "nodeType": "feature",
+  "title": "스펙 원격 저장소 Push",
+  "description": "로컬 스펙 변경사항을 원격 git 저장소에 명시적으로 push하는 기능. CLI 명령(spec-push)으로 git add·commit·push를 일괄 수행하고, VSCode 스펙 트리뷰 타이틀바에 Push 버튼을 제공하여 미push 커밋이 있을 때 즉시 push할 수 있다. 자동 push 대신 명시적 트리거 방식을 채택하여 여러 스펙 변경을 하나의 커밋으로 묶을 수 있다.",
+  "status": "queued",
+  "parent": "F-001",
+  "dependencies": [
+    "F-060"
+  ],
+  "conditions": [
+    {
+      "id": "F-081-C1",
+      "nodeType": "condition",
+      "description": "Given 로컬 스펙 변경(신규/수정/삭제)이 존재, When spec-push 실행, Then git add . + git commit + git push를 순서대로 수행하고 결과 출력",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecGitService.cs",
+        "tools/flow-cli/Commands/SpecCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-081-C2",
+      "nodeType": "condition",
+      "description": "Given push할 변경 없음(nothing to commit), When spec-push 실행, Then 'Already up to date' 메시지를 출력하고 정상 종료",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecGitService.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-081-C3",
+      "nodeType": "condition",
+      "description": "Given 네트워크 오류 또는 인증 실패, When spec-push 실행, Then 오류 상세 내용을 출력하고 exit 1",
+      "status": "working",
+      "codeRefs": [
+        "tools/flow-cli/Services/SpecGraph/SpecGitService.cs",
+        "tools/flow-cli/Commands/SpecCommand.cs"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-081-C4",
+      "nodeType": "condition",
+      "description": "Given 미push 커밋이 존재, When VSCode 스펙 트리뷰 활성화, Then 타이틀바(title bar)에 Push 버튼(upload 아이콘) 표시 및 미push 커밋 수를 툴팁으로 제공",
+      "status": "working",
+      "codeRefs": [
+        "tools/spec-graph-ext/src/extension.ts",
+        "tools/spec-graph-ext/package.json"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-081-C5",
+      "nodeType": "condition",
+      "description": "Given 타이틀바 Push 버튼 클릭, When push 완료, Then 성공/실패 결과를 VSCode 알림(notification)으로 표시하고 트리뷰 새로고침",
+      "status": "working",
+      "codeRefs": [
+        "tools/spec-graph-ext/src/extension.ts"
+      ],
+      "evidence": [],
+      "tests": []
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/SpecGraph/SpecGitService.cs",
+    "tools/flow-cli/Commands/SpecCommand.cs",
+    "tools/spec-graph-ext/src/extension.ts",
+    "tools/spec-graph-ext/package.json"
+  ],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "git",
+    "push",
+    "vscode",
+    "cli"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "selectionReason": {
+      "selectedAt": "2026-03-07T17:20:57.0822400Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 17
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T17:20:57.0837390Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner가 'F-081: 스펙 원격 저장소 Push' 구현을 시작합니다.",
+      "startedAt": "2026-03-07T17:20:57.0837430Z"
+    },
+    "lastError": "머지 실패",
+    "lastErrorAt": "2026-03-07T17:28:47.8582690Z",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T01:39:34.9167959Z",
+      "reviewedBy": "runner-7472-011050",
+      "summary": "자동 검토 파싱 실패. 마지막 오류: 머지 실패",
+      "failureReasons": [
+        "마지막 오류: 머지 실패"
+      ],
+      "alternatives": [
+        "구현 로그와 변경 파일을 확인한 뒤 재시도합니다."
+      ],
+      "suggestedAttempts": [
+        "Copilot 검토 프롬프트를 다시 실행합니다.",
+        "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T01:39:34.9167959Z",
+    "lastReviewBy": "runner-7472-011050"
+  },
+  "createdAt": "2026-03-05T12:48:46.0152659Z",
+  "updatedAt": "2026-03-08T01:39:34.9168529Z"
+}

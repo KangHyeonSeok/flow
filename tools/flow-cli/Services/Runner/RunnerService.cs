@@ -49,22 +49,25 @@ public class RunnerService
 
         _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId);
 
-        // specRepository 필수 검증 (F-080-C5)
-        if (string.IsNullOrWhiteSpace(_config.SpecRepository))
+        // specRepository가 설정된 경우: 원격 spec-repo 사용 (F-080-C3, C4)
+        // 미설정인 경우: 로컬 docs/specs/ 직접 사용 (로컬 모드)
+        if (!string.IsNullOrWhiteSpace(_config.SpecRepository))
         {
-            throw new InvalidOperationException(
-                "specRepository가 설정되지 않았습니다. " +
-                "'.flow/config.json'에 specRepository(git URL)를 설정하세요. " +
-                "예: flow config --spec-repo https://github.com/user/flow-spec.git");
+            _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, specCacheDir, _log);
+            _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
+            _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {specCacheDir}");
+        }
+        else
+        {
+            _specRepo = null;
+            _specStore = new SpecStore(projectRoot);  // docs/specs/ 로컬 모드
+            _log.Info("init", $"로컬 스펙 모드: {_specStore.SpecsDir} (specRepository 미설정)");
         }
 
-        // 스펙 저장소 설정: .flow/spec-cache/ 에서 스펙 로드 (F-080-C3, C4)
-        _specRepo = new SpecRepoService(_config.SpecRepository, _config.SpecBranch, specCacheDir, _log);
-        _specStore = new SpecStore(_specRepo.SpecsDir, externalRepo: true);
-        _log.Info("init", $"스펙 저장소 설정: {_config.SpecRepository} → {specCacheDir}");
-
         // F-025: 손상 스펙 진단 서비스 초기화
-        _diagService = new BrokenSpecDiagService(specCacheDir, _log);
+        // 로컬 모드에서는 .flow/ 에 진단 캐시 저장, 원격 모드에서는 spec-cache/ 에 저장
+        var diagCacheDir = _specRepo != null ? specCacheDir : _flowRoot;
+        _diagService = new BrokenSpecDiagService(diagCacheDir, _log);
         _specStore.SetDiagService(_diagService);
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
@@ -411,9 +414,9 @@ public class RunnerService
                 var allIds = allSpecs.Select(x => x.Id).ToHashSet();
                 return s.Dependencies.Any(dep => allIds.Contains(dep) && !completedIds.Contains(dep));
             });
-            // requiresUserInput=true 스펙은 Fix 1 이후 "needs-review" 상태 → 별도 카운팅
+            // 미해결 질문이 남은 스펙은 "needs-review" 상태로 별도 카운팅
             var needsInput = allSpecs.Count(s =>
-                string.Equals(s.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && IsRequiresUserInput(s));
+                string.Equals(s.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && HasOpenQuestions(s));
             skipReason = $"대기열 스펙 {queuedSpecs.Count}개 중 처리 가능 후보 없음 " +
                          $"(의존성 미충족: {blockedByDeps}개, 사용자 입력 대기(needs-review): {needsInput}개)";
         }
@@ -605,8 +608,8 @@ public class RunnerService
 
         foreach (var spec in candidates)
         {
-            // C3: requiresUserInput=true 스펙은 선행 처리 대상에서 제외
-            if (IsRequiresUserInput(spec))
+            // C3: 미해결 질문이 있는 스펙은 선행 처리 대상에서 제외
+            if (HasOpenQuestions(spec))
             {
                 notReady.Add(spec);
                 continue;
@@ -712,16 +715,47 @@ public class RunnerService
     }
 
     /// <summary>
-    /// F-015-C3: metadata.requiresUserInput이 true인지 확인한다.
+    /// metadata.questions에서 open 상태 질문이 남아 있는지 확인한다.
     /// </summary>
-    private static bool IsRequiresUserInput(SpecNode spec)
+    private static bool HasOpenQuestions(SpecNode spec)
     {
-        if (spec.Metadata == null) return false;
-        if (!spec.Metadata.TryGetValue("requiresUserInput", out var val)) return false;
-        if (val is System.Text.Json.JsonElement je)
-            return je.ValueKind == System.Text.Json.JsonValueKind.True;
-        if (val is bool b) return b;
-        return bool.TryParse(val?.ToString(), out var bp) && bp;
+        return CountOpenQuestions(spec) > 0;
+    }
+
+    private static int CountOpenQuestions(SpecNode spec)
+    {
+        if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
+            return 0;
+
+        if (rawQuestions is System.Text.Json.JsonElement element)
+        {
+            if (element.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return 0;
+
+            return element.EnumerateArray().Count(question =>
+                question.ValueKind == System.Text.Json.JsonValueKind.Object
+                && question.TryGetProperty("status", out var status)
+                && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (rawQuestions is IEnumerable<object> questions)
+        {
+            return questions.Count(question =>
+            {
+                if (question is Dictionary<string, object> dict
+                    && dict.TryGetValue("status", out var statusValue))
+                {
+                    return string.Equals(statusValue?.ToString(), "open", StringComparison.OrdinalIgnoreCase);
+                }
+
+                return question is System.Text.Json.JsonElement questionElement
+                    && questionElement.ValueKind == System.Text.Json.JsonValueKind.Object
+                    && questionElement.TryGetProperty("status", out var status)
+                    && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        return 0;
     }
 
     /// <summary>
@@ -1387,19 +1421,19 @@ public class RunnerService
             return FinalizeResult(result);
         }
 
-        // 검토 완료 후 queued로 재배치된 경우 worktree 정리 (needs-review+requiresUserInput은 보존)
+        // 검토 완료 후 queued로 재배치된 경우 worktree 정리 (needs-review+미해결 질문은 보존)
         if (string.Equals(reviewedSpec!.Status, "queued", StringComparison.OrdinalIgnoreCase))
         {
             await CleanupWorktreeFromMetadataAsync(reviewedSpec);
         }
 
-        var commitMsg = IsRequiresUserInput(reviewedSpec!)
+        var commitMsg = HasOpenQuestions(reviewedSpec!)
             ? $"[runner] Review {candidate.Id}: waiting for user input"
             : $"[runner] Review {candidate.Id} and requeue";
         await CommitSpecRepoAsync(commitMsg, cancellationToken);
 
         result.Success = true;
-        result.TriggeredReschedule = !IsRequiresUserInput(reviewedSpec!);
+        result.TriggeredReschedule = !HasOpenQuestions(reviewedSpec!);
         return FinalizeResult(result);
     }
 
@@ -1407,7 +1441,7 @@ public class RunnerService
         => _specStore.GetAll()
             .Where(spec => string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase)
                 && !IsTaskSpec(spec)
-                && !IsRequiresUserInput(spec)) // 사용자 입력 대기 중인 스펙은 이미 검토 완료 — 재검토 불필요
+                && !HasOpenQuestions(spec)) // 사용자 질문 대기 중인 스펙은 이미 검토 완료 — 재검토 불필요
             .OrderBy(spec => ParseIsoDate(spec.UpdatedAt) ?? DateTime.MaxValue)
             .ThenBy(spec => spec.Id)
             .FirstOrDefault();
@@ -1505,11 +1539,10 @@ public class RunnerService
 
         var reviewedAt = reviewedAtUtc.ToString("o");
         var questions = BuildReviewQuestions(spec, analysis, reviewerId, reviewedAt);
-        var requiresUserInput = analysis.RequiresUserInput || questions.Any(q => string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
+        var hasOpenQuestions = questions.Any(q => string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
 
-        // requiresUserInput=true → "needs-review" 상태 유지 (사용자 입력 대기, 자동 재처리 금지)
-        // requiresUserInput=false → "queued"로 재배치 (자동 재시도 가능)
-        spec.Status = requiresUserInput ? "needs-review" : "queued";
+        // 미해결 질문이 있으면 "needs-review" 상태 유지, 없으면 "queued"로 재배치한다.
+        spec.Status = hasOpenQuestions ? "needs-review" : "queued";
 
         spec.Metadata["review"] = new Dictionary<string, object>
         {
@@ -1520,7 +1553,6 @@ public class RunnerService
             ["failureReasons"] = analysis.FailureReasons,
             ["alternatives"] = analysis.Alternatives,
             ["suggestedAttempts"] = analysis.SuggestedAttempts,
-            ["requiresUserInput"] = requiresUserInput,
             ["additionalInformationRequests"] = analysis.AdditionalInformationRequests
         };
         spec.Metadata["questions"] = questions
@@ -1535,13 +1567,13 @@ public class RunnerService
                 ["requestedBy"] = question.RequestedBy ?? reviewerId
             })
             .ToList();
-        spec.Metadata["reviewDisposition"] = requiresUserInput ? "needs-user-decision" : "retry-queued";
-        spec.Metadata["requiresUserInput"] = requiresUserInput;
-        spec.Metadata["plannerState"] = requiresUserInput ? "waiting-user-input" : "standby";
+        spec.Metadata["reviewDisposition"] = hasOpenQuestions ? "needs-user-decision" : "retry-queued";
+        spec.Metadata["plannerState"] = hasOpenQuestions ? "waiting-user-input" : "standby";
         spec.Metadata["lastReviewAt"] = reviewedAt;
         spec.Metadata["lastReviewBy"] = reviewerId;
+        spec.Metadata.Remove("requiresUserInput");
 
-        if (requiresUserInput)
+        if (hasOpenQuestions)
         {
             spec.Metadata["questionStatus"] = "waiting-user-input";
         }
@@ -1556,9 +1588,9 @@ public class RunnerService
         if (spec == null || spec.Metadata == null)
             return false;
 
-        // "queued" (자동 재시도) 또는 "needs-review" + requiresUserInput=true (사용자 입력 대기) 모두 유효한 반영 결과
+        // "queued" (자동 재시도) 또는 "needs-review" + open 질문 존재(사용자 입력 대기) 모두 유효한 반영 결과
         var hasValidStatus = string.Equals(spec.Status, "queued", StringComparison.OrdinalIgnoreCase)
-            || (string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && IsRequiresUserInput(spec));
+            || (string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && HasOpenQuestions(spec));
 
         if (!hasValidStatus)
             return false;

@@ -75,11 +75,11 @@ public class SpecAppendReviewCommandTests : IDisposable
         Environment.ExitCode.Should().Be(0);
         var updated = store.Get("F-301");
         updated.Should().NotBeNull();
-        // requiresUserInput=true → "needs-review" 유지 (사용자 입력 대기)
+        // open 질문이 남아 있으므로 "needs-review" 유지 (사용자 입력 대기)
         updated!.Status.Should().Be("needs-review");
         updated.Metadata.Should().NotBeNull();
         updated.Metadata!["reviewDisposition"].ToString().Should().Be("needs-user-decision");
-        bool.Parse(updated.Metadata["requiresUserInput"].ToString()!).Should().BeTrue();
+        updated.Metadata.Should().NotContainKey("requiresUserInput");
         updated.Metadata["questionStatus"].ToString().Should().Be("waiting-user-input");
         ReadCapturedOutput().Should().Contain("spec-append-review");
     }

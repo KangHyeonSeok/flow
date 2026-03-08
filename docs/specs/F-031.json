@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 2,
+  "id": "F-031",
+  "nodeType": "feature",
+  "title": "Runner \uC0C1\uD0DC \uC804\uD658 \uD6C4 \uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904",
+  "description": "Runner\uAC00 Copilot CLI \uAC80\uD1A0 \uB610\uB294 \uAD6C\uD604 \uACB0\uACFC\uB85C \uC2A4\uD399\uC744 needs-review, verified, done, queued \uAC19\uC740 \uD6C4\uC18D \uC0C1\uD0DC\uB85C \uC774\uB3D9\uC2DC\uD0A8 \uC9C1\uD6C4 \uC804\uCCB4 polling \uB300\uAE30 \uC2DC\uAC04\uC744 \uB2E4\uC2DC \uC18C\uBAA8\uD558\uC9C0 \uC54A\uACE0 \uAC19\uC740 \uC8FC\uAE30 \uC548\uC5D0\uC11C \uB2E4\uC74C \uCC98\uB9AC \uAC00\uB2A5 \uC2A4\uD399\uC744 \uC989\uC2DC \uC7AC\uD3C9\uAC00\uD558\uB3C4\uB85D \uC815\uC758\uD55C\uB2E4.",
+  "status": "queued",
+  "parent": "F-070",
+  "dependencies": [
+    "F-090"
+  ],
+  "conditions": [
+    {
+      "id": "F-031-C1",
+      "nodeType": "condition",
+      "description": "Given runner\uAC00 working \uC2A4\uD399\uC758 \uAD6C\uD604 \uB610\uB294 Copilot CLI \uAE30\uBC18 \uAC80\uD1A0\uB97C \uB9C8\uCE58\uACE0 status\uB97C needs-review, verified, done, queued \uC911 \uD558\uB098\uB85C \uAC31\uC2E0\uD568, When \uD604\uC7AC \uC0AC\uC774\uD074\uC758 \uD6C4\uC18D \uB2E8\uACC4\uB97C \uD3C9\uAC00, Then runner\uB294 \uAE30\uBCF8 poll interval\uC744 \uAE30\uB2E4\uB9AC\uC9C0 \uC54A\uACE0 \uAC19\uC740 \uC2E4\uD589 \uC8FC\uAE30 \uC548\uC5D0\uC11C \uB2E4\uC74C \uCC98\uB9AC \uD6C4\uBCF4\uB97C \uC989\uC2DC \uB2E4\uC2DC \uC120\uD0DD\uD55C\uB2E4.",
+      "status": "needs-review",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs#L225-L267",
+        "tools/flow-cli/Services/Runner/RunnerModels.cs#L103-L108"
+      ],
+      "evidence": [],
+      "tests": [
+        {
+          "testId": "tools/flow-cli.Tests/RunnerConfigDefaultsTests.cs",
+          "name": "tools/flow-cli.Tests/RunnerConfigDefaultsTests.cs",
+          "status": "",
+          "quarantined": false,
+          "flakyHistory": []
+        }
+      ]
+    },
+    {
+      "id": "F-031-C2",
+      "nodeType": "condition",
+      "description": "Given \uC0C1\uD0DC \uC804\uD658 \uC9C1\uD6C4\uC5D0\uB3C4 queued \uB610\uB294 \uC7AC\uAC80\uD1A0 \uAC00\uB2A5\uD55C \uC2A4\uD399\uC774 \uB0A8\uC544 \uC788\uC74C, When runner\uAC00 \uB2E4\uC74C \uC791\uC5C5\uC744 \uACE0\uB984, Then \uB9C8\uC9C0\uB9C9 \uC804\uD658 \uACB0\uACFC\uC640 \uAC31\uC2E0\uB41C \uC2A4\uD399 \uADF8\uB798\uD504\uB97C \uBC18\uC601\uD55C \uCD5C\uC2E0 \uD050 \uD3C9\uAC00\uB97C \uB2E4\uC2DC \uC218\uD589\uD558\uACE0 stale \uCE90\uC2DC\uB098 \uC774\uC804 \uC120\uD0DD \uACB0\uACFC\uB97C \uADF8\uB300\uB85C \uC7AC\uC0AC\uC6A9\uD558\uC9C0 \uC54A\uB294\uB2E4.",
+      "status": "needs-review",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs#L299-L327"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-031-C3",
+      "nodeType": "condition",
+      "description": "Given \uC0C1\uD0DC \uC804\uD658 \uACB0\uACFC\uAC00 needs-review \uB610\uB294 verified/done \uC774\uC5B4\uC11C \uC790\uB3D9 \uAD6C\uD604 \uB300\uC0C1\uC774 \uB354 \uC774\uC0C1 \uC544\uB2D8, When runner\uAC00 \uD6C4\uC18D \uB3D9\uC791\uC744 \uACB0\uC815, Then review handoff\uC5D0 \uD544\uC694\uD55C \uB85C\uADF8\uC640 metadata\uB294 \uBCF4\uC874\uD558\uB418 \uB2E4\uC74C \uD6C4\uBCF4 \uD0D0\uC0C9 \uC790\uCCB4\uB294 idle sleep\uBCF4\uB2E4 \uC6B0\uC120\uD55C\uB2E4.",
+      "status": "needs-review",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs#L303-L305"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-031-C4",
+      "nodeType": "condition",
+      "description": "Given \uC0C1\uD0DC \uC804\uD658 \uC9C1\uD6C4 \uC989\uC2DC \uCC98\uB9AC \uAC00\uB2A5\uD55C \uD6C4\uC18D \uC2A4\uD399\uC774 \uD558\uB098\uB3C4 \uC5C6\uC74C, When runner\uAC00 \uD050\uC640 \uBCF5\uAD6C \uD6C4\uBCF4\uB97C \uC7AC\uD3C9\uAC00\uD568, Then \uADF8\uB54C\uC5D0\uB9CC \uAE30\uC874 idle \uB610\uB294 poll \uB300\uAE30 \uC815\uCC45\uC73C\uB85C \uB4E4\uC5B4\uAC00\uBA70 \uC65C \uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904\uB418\uC9C0 \uC54A\uC558\uB294\uC9C0 \uC0AC\uC720\uB97C runner \uB85C\uADF8\uC640 selection metadata\uC5D0 \uB0A8\uAE34\uB2E4.",
+      "status": "needs-review",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs#L329-L391"
+      ],
+      "evidence": [],
+      "tests": []
+    },
+    {
+      "id": "F-031-C5",
+      "nodeType": "condition",
+      "description": "Given \uAC19\uC740 \uC8FC\uAE30 \uC548\uC5D0\uC11C \uC5EC\uB7EC \uBC88 \uC0C1\uD0DC \uC804\uD658\uC774 \uC5F0\uC18D \uBC1C\uC0DD\uD568, When runner\uAC00 \uC7AC\uC2A4\uCF00\uC904\uC744 \uBC18\uBCF5, Then \uC911\uBCF5 \uB8E8\uD504\uB098 busy wait\uB97C \uD53C\uD558\uAE30 \uC704\uD574 cycle \uC0C1\uD55C \uB610\uB294 debounce \uC815\uCC45\uC744 \uC801\uC6A9\uD558\uBA74\uC11C\uB3C4 \uC0C1\uD0DC \uC804\uD658 1\uD68C\uB9C8\uB2E4 \uCD5C\uC18C 1\uD68C\uC758 \uD6C4\uC18D \uD6C4\uBCF4 \uC7AC\uD3C9\uAC00 \uAE30\uD68C\uB97C \uBCF4\uC7A5\uD55C\uB2E4.",
+      "status": "needs-review",
+      "codeRefs": [
+        "tools/flow-cli/Services/Runner/RunnerService.cs#L231-L236",
+        "tools/flow-cli/Services/Runner/RunnerModels.cs#L73-L74"
+      ],
+      "evidence": [],
+      "tests": [
+        {
+          "testId": "tools/flow-cli.Tests/RunnerConfigDefaultsTests.cs",
+          "name": "tools/flow-cli.Tests/RunnerConfigDefaultsTests.cs",
+          "status": "",
+          "quarantined": false,
+          "flakyHistory": []
+        }
+      ]
+    }
+  ],
+  "codeRefs": [
+    "tools/flow-cli/Services/Runner/RunnerService.cs#L195-L391",
+    "tools/flow-cli/Services/Runner/RunnerModels.cs#L73-L108"
+  ],
+  "evidence": [],
+  "tags": [
+    "runner",
+    "scheduling",
+    "status",
+    "latency"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [],
+  "metadata": {
+    "selectionReason": {
+      "selectedAt": "2026-03-07T16:56:30.1037680Z",
+      "issuePriorityScore": 0,
+      "isFallback": true,
+      "rank": 1,
+      "totalCandidates": 18
+    },
+    "runnerInstanceId": "runner-82653-165628",
+    "runnerStartedAt": "2026-03-07T16:56:30.1403310Z",
+    "implementationPlan": {
+      "triggeredFrom": "queued",
+      "approach": "AI Runner\uAC00 \u0027F-031: Runner \uC0C1\uD0DC \uC804\uD658 \uD6C4 \uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904\u0027 \uAD6C\uD604\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.",
+      "startedAt": "2026-03-07T16:56:30.1403360Z"
+    },
+    "lastCompletedAt": "2026-03-07T17:12:16.7220000Z",
+    "lastCompletedBy": "copilot-cli",
+    "review": {
+      "source": "copilot-cli-review",
+      "reviewedAt": "2026-03-08T04:41:49.6508261Z",
+      "reviewedBy": "runner-40844-044047",
+      "summary": "Runner \uC0C1\uD0DC \uC804\uD658 \uC9C1\uD6C4 \uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904\uC744 \uBCF4\uC7A5\uD574\uC57C \uD558\uBA70, \uD604\uC7AC \uC124\uACC4\uC5D0\uC11C \uCE90\uC2DC \uBB34\uD6A8\uD654\uC640 debounce \uC815\uCC45\uC774 \uBD88\uBA85\uD655\uD569\uB2C8\uB2E4.",
+      "failureReasons": [
+        "\uC0C1\uD0DC \uC804\uD658 \uC9C1\uD6C4\uC5D0\uB3C4 stale \uCE90\uC2DC\uAC00 \uC7AC\uC0AC\uC6A9\uB420 \uC704\uD5D8",
+        "debounce/\uC0C1\uD55C \uC815\uCC45 \uBBF8\uC815\uC758\uB85C \uC911\uBCF5 \uB8E8\uD504 \uB610\uB294 busy wait \uC704\uD5D8",
+        "\uAD00\uB828 \uB2E8\uC704/\uD1B5\uD569 \uD14C\uC2A4\uD2B8\uC640 \uB85C\uADF8 \uBCF4\uC874 \uC694\uAD6C\uC0AC\uD56D\uC774 \uBD88\uCDA9\uBD84\uD568"
+      ],
+      "alternatives": [
+        "\uC120\uD0DD\uC801 \uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904 \uD50C\uB798\uADF8\uB97C \uB3C4\uC785\uD574 \uC548\uC804\uBAA8\uB4DC \uC81C\uACF5",
+        "\uC7AC\uC2A4\uCF00\uC904 \uD2B8\uB9AC\uAC70\uB97C \uC774\uBCA4\uD2B8 \uAE30\uBC18\uC73C\uB85C \uBCC0\uACBD\uD574 \uC989\uC2DC \uBC18\uC751\uC131 \uD5A5\uC0C1",
+        "debounce \uC815\uCC45\uACFC \uCD5C\uB300 \uC7AC\uC2DC\uB3C4 \uD68C\uC218 \uBA85\uC138\uB97C \uCD94\uAC00"
+      ],
+      "suggestedAttempts": [
+        "\uC7AC\uC2A4\uCF00\uC904 \uC2DC \uCD5C\uC2E0 \uC2A4\uD399 \uADF8\uB798\uD504 \uAC15\uC81C \uB9AC\uD504\uB808\uC2DC \uBC0F \uCE90\uC2DC \uBB34\uD6A8\uD654 \uCD94\uAC00",
+        "cycle \uC0C1\uD55C\uACFC debounce \uC708\uB3C4\uC6B0\uB97C \uBA85\uC138\uD654\uD558\uACE0 \uAE30\uBCF8\uAC12\uC744 \uBB38\uC11C\uD654",
+        "\uAD00\uB828 \uB2E8\uC704/\uD1B5\uD569 \uD14C\uC2A4\uD2B8 \uCF00\uC774\uC2A4\uC640 \uB85C\uADF8 \uD544\uB4DC \uAC80\uC99D \uCD94\uAC00"
+      ],
+      "additionalInformationRequests": []
+    },
+    "questions": [
+      {
+        "id": "F-031-Q1",
+        "type": "user-decision",
+        "question": "\uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904 \uB3D9\uC791\uC758 \uAE30\uBCF8 \uC815\uCC45\uC744 \uAE30\uBCF8 \uD65C\uC131\uD654\uB85C \uD560\uC9C0, \uC544\uB2C8\uBA74 \uC548\uC804 \uBAA8\uB4DC(\uBA85\uC2DC\uC801 \uD50C\uB798\uADF8 \uD544\uC694)\uB85C \uD560\uC9C0 \uC120\uD0DD\uD574 \uC8FC\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?",
+        "why": "\uAE30\uBCF8 \uB3D9\uC791\uC740 \uB7F0\uB108\uC758 \uCC98\uB9AC\uB7C9\uACFC \uC548\uC815\uC131\uC5D0 \uD070 \uC601\uD5A5\uC744 \uC8FC\uBBC0\uB85C \uC81C\uD488 \uC18C\uC720\uC790\uC758 \uACB0\uC815\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:41:49.6508261Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "기본 정책은 기본 활성화로 두되, 같은 사이클 내 과도한 반복만 제한하는 guardrail을 둡니다. 이 프로젝트는 후속 후보를 바로 재평가하는 편이 poll 지연보다 이득이 크므로 opt-in보다 기본 활성화가 맞습니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-031-Q2",
+        "type": "missing-info",
+        "question": "\uD5C8\uC6A9 \uAC00\uB2A5\uD55C debounce \uC2DC\uAC04 \uBC94\uC704(\uCD5C\uC18C/\uCD5C\uB300) \uBC0F \uCD5C\uB300 \uBC18\uBCF5 \uC7AC\uC2A4\uCF00\uC904 \uD69F\uC218",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:41:49.6508261Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "첫 재평가는 즉시 수행하고, 같은 사이클에서 연속 재스케줄이 이어질 때만 100ms 기본 debounce를 적용하되 250ms를 상한으로 둡니다. 한 사이클당 최대 재스케줄 횟수는 3회로 제한합니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      },
+      {
+        "id": "F-031-Q3",
+        "type": "missing-info",
+        "question": "\uC989\uC2DC \uC7AC\uC2A4\uCF00\uC904 \uC2DC \uB85C\uADF8\uC5D0 \uD3EC\uD568\uB418\uC5B4\uC57C \uD560 \uAD6C\uCCB4 \uD544\uB4DC \uBAA9\uB85D",
+        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "status": "answered",
+        "requestedAt": "2026-03-08T04:41:49.6508261Z",
+        "requestedBy": "runner-40844-044047",
+        "answer": "로그에는 cycleId, triggerSpecId, previousStatus, nextStatus, triggerSource, immediateAttemptIndex, debounceMs, candidateCount, selectedSpecId, graphReloaded 여부를 남깁니다.",
+        "answeredAt": "2026-03-08T10:25:00.000Z"
+      }
+    ],
+    "reviewDisposition": "retry-queued",
+    "plannerState": "standby",
+    "lastReviewAt": "2026-03-08T04:41:49.6508261Z",
+    "lastReviewBy": "runner-40844-044047",
+    "lastAnsweredAt": "2026-03-08T10:25:00.000Z"
+  },
+  "createdAt": "2026-03-07T13:48:31.1170606Z",
+  "updatedAt": "2026-03-08T10:25:00.000Z"
+}

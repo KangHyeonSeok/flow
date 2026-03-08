@@ -44,6 +44,7 @@ export class KanbanPanel {
         );
 
         this.loader.onDidChange(() => this.update());
+        this.loader.onDidStateChange(() => this.update());
     }
 
     /** 싱글톤 패널 생성 또는 포커스 */
@@ -994,13 +995,13 @@ function filterCards(query) {
     </div>`
             : '';
 
-        // C1: 사용자 판단 필요 배지 (requiresUserInput 또는 questionStatus='waiting-user-input')
-        const userInputBadge = feedback.requiresUserInput
-            ? `<div class="user-input-badge">❓ 사용자 판단 필요${feedback.openQuestionCount > 0 ? ` (${feedback.openQuestionCount}건)` : ''}</div>`
+        // C1: 실제 미해결 질문 수를 기준으로 사용자 판단 필요 배지 표시
+        const userInputBadge = feedback.openQuestionCount > 0
+          ? `<div class="user-input-badge">❓ 사용자 판단 필요 (${feedback.openQuestionCount}건)</div>`
             : '';
 
-        // C6: 미해결 질문 수 표시 (requiresUserInput 아니더라도 open 질문 있으면 표시)
-        const openQuestionInfo = !feedback.requiresUserInput && feedback.openQuestionCount > 0
+        // C6: 미해결 질문 수 표시
+        const openQuestionInfo = feedback.openQuestionCount > 0
             ? `<div class="question-count">❓ 미해결 질문 ${feedback.openQuestionCount}건</div>`
             : '';
 
@@ -1030,8 +1031,8 @@ function filterCards(query) {
 
         // C5: 날짜를 카드 헤더(ID 옆 같은 줄)에 배치, 하단 중복 날짜 제거
         // user-input-required 클래스로 카드 테두리 색 차별화
-        const userInputClass = feedback.requiresUserInput ? ' user-input-required' : '';
-        const borderColor = feedback.requiresUserInput ? '#e91e63' : color;
+        const userInputClass = feedback.openQuestionCount > 0 ? ' user-input-required' : '';
+        const borderColor = feedback.openQuestionCount > 0 ? '#e91e63' : color;
 
         return /* html */`
 <div class="card${userInputClass}"

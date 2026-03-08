@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "id": "F-098",
+  "nodeType": "feature",
+  "title": "스펙 작성 마찰 완화 및 생성 안전장치",
+  "description": "스펙 작성 마찰 완화 및 생성 안전장치",
+  "status": "draft",
+  "parent": "F-010",
+  "dependencies": [],
+  "conditions": [],
+  "codeRefs": [],
+  "evidence": [],
+  "tags": [
+    "spec",
+    "planner",
+    "authoring",
+    "validation",
+    "ux"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:47:42.0228832Z",
+      "author": "planner",
+      "summary": "스펙 'F-098' 생성",
+      "relatedIds": []
+    }
+  ],
+  "createdAt": "2026-03-08T01:47:42.0228832Z",
+  "updatedAt": "2026-03-08T01:47:42.0228832Z"
+}

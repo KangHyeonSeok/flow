@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 2,
+  "id": "F-097",
+  "nodeType": "task",
+  "title": "미연결 테스트 기반 Hidden Spec 경고",
+  "description": "spec condition과 연결되지 않은 신규 테스트를 hidden spec 후보로 올리는 일회성 구현 작업. 테스트 추가 자체를 문제로 보지 않고, spec annotation 또는 조건 매핑이 누락된 상태에서 완료되려는 변경만 경고로 올려 리뷰 비용을 줄인다. 이 작업은 F-014의 테스트 동기화 기능을 활용해 hidden spec 운영 규칙을 구현하는 task다.",
+  "status": "queued",
+  "parent": "F-095",
+  "dependencies": [
+    "F-095",
+    "F-014"
+  ],
+  "conditions": [],
+  "codeRefs": [
+    "docs/hidden-spec-policy.md"
+  ],
+  "evidence": [],
+  "tags": [
+    "hidden-spec",
+    "test",
+    "ci",
+    "warning",
+    "task"
+  ],
+  "supersedes": [],
+  "supersededBy": [],
+  "mutates": [],
+  "mutatedBy": [],
+  "changeLog": [
+    {
+      "type": "create",
+      "at": "2026-03-08T01:45:11.1874844Z",
+      "author": "planner",
+      "summary": "스펙 'F-097' 생성",
+      "relatedIds": []
+    },
+    {
+      "type": "mutate",
+      "at": "2026-03-08T01:46:00Z",
+      "author": "planner",
+      "summary": "spec 미연결 테스트를 hidden spec 경고 후보로 올리는 task로 구조화하고 queued 상태로 준비",
+      "relatedIds": [
+        "F-095",
+        "F-014"
+      ]
+    }
+  ],
+  "createdAt": "2026-03-08T01:45:11.1874844Z",
+  "updatedAt": "2026-03-08T01:46:00Z"
+}

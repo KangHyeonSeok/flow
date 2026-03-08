@@ -94,19 +94,6 @@ public class PlannerAutoQueueServiceTests : IDisposable
     // ── C2: 금지 조건 ──────────────────────────────────────────────────────
 
     [Fact]
-    public void EvaluateEligibility_RequiresUserInputTrue_IsNotEligible()
-    {
-        var spec = CreateFeatureSpec("F-001");
-        spec.Metadata = new Dictionary<string, object> { ["requiresUserInput"] = true };
-
-        var result = _svc.EvaluateEligibility(spec);
-
-        result.IsEligible.Should().BeFalse();
-        result.PlannerState.Should().Be("waiting-user-input");
-        result.BlockReason.Should().Contain("requiresUserInput");
-    }
-
-    [Fact]
     public void EvaluateEligibility_PlannerStateWaiting_IsNotEligible()
     {
         var spec = CreateFeatureSpec("F-001");
@@ -210,7 +197,7 @@ public class PlannerAutoQueueServiceTests : IDisposable
 
         reverted.Status.Should().Be("draft");
         reverted.Metadata!["plannerState"].Should().Be("waiting-user-input");
-        reverted.Metadata["requiresUserInput"].Should().Be(true);
+        reverted.Metadata.Should().NotContainKey("requiresUserInput");
 
         // 이력 보존 확인
         var promoDict = reverted.Metadata["promotion"] as Dictionary<string, object>;

@@ -192,7 +192,7 @@ public partial class FlowApp
     }
 
     // ─── flow spec append-review ─────────────────────────────────────
-    [Command("spec-append-review", Description = "리뷰 JSON을 metadata.review에 반영합니다. requiresUserInput=false이면 queued로 재배치, true이면 needs-review 상태로 사용자 입력 대기합니다")]
+    [Command("spec-append-review", Description = "리뷰 JSON을 metadata.review에 반영합니다. 미해결 질문이 있으면 needs-review 상태로 사용자 입력을 대기하고, 없으면 queued로 재배치합니다")]
     public void SpecAppendReview(
         [Argument(Description = "스펙 ID")] string id,
         [Option("input-file", Description = "리뷰 JSON 파일 경로")] string inputFile = "",
@@ -254,8 +254,7 @@ public partial class FlowApp
                     id = updated.Id,
                     status = updated.Status,
                     reviewDisposition = GetMetadataString(updated, "reviewDisposition"),
-                    requiresUserInput = GetMetadataBool(updated, "requiresUserInput"),
-                    questionCount = CountStoredQuestions(updated),
+                    openQuestionCount = CountOpenQuestions(updated),
                     inputFile
                 },
                 $"스펙 '{updated.Id}'에 review 메타데이터를 반영했습니다."), pretty);
@@ -393,7 +392,7 @@ public partial class FlowApp
         return rawValue.ToString();
     }
 
-    private static int CountStoredQuestions(SpecNode spec)
+    private static int CountOpenQuestions(SpecNode spec)
     {
         if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
         {
@@ -402,12 +401,25 @@ public partial class FlowApp
 
         if (rawQuestions is JsonElement element && element.ValueKind == JsonValueKind.Array)
         {
-            return element.GetArrayLength();
+            return element.EnumerateArray().Count(question =>
+                question.ValueKind == JsonValueKind.Object
+                && question.TryGetProperty("status", out var status)
+                && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase));
         }
 
         if (rawQuestions is IEnumerable<object> questions)
         {
-            return questions.Count();
+            return questions.Count(question =>
+            {
+                if (question is JsonElement element)
+                {
+                    return element.ValueKind == JsonValueKind.Object
+                        && element.TryGetProperty("status", out var status)
+                        && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase);
+                }
+
+                return question?.ToString()?.Contains("open", StringComparison.OrdinalIgnoreCase) == true;
+            });
         }
 
         return 0;

@@ -183,7 +183,7 @@ public class SpecStore
             }
 
             // runner가 명시적으로 설정하지 않은 경우에만 디스크 값 보존
-            var onlyIfMissing = new[] { "requiresUserInput", "questionStatus", "reviewDisposition", "plannerState" };
+            var onlyIfMissing = new[] { "questionStatus", "reviewDisposition", "plannerState" };
             foreach (var key in onlyIfMissing)
             {
                 if (!spec.Metadata.ContainsKey(key) && diskMeta.TryGetProperty(key, out var diskVal))
