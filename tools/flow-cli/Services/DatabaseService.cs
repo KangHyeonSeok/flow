@@ -40,22 +40,22 @@ public class DatabaseService : IDisposable
     }
 
     /// <summary>
-    /// Loads the sqlite-vec extension (vec0.dll) if available.
+    /// Loads the sqlite-vec extension (vec0) if available.
     /// Falls back gracefully if not installed — vector search will be unavailable.
+    /// Supports .dll (Windows), .so (Linux), .dylib (macOS), and bare name.
     /// </summary>
     private void LoadSqliteVecExtension()
     {
         try
         {
-            var vecPath = _paths.EmbedExePath.Replace("embed.exe", "vec0");
-            // Also check the rag/bin directory directly
             var ragBinDir = Path.GetDirectoryName(_paths.EmbedExePath);
-            var vec0Path = ragBinDir != null ? Path.Combine(ragBinDir, "vec0") : vecPath;
+            var vec0Base = ragBinDir != null ? Path.Combine(ragBinDir, "vec0") : _paths.EmbedExePath.Replace("embed.exe", "vec0");
 
-            if (File.Exists(vec0Path + ".dll") || File.Exists(vec0Path + ".so") || File.Exists(vec0Path))
+            if (File.Exists(vec0Base + ".dll") || File.Exists(vec0Base + ".so") ||
+                File.Exists(vec0Base + ".dylib") || File.Exists(vec0Base))
             {
                 _connection!.EnableExtensions(true);
-                _connection.LoadExtension(vec0Path);
+                _connection.LoadExtension(vec0Base);
             }
         }
         catch

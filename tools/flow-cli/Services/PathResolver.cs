@@ -31,7 +31,8 @@ public class PathResolver
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
         ConfigPath = Path.Combine(FlowRoot, "config.json");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
-        EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
+        var embedBin = OperatingSystem.IsWindows() ? "embed.exe" : "embed";
+        EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", embedBin);
         BrokenSpecDiagPath = Path.Combine(FlowRoot, "broken-spec-diag.json");
     }
 
@@ -46,7 +47,8 @@ public class PathResolver
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
         ConfigPath = Path.Combine(FlowRoot, "config.json");
         RagDbPath = Path.Combine(FlowRoot, "rag", "db", "local.db");
-        EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", "embed.exe");
+        var embedBinTest = OperatingSystem.IsWindows() ? "embed.exe" : "embed";
+        EmbedExePath = Path.Combine(FlowRoot, "rag", "bin", embedBinTest);
         BrokenSpecDiagPath = Path.Combine(FlowRoot, "broken-spec-diag.json");
     }
 

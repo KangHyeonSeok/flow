@@ -39,7 +39,8 @@ public class InferenceService : IDisposable
     {
         var options = new SessionOptions();
 
-        // GPU 시도 (DirectML)
+#if USE_DIRECTML
+        // GPU 시도 (DirectML, Windows-only)
         try
         {
             options.AppendExecutionProvider_DML(0);  // Device 0
@@ -51,6 +52,9 @@ public class InferenceService : IDisposable
             Console.Error.WriteLine($"[WARNING] DirectML not available: {ex.Message}");
             Console.Error.WriteLine("[INFO] Falling back to CPU");
         }
+#else
+        Console.Error.WriteLine("[INFO] Using CPU inference (DirectML not available on this platform)");
+#endif
 
         // CPU 폴백
         return options;

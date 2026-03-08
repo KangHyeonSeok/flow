@@ -24,7 +24,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     
-    [ValidateSet("win-x64", "linux-x64", "osx-x64")]
+    [ValidateSet("win-x64", "linux-x64", "osx-x64", "osx-arm64")]
     [string[]]$RuntimeIdentifiers = @("win-x64")
 )
 

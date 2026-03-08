@@ -42,7 +42,7 @@ PY
 
 validate_runtime() {
     case "$1" in
-        win-x64|linux-x64|osx-x64)
+        win-x64|linux-x64|osx-x64|osx-arm64)
             ;;
         *)
             echo "[ERROR] Unsupported runtime: $1" >&2
@@ -101,7 +101,17 @@ if [[ ! -f "$PROJECT_PATH" ]]; then
 fi
 
 if [[ ${#RUNTIMES[@]} -eq 0 ]]; then
-    RUNTIMES=("win-x64")
+    # Auto-detect default runtime based on current OS/arch
+    case "$(uname -s)" in
+        Darwin)
+            case "$(uname -m)" in
+                arm64) RUNTIMES=("osx-arm64") ;;
+                *)     RUNTIMES=("osx-x64") ;;
+            esac
+            ;;
+        Linux) RUNTIMES=("linux-x64") ;;
+        *)     RUNTIMES=("win-x64") ;;
+    esac
 fi
 
 echo "======================================="
@@ -111,7 +121,7 @@ echo
 echo "Configuration: $CONFIGURATION"
 echo "Targets: ${RUNTIMES[*]}"
 echo
-echo "[INFO] tools/embed targets net8.0-windows and DirectML. Non-Windows builds may fail depending on the local toolchain."
+echo "[INFO] tools/embed supports win-x64 (DirectML), osx-x64, osx-arm64 (CPU), linux-x64 (CPU)."
 
 SUCCESS_COUNT=0
 TOTAL_COUNT=${#RUNTIMES[@]}
