@@ -27,6 +27,9 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
 
 # 삭제
 ./flow.ps1 spec-delete F-040
+
+# review JSON 반영
+./flow.ps1 spec-append-review F-040 --input-file ./.flow/review/F-040-review.json --reviewer runner-01
 ```
 
 ## 검증

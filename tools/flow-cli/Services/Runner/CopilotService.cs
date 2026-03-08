@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using FlowCLI.Services.SpecGraph;
 
 namespace FlowCLI.Services.Runner;
 
@@ -9,6 +10,8 @@ namespace FlowCLI.Services.Runner;
 /// </summary>
 public class CopilotService
 {
+    private const string ReviewModel = "gpt-5-mini";
+
     private readonly RunnerConfig _config;
     private readonly RunnerLogService _log;
 
@@ -54,16 +57,35 @@ public class CopilotService
         return await RunCopilotAsync(repairPrompt, workDir, specId, "repair-spec");
     }
 
-    private async Task<CopilotResult> RunCopilotAsync(string prompt, string workDir, string specId, string action)
+    /// <summary>
+    /// Copilot CLI를 호출하여 검토 대기 스펙을 분석한다.
+    /// review JSON 파일을 만들고 flow spec-append-review 명령으로 반영하도록 요청한다.
+    /// </summary>
+    public async Task<CopilotResult> ReviewSpecAsync(SpecNode spec, string specJson, string reviewContext, string workDir, string reviewerId)
     {
-        _log.Info($"copilot-{action}", $"Copilot 호출 시작 (model: {_config.CopilotModel})", specId);
+        var prompt = BuildReviewPrompt(spec.Id, specJson, reviewContext, reviewerId);
+        var reviewModel = ResolveReviewModel(spec, _config);
+        return await RunCopilotAsync(prompt, workDir, spec.Id, "review", allowWrites: true, modelOverride: reviewModel);
+    }
+
+    internal static string ResolveReviewModel(SpecNode spec, RunnerConfig config)
+    {
+        return ReviewModel;
+    }
+
+    private async Task<CopilotResult> RunCopilotAsync(string prompt, string workDir, string specId, string action, bool allowWrites = true, string? modelOverride = null)
+    {
+        var model = string.IsNullOrWhiteSpace(modelOverride) ? _config.CopilotModel : modelOverride;
+        _log.Info($"copilot-{action}", $"Copilot 호출 시작 (model: {model})", specId);
 
         try
         {
             var escapedPrompt = prompt.Replace("\"", "\\\"");
-            // --yolo: 모든 권한 허용 (비대화형 모드에서 권한 확인 없이 파일 편집/도구 실행)
-            // --autopilot: 멀티턴 자동 계속 실행
-            var copilotArgs = $"-p \"{escapedPrompt}\" --model {_config.CopilotModel} --yolo --autopilot";
+            var copilotArgs = $"-p \"{escapedPrompt}\" --model {model}";
+            if (allowWrites)
+            {
+                copilotArgs += " --yolo --autopilot";
+            }
 
             string fileName;
             string arguments;
@@ -223,6 +245,53 @@ public class CopilotService
 
             오류를 분석하고 수정한 후 빌드가 통과하는지 확인하세요.
             """;
+    }
+
+    private static string BuildReviewPrompt(string specId, string specJson, string reviewContext, string reviewerId)
+    {
+        var reviewFile = $".flow/review/{specId}-review.json";
+        return $@"다음 스펙은 현재 needs-review 상태입니다. 코드 파일을 수정하지 말고, 검토 결과를 flow CLI로 저장하세요.
+
+반드시 아래 절차를 그대로 수행하세요.
+1. `.flow/review` 디렉토리가 없으면 생성합니다.
+2. 아래 스키마와 정확히 일치하는 JSON 객체 하나만 `{reviewFile}` 파일에 저장합니다.
+3. 다음 명령으로 review를 반영합니다.
+   ./flow.ps1 spec-append-review {specId} --input-file ""{reviewFile}"" --reviewer ""{reviewerId}""
+4. 명령이 JSON 형식 또는 스키마 오류로 실패하면, 오류 메시지를 보고 `{reviewFile}`을 수정한 뒤 같은 명령을 다시 실행합니다.
+5. `spec-append-review` 명령이 exit 0으로 성공할 때까지 반복합니다.
+6. 스펙 JSON 파일을 직접 수정하지 않습니다.
+7. 최종 응답은 짧은 완료 메시지 한 줄만 출력합니다.
+
+검토 목적:
+- 왜 실패했는지 또는 왜 재작업이 필요한지 요약
+- 어떤 대안이 있는지 제안
+- 다음 시도에서 무엇을 해야 하는지 제안
+- 사용자 판단이 필요한지 식별
+- 추가 정보 요청이 필요한지 식별
+
+review JSON 스키마:
+{{
+    ""summary"": ""한두 문장 요약"",
+    ""failureReasons"": [""실패/보류 원인""],
+    ""alternatives"": [""가능한 대안""],
+    ""suggestedAttempts"": [""다음 시도 액션""],
+    ""requiresUserInput"": true,
+    ""additionalInformationRequests"": [""추가로 필요한 정보""],
+    ""questions"": [
+        {{
+            ""type"": ""user-decision|missing-info|clarification"",
+            ""question"": ""사용자에게 물을 질문"",
+            ""why"": ""왜 필요한지""
+        }}
+    ]
+}}
+
+스펙 ID: {specId}
+검토 컨텍스트:
+{reviewContext}
+
+스펙 내용:
+{specJson}";
     }
 
     /// <summary>

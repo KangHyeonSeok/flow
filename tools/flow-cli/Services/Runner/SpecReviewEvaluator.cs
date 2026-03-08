@@ -15,6 +15,8 @@ internal sealed class SpecReviewEvaluation
 {
     public int TotalConditions { get; init; }
     public int VerifiedConditions { get; init; }
+    public int TotalCodeRefs { get; init; }
+    public int DescriptionLength { get; init; }
     public IReadOnlyList<ManualVerificationItem> ManualVerificationItems { get; init; } = Array.Empty<ManualVerificationItem>();
 
     public bool HasConditions => TotalConditions > 0;
@@ -47,9 +49,14 @@ internal static class SpecReviewEvaluator
         {
             TotalConditions = spec.Conditions.Count,
             VerifiedConditions = spec.Conditions.Count(c => string.Equals(c.Status, "verified", StringComparison.OrdinalIgnoreCase)),
+            TotalCodeRefs = CountCodeRefs(spec),
+            DescriptionLength = spec.Description?.Length ?? 0,
             ManualVerificationItems = items
         };
     }
+
+    private static int CountCodeRefs(SpecNode spec)
+        => (spec.CodeRefs?.Count ?? 0) + spec.Conditions.Sum(condition => condition.CodeRefs?.Count ?? 0);
 
     private static void AppendManualVerificationItems(
         Dictionary<string, object>? metadata,

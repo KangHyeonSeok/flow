@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,6 +23,7 @@ public class RunnerService
     private readonly RunnerLogService _log;
     private readonly GitHubIssueService? _githubIssue;
     private readonly BrokenSpecDiagService _diagService;
+    private readonly SemaphoreSlim _specRepoGate = new(1, 1);
     private readonly string _instanceId;
     private readonly string _pidFilePath;
     private DateTime _lastIssuePollAt = DateTime.MinValue;
@@ -101,7 +103,7 @@ public class RunnerService
 
         // 1. 스펙 저장소 동기화 (F-080-C3: git clone/pull로 최신 스펙을 로컬 캐시로 가져옴)
         _log.Info("sync", "스펙 저장소 동기화 시작");
-        var synced = await _specRepo!.SyncAsync();
+        var synced = await SyncSpecRepoAsync();
         if (!synced)
         {
             _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
@@ -182,7 +184,7 @@ public class RunnerService
                 // 이슈 처리로 스펙이 변경되었으면 push
                 if (issueResults.Any(r => r.Success && r.Action is "linked" or "created") && _specRepo != null)
                 {
-                    await _specRepo.CommitAndPushAsync("[runner] Update specs from GitHub issues");
+                    await CommitSpecRepoAsync("[runner] Update specs from GitHub issues");
                 }
             }
         }
@@ -200,9 +202,15 @@ public class RunnerService
     public async Task RunDaemonAsync(CancellationToken cancellationToken = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task? reviewLoopTask = null;
 
         WritePidFile();
-        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 주기: {_config.PollIntervalMinutes}분, 유휴 재확인: 30초, 최대 즉시 재스케줄: {_config.MaxReschedulesPerPoll}회)");
+        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 구현 주기: {_config.PollIntervalMinutes}분, 검토 주기: {_config.ReviewPollIntervalSeconds}초, 유휴 재확인: 30초, 최대 즉시 재스케줄: {_config.MaxReschedulesPerPoll}회)");
+
+        if (_config.ReviewPollIntervalSeconds > 0)
+        {
+            reviewLoopTask = RunReviewDaemonAsync(_cts.Token);
+        }
 
         try
         {
@@ -286,9 +294,57 @@ public class RunnerService
         }
         finally
         {
+            if (_cts is { IsCancellationRequested: false })
+            {
+                _cts.Cancel();
+            }
+
+            if (reviewLoopTask != null)
+            {
+                try
+                {
+                    await reviewLoopTask;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+
             RemovePidFile();
             _log.Info("daemon", "데몬 종료");
         }
+    }
+
+    private async Task RunReviewDaemonAsync(CancellationToken cancellationToken)
+    {
+        _log.Info("review-loop", $"검토 루프 시작 (주기: {_config.ReviewPollIntervalSeconds}초, 단건 처리)");
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await ReviewNextSpecAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _log.Error("review-loop", $"검토 루프 오류: {ex.Message}");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(_config.ReviewPollIntervalSeconds), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        _log.Info("review-loop", "검토 루프 종료");
     }
 
     /// <summary>
@@ -351,9 +407,11 @@ public class RunnerService
                 var allIds = allSpecs.Select(x => x.Id).ToHashSet();
                 return s.Dependencies.Any(dep => allIds.Contains(dep) && !completedIds.Contains(dep));
             });
-            var needsInput = queuedSpecs.Count(IsRequiresUserInput);
+            // requiresUserInput=true 스펙은 Fix 1 이후 "needs-review" 상태 → 별도 카운팅
+            var needsInput = allSpecs.Count(s =>
+                string.Equals(s.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && IsRequiresUserInput(s));
             skipReason = $"대기열 스펙 {queuedSpecs.Count}개 중 처리 가능 후보 없음 " +
-                         $"(의존성 미충족: {blockedByDeps}개, 사용자 입력 필요: {needsInput}개)";
+                         $"(의존성 미충족: {blockedByDeps}개, 사용자 입력 대기(needs-review): {needsInput}개)";
         }
 
         _log.Info("reschedule", $"즉시 재스케줄 후보 없음 — {skipReason} (F-031-C4)");
@@ -498,7 +556,7 @@ public class RunnerService
             // 8. 스펙 저장소 변경사항 push (별도 저장소인 경우)
             if (_specRepo != null)
             {
-                await _specRepo.CommitAndPushAsync($"[runner] Update {spec.Id} status to {spec.Status}");
+                await CommitSpecRepoAsync($"[runner] Update {spec.Id} status to {spec.Status}");
             }
 
             result.Success = true;
@@ -570,13 +628,12 @@ public class RunnerService
             .ThenBy(s => s.Id)
             .ToList();
 
-        // C4: not-ready 그룹 — 기존 fallback 순서 유지 (starvation 없이 처리 가능)
-        var sortedNotReady = notReady
-            .OrderBy(s => s.Dependencies.Count)
-            .ThenBy(s => s.Id)
-            .ToList();
+        // C4: not-ready 그룹(의존성 미충족 또는 사용자 입력 필요)은 처리 대상에서 제외.
+        // 포함 시 처리 불가 스펙이 자동 선택되어 잘못된 구현이 시작될 수 있음.
+        if (notReady.Count > 0)
+            _log.Info("queue-priority", $"처리 불가 스펙 {notReady.Count}개 제외 (의존성 미충족 또는 사용자 입력 필요)");
 
-        var result = sortedReady.Concat(sortedNotReady).ToList();
+        var result = sortedReady;
 
         // C6: 큐 정렬 결과 로깅 및 선택된 스펙 selectionReason 기록
         LogQueueSelection(result);
@@ -746,12 +803,19 @@ public class RunnerService
         var prevStatus = spec.Status;
         var review = SpecReviewEvaluator.Evaluate(spec);
 
-        spec.Status = "needs-review";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastCompletedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastCompletedBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+
+        if (IsTaskSpec(spec))
+        {
+            MarkSpecDone(spec, prevStatus, "구현 완료, task 종료");
+            return;
+        }
+
+        spec.Status = "needs-review";
 
         if (review.CanAutoVerify)
         {
@@ -792,6 +856,24 @@ public class RunnerService
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
     }
 
+    private void MarkSpecDone(SpecNode spec, string prevStatus, string reason)
+    {
+        spec.Status = "done";
+        spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata["lastDoneAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata["lastDoneBy"] = _instanceId;
+        spec.Metadata.Remove("lastError");
+        spec.Metadata.Remove("lastErrorAt");
+        spec.Metadata.Remove("lastVerifiedAt");
+        spec.Metadata.Remove("lastVerifiedBy");
+        spec.Metadata.Remove("verificationSource");
+        spec.Metadata.Remove("questionStatus");
+        spec.Metadata.Remove("reviewDisposition");
+        spec.Metadata.Remove("requiresUserInput");
+        _specStore.Update(spec);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → done ({reason})", spec.Id);
+    }
+
     private async Task<List<SpecWorkResult>> AutoVerifyReviewedSpecsAsync()
     {
         var results = new List<SpecWorkResult>();
@@ -807,6 +889,23 @@ public class RunnerService
 
         foreach (var spec in reviewedSpecs)
         {
+            if (IsTaskSpec(spec))
+            {
+                var completedAt = DateTime.UtcNow.ToString("o");
+                MarkSpecDone(spec, "needs-review", "task 타입 최종 상태 정리");
+
+                results.Add(new SpecWorkResult
+                {
+                    SpecId = spec.Id,
+                    Success = true,
+                    Action = "auto-complete-task",
+                    StartedAt = completedAt,
+                    CompletedAt = completedAt,
+                    TriggeredReschedule = true
+                });
+                continue;
+            }
+
             var evaluation = SpecReviewEvaluator.Evaluate(spec);
             if (!evaluation.CanAutoVerify)
             {
@@ -832,7 +931,7 @@ public class RunnerService
             var summary = results.Count <= 3
                 ? string.Join(", ", results.Select(result => result.SpecId))
                 : $"{results.Count} specs";
-            await _specRepo.CommitAndPushAsync($"[runner] Auto-verify {summary}");
+            await CommitSpecRepoAsync($"[runner] Auto-verify {summary}");
         }
 
         return results;
@@ -886,7 +985,7 @@ public class RunnerService
         // 복구로 인한 스펙 저장소 변경 push
         if (results.Any(r => r.Success && r.Action == "repair") && _specRepo != null)
         {
-            await _specRepo.CommitAndPushAsync("[runner] Repair broken spec JSON files");
+            await CommitSpecRepoAsync("[runner] Repair broken spec JSON files");
         }
 
         return results;
@@ -1154,6 +1253,543 @@ public class RunnerService
         {
             return null;
         }
+    }
+
+    private async Task<bool> SyncSpecRepoAsync(CancellationToken cancellationToken = default)
+    {
+        if (_specRepo == null)
+        {
+            return true;
+        }
+
+        await _specRepoGate.WaitAsync(cancellationToken);
+        try
+        {
+            return await _specRepo.SyncAsync();
+        }
+        finally
+        {
+            _specRepoGate.Release();
+        }
+    }
+
+    private async Task CommitSpecRepoAsync(string message, CancellationToken cancellationToken = default)
+    {
+        if (_specRepo == null)
+        {
+            return;
+        }
+
+        await _specRepoGate.WaitAsync(cancellationToken);
+        try
+        {
+            await _specRepo.CommitAndPushAsync(message);
+        }
+        finally
+        {
+            _specRepoGate.Release();
+        }
+    }
+
+    private async Task<SpecWorkResult?> ReviewNextSpecAsync(CancellationToken cancellationToken)
+    {
+        if (_specRepo == null)
+        {
+            return null;
+        }
+
+        var synced = await SyncSpecRepoAsync(cancellationToken);
+        if (!synced)
+        {
+            _log.Warn("review-loop", "검토 루프용 스펙 저장소 동기화 실패");
+            return null;
+        }
+
+        var candidate = FindNextReviewCandidate();
+        if (candidate == null)
+        {
+            return null;
+        }
+
+        var result = new SpecWorkResult
+        {
+            SpecId = candidate.Id,
+            Success = false,
+            Action = "review",
+            StartedAt = DateTime.UtcNow.ToString("o")
+        };
+
+        _log.Info("review-loop", $"검토 대기 스펙 분석 시작: {candidate.Id}", candidate.Id);
+
+        var specJson = JsonSerializer.Serialize(candidate, SpecJsonOpts);
+        var reviewContext = BuildReviewContext(candidate);
+        var reviewResult = await _copilot.ReviewSpecAsync(candidate, specJson, reviewContext, _projectRoot, _instanceId);
+
+        if (!reviewResult.Success)
+        {
+            result.ErrorMessage = reviewResult.ErrorMessage ?? "검토 분석 실패";
+            _log.Warn("review-loop", $"검토 분석 실패: {result.ErrorMessage}", candidate.Id);
+            return FinalizeResult(result);
+        }
+
+        var reviewedSpec = _specStore.Get(candidate.Id);
+        if (!HasPersistedReviewResult(reviewedSpec))
+        {
+            result.ErrorMessage = "spec-append-review 결과가 스펙에 반영되지 않았습니다.";
+            _log.Warn("review-loop", result.ErrorMessage, candidate.Id);
+            return FinalizeResult(result);
+        }
+
+        var commitMsg = IsRequiresUserInput(reviewedSpec!)
+            ? $"[runner] Review {candidate.Id}: waiting for user input"
+            : $"[runner] Review {candidate.Id} and requeue";
+        await CommitSpecRepoAsync(commitMsg, cancellationToken);
+
+        result.Success = true;
+        result.TriggeredReschedule = !IsRequiresUserInput(reviewedSpec!);
+        return FinalizeResult(result);
+    }
+
+    private SpecNode? FindNextReviewCandidate()
+        => _specStore.GetAll()
+            .Where(spec => string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase)
+                && !IsTaskSpec(spec)
+                && !IsRequiresUserInput(spec)) // 사용자 입력 대기 중인 스펙은 이미 검토 완료 — 재검토 불필요
+            .OrderBy(spec => ParseIsoDate(spec.UpdatedAt) ?? DateTime.MaxValue)
+            .ThenBy(spec => spec.Id)
+            .FirstOrDefault();
+
+    private static bool IsTaskSpec(SpecNode spec)
+        => string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase);
+
+    private static DateTime? ParseIsoDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    internal static SpecReviewAnalysis ParseReviewAnalysis(string? output, SpecNode spec)
+    {
+        if (TryParseReviewAnalysis(output, out var analysis))
+        {
+            return analysis;
+        }
+
+        var lastError = spec.Metadata != null && spec.Metadata.TryGetValue("lastError", out var errorValue)
+            ? errorValue?.ToString()
+            : null;
+
+        return new SpecReviewAnalysis
+        {
+            Summary = string.IsNullOrWhiteSpace(lastError)
+                ? "자동 검토 결과를 구조화하지 못해 재시도 대기열로 되돌립니다."
+                : $"자동 검토 파싱 실패. 마지막 오류: {lastError}",
+            FailureReasons = string.IsNullOrWhiteSpace(lastError)
+                ? ["Copilot 검토 결과를 JSON으로 해석하지 못했습니다."]
+                : [$"마지막 오류: {lastError}"],
+            Alternatives = ["구현 로그와 변경 파일을 확인한 뒤 재시도합니다."],
+            SuggestedAttempts = ["Copilot 검토 프롬프트를 다시 실행합니다.", "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."],
+            RequiresUserInput = false,
+            AdditionalInformationRequests = []
+        };
+    }
+
+    internal static bool TryParseReviewAnalysis(string? output, out SpecReviewAnalysis analysis)
+    {
+        analysis = new SpecReviewAnalysis();
+        var json = ExtractFirstJsonObject(output);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        return TryParseReviewAnalysisJson(json, out analysis, out _);
+    }
+
+    internal static bool TryParseReviewAnalysisJson(string? json, out SpecReviewAnalysis analysis, out string? errorMessage)
+    {
+        analysis = new SpecReviewAnalysis();
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            errorMessage = "리뷰 JSON이 비어 있습니다.";
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                errorMessage = "리뷰 JSON 루트는 객체여야 합니다.";
+                return false;
+            }
+
+            analysis = CreateReviewAnalysis(root);
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"리뷰 JSON 파싱 실패 (line {ex.LineNumber + 1}, byte {ex.BytePositionInLine + 1}): {ex.Message}";
+            return false;
+        }
+    }
+
+    internal static void ApplyReviewAnalysis(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, DateTime reviewedAtUtc)
+    {
+        spec.Metadata ??= new Dictionary<string, object>();
+
+        var reviewedAt = reviewedAtUtc.ToString("o");
+        var questions = BuildReviewQuestions(spec, analysis, reviewerId, reviewedAt);
+        var requiresUserInput = analysis.RequiresUserInput || questions.Any(q => string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
+
+        // requiresUserInput=true → "needs-review" 상태 유지 (사용자 입력 대기, 자동 재처리 금지)
+        // requiresUserInput=false → "queued"로 재배치 (자동 재시도 가능)
+        spec.Status = requiresUserInput ? "needs-review" : "queued";
+
+        spec.Metadata["review"] = new Dictionary<string, object>
+        {
+            ["source"] = "copilot-cli-review",
+            ["reviewedAt"] = reviewedAt,
+            ["reviewedBy"] = reviewerId,
+            ["summary"] = analysis.Summary,
+            ["failureReasons"] = analysis.FailureReasons,
+            ["alternatives"] = analysis.Alternatives,
+            ["suggestedAttempts"] = analysis.SuggestedAttempts,
+            ["requiresUserInput"] = requiresUserInput,
+            ["additionalInformationRequests"] = analysis.AdditionalInformationRequests
+        };
+        spec.Metadata["questions"] = questions
+            .Select(question => new Dictionary<string, object>
+            {
+                ["id"] = question.Id,
+                ["type"] = question.Type,
+                ["question"] = question.Question,
+                ["why"] = question.Why,
+                ["status"] = question.Status,
+                ["requestedAt"] = question.RequestedAt ?? reviewedAt,
+                ["requestedBy"] = question.RequestedBy ?? reviewerId
+            })
+            .ToList();
+        spec.Metadata["reviewDisposition"] = requiresUserInput ? "needs-user-decision" : "retry-queued";
+        spec.Metadata["requiresUserInput"] = requiresUserInput;
+        spec.Metadata["plannerState"] = requiresUserInput ? "waiting-user-input" : "standby";
+        spec.Metadata["lastReviewAt"] = reviewedAt;
+        spec.Metadata["lastReviewBy"] = reviewerId;
+
+        if (requiresUserInput)
+        {
+            spec.Metadata["questionStatus"] = "waiting-user-input";
+        }
+        else
+        {
+            spec.Metadata.Remove("questionStatus");
+        }
+    }
+
+    private static bool HasPersistedReviewResult(SpecNode? spec)
+    {
+        if (spec == null || spec.Metadata == null)
+            return false;
+
+        // "queued" (자동 재시도) 또는 "needs-review" + requiresUserInput=true (사용자 입력 대기) 모두 유효한 반영 결과
+        var hasValidStatus = string.Equals(spec.Status, "queued", StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && IsRequiresUserInput(spec));
+
+        if (!hasValidStatus)
+            return false;
+
+        return spec.Metadata.ContainsKey("review")
+            && spec.Metadata.ContainsKey("lastReviewAt")
+            && spec.Metadata.ContainsKey("lastReviewBy");
+    }
+
+    private static SpecReviewAnalysis CreateReviewAnalysis(JsonElement root)
+    {
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = GetString(root, "summary") ?? "재시도 전 검토가 필요합니다.",
+            FailureReasons = GetStringArray(root, "failureReasons"),
+            Alternatives = GetStringArray(root, "alternatives"),
+            SuggestedAttempts = GetStringArray(root, "suggestedAttempts"),
+            RequiresUserInput = GetBoolean(root, "requiresUserInput"),
+            AdditionalInformationRequests = GetStringArray(root, "additionalInformationRequests"),
+            Questions = GetQuestions(root)
+        };
+
+        if (analysis.FailureReasons.Count == 0 && !string.IsNullOrWhiteSpace(analysis.Summary))
+        {
+            analysis.FailureReasons.Add(analysis.Summary);
+        }
+
+        return analysis;
+    }
+
+    private static List<SpecReviewQuestion> BuildReviewQuestions(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, string reviewedAt)
+    {
+        var merged = ReadExistingQuestions(spec)
+            .Where(question => !string.Equals(question.Status, "open", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var nextIndex = merged.Count + 1;
+        foreach (var question in analysis.Questions)
+        {
+            if (string.IsNullOrWhiteSpace(question.Question))
+            {
+                continue;
+            }
+
+            merged.Add(new SpecReviewQuestion
+            {
+                Id = string.IsNullOrWhiteSpace(question.Id) ? $"{spec.Id}-Q{nextIndex++}" : question.Id,
+                Type = string.IsNullOrWhiteSpace(question.Type) ? "clarification" : question.Type,
+                Question = question.Question,
+                Why = question.Why,
+                Status = string.IsNullOrWhiteSpace(question.Status) ? "open" : question.Status,
+                RequestedAt = question.RequestedAt ?? reviewedAt,
+                RequestedBy = question.RequestedBy ?? reviewerId
+            });
+        }
+
+        foreach (var request in analysis.AdditionalInformationRequests)
+        {
+            if (string.IsNullOrWhiteSpace(request))
+            {
+                continue;
+            }
+
+            merged.Add(new SpecReviewQuestion
+            {
+                Id = $"{spec.Id}-Q{nextIndex++}",
+                Type = "missing-info",
+                Question = request,
+                Why = "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
+                Status = "open",
+                RequestedAt = reviewedAt,
+                RequestedBy = reviewerId
+            });
+        }
+
+        return merged;
+    }
+
+    private static List<SpecReviewQuestion> ReadExistingQuestions(SpecNode spec)
+    {
+        var result = new List<SpecReviewQuestion>();
+        if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
+        {
+            return result;
+        }
+
+        if (rawQuestions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                var parsed = ParseQuestion(item);
+                if (parsed != null)
+                {
+                    result.Add(parsed);
+                }
+            }
+        }
+        else if (rawQuestions is IEnumerable<object> enumerable)
+        {
+            foreach (var item in enumerable)
+            {
+                var parsed = ParseQuestion(item);
+                if (parsed != null)
+                {
+                    result.Add(parsed);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static SpecReviewQuestion? ParseQuestion(object rawQuestion)
+    {
+        if (rawQuestion is JsonElement element)
+        {
+            return new SpecReviewQuestion
+            {
+                Id = GetString(element, "id") ?? "",
+                Type = GetString(element, "type") ?? "clarification",
+                Question = GetString(element, "question") ?? "",
+                Why = GetString(element, "why") ?? "",
+                Status = GetString(element, "status") ?? "open",
+                RequestedAt = GetString(element, "requestedAt"),
+                RequestedBy = GetString(element, "requestedBy")
+            };
+        }
+
+        if (rawQuestion is Dictionary<string, object> dictionary)
+        {
+            return new SpecReviewQuestion
+            {
+                Id = dictionary.GetValueOrDefault("id")?.ToString() ?? "",
+                Type = dictionary.GetValueOrDefault("type")?.ToString() ?? "clarification",
+                Question = dictionary.GetValueOrDefault("question")?.ToString() ?? "",
+                Why = dictionary.GetValueOrDefault("why")?.ToString() ?? "",
+                Status = dictionary.GetValueOrDefault("status")?.ToString() ?? "open",
+                RequestedAt = dictionary.GetValueOrDefault("requestedAt")?.ToString(),
+                RequestedBy = dictionary.GetValueOrDefault("requestedBy")?.ToString()
+            };
+        }
+
+        return null;
+    }
+
+    private static string? ExtractFirstJsonObject(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        var start = output.IndexOf('{');
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        for (int i = start; i < output.Length; i++)
+        {
+            var ch = output[i];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+            {
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                depth++;
+            }
+            else if (ch == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return output[start..(i + 1)];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string BuildReviewContext(SpecNode spec)
+    {
+        var evaluation = SpecReviewEvaluator.Evaluate(spec);
+        var conditionSummary = spec.Conditions.Count == 0
+            ? "조건 없음"
+            : string.Join(", ", spec.Conditions.Select(condition => $"{condition.Id}:{condition.Status}"));
+        var lastError = spec.Metadata != null && spec.Metadata.TryGetValue("lastError", out var errorValue)
+            ? errorValue?.ToString()
+            : null;
+
+        return $"상태={spec.Status}; nodeType={spec.NodeType}; conditions={conditionSummary}; codeRefs={evaluation.TotalCodeRefs}; descriptionLength={evaluation.DescriptionLength}; lastError={lastError ?? "none"}";
+    }
+
+    private static string? GetString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind == JsonValueKind.String ? property.GetString() : property.ToString();
+    }
+
+    private static bool GetBoolean(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.String when bool.TryParse(property.GetString(), out var parsed) => parsed,
+            _ => false
+        };
+    }
+
+    private static List<string> GetStringArray(JsonElement element, string propertyName)
+    {
+        var result = new List<string>();
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var item in property.EnumerateArray())
+        {
+            var value = item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                result.Add(value!);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<SpecReviewQuestion> GetQuestions(JsonElement element)
+    {
+        var result = new List<SpecReviewQuestion>();
+        if (!element.TryGetProperty("questions", out var property) || property.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var item in property.EnumerateArray())
+        {
+            result.Add(new SpecReviewQuestion
+            {
+                Type = GetString(item, "type") ?? "clarification",
+                Question = GetString(item, "question") ?? "",
+                Why = GetString(item, "why") ?? "",
+                Status = GetString(item, "status") ?? "open"
+            });
+        }
+
+        return result.Where(question => !string.IsNullOrWhiteSpace(question.Question)).ToList();
     }
 
     private SpecWorkResult FinalizeResult(SpecWorkResult result)

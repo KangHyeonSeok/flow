@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace FlowCLI.Services.Runner;
 
@@ -9,6 +11,23 @@ namespace FlowCLI.Services.Runner;
 /// </summary>
 public class SpecRepoService
 {
+    private static readonly string[][] SafeRestorePaths =
+    [
+        ["status"],
+        ["metadata", "userPriorityHint"],
+        ["metadata", "runnerInstanceId"],
+        ["metadata", "runnerStartedAt"],
+        ["metadata", "implementationPlan"],
+        ["metadata", "lastError"],
+        ["metadata", "lastErrorAt"],
+        ["metadata", "lastCompletedAt"],
+        ["metadata", "lastCompletedBy"],
+        ["metadata", "lastVerifiedAt"],
+        ["metadata", "lastVerifiedBy"],
+        ["metadata", "verificationSource"],
+        ["metadata", "selectionReason"]
+    ];
+
     private readonly RunnerLogService _log;
     private readonly string _specRepository;
     private readonly string _specBranch;
@@ -122,10 +141,10 @@ public class SpecRepoService
         {
             _log.Error("spec-repo", $"스펙 저장소 동기화 예외: {ex.Message}");
 
-            // 기존 캐시가 있으면 폴백
+            // 기존 캐시가 있으면 폴백 — 오래된 스펙으로 실행될 수 있음을 ERROR로 명시
             if (Directory.Exists(_specsDir) && Directory.GetFiles(_specsDir, "*.json").Length > 0)
             {
-                _log.Warn("spec-repo", "이전 캐시로 폴백합니다.");
+                _log.Error("spec-repo", $"스펙 저장소 동기화 예외, 이전 캐시로 폴백 (오래된 스펙 사용 주의): {ex.Message}");
                 return true;
             }
 
@@ -171,23 +190,252 @@ public class SpecRepoService
     {
         _log.Info("spec-repo", $"스펙 저장소 pull 시작: {_localPath}");
 
+        var statusResult = await RunGitAsync("status --porcelain", _localPath);
+        if (!statusResult.Success)
+        {
+            _log.Warn("spec-repo", $"git status 실패: {statusResult.Error}");
+        }
+        else if (!string.IsNullOrWhiteSpace(statusResult.Output))
+        {
+            return await PullWithRecoveryAsync();
+        }
+
         var result = await RunGitAsync($"pull origin {_specBranch} --rebase=false", _localPath);
         if (!result.Success)
         {
-            _log.Warn("spec-repo", $"git pull 실패: {result.Error}");
-
-            // pull 실패 시 기존 캐시가 있으면 폴백
+            // pull 실패 시 기존 캐시가 있으면 폴백 — 오래된 스펙으로 실행될 수 있음을 ERROR로 명시
             if (Directory.Exists(_specsDir) && Directory.GetFiles(_specsDir, "*.json").Length > 0)
             {
-                _log.Warn("spec-repo", "이전 캐시로 폴백합니다.");
+                _log.Error("spec-repo", $"git pull 실패 — 이전 캐시로 폴백 (오래된 스펙 사용 주의): {result.Error}");
                 return true;
             }
 
+            _log.Error("spec-repo", $"git pull 실패, 사용 가능한 캐시 없음: {result.Error}");
             return false;
         }
 
         _log.Info("spec-repo", "스펙 저장소 pull 완료");
         return true;
+    }
+
+    private async Task<bool> PullWithRecoveryAsync()
+    {
+        var stashMessage = $"flow-spec-sync-{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var stashResult = await RunGitAsync($"stash push --include-untracked -m \"{stashMessage}\"", _localPath);
+        if (!stashResult.Success)
+        {
+            _log.Warn("spec-repo", $"git stash 실패: {stashResult.Error}");
+            return false;
+        }
+
+        if (stashResult.Output.Contains("No local changes to save", StringComparison.OrdinalIgnoreCase))
+        {
+            var cleanPull = await RunGitAsync($"pull origin {_specBranch} --rebase=false", _localPath);
+            if (!cleanPull.Success)
+            {
+                _log.Warn("spec-repo", $"git pull 실패: {cleanPull.Error}");
+                return false;
+            }
+
+            _log.Info("spec-repo", "스펙 저장소 pull 완료");
+            return true;
+        }
+
+        const string stashRef = "stash@{0}";
+        var pullResult = await RunGitAsync($"pull origin {_specBranch} --rebase=false", _localPath);
+        if (!pullResult.Success)
+        {
+            _log.Warn("spec-repo", $"git pull 실패: {pullResult.Error}");
+            await RestoreStashAfterFailedPullAsync(stashRef);
+            return false;
+        }
+
+        var recovery = await RestoreSpecsFromStashAsync(stashRef);
+        if (recovery.RestoredFileCount > 0 || recovery.RestoredFieldCount > 0 || recovery.SkippedFileCount > 0)
+        {
+            _log.Info(
+                "spec-repo",
+                $"stash 복구 완료: files={recovery.RestoredFileCount}, fields={recovery.RestoredFieldCount}, skipped={recovery.SkippedFileCount}"
+            );
+        }
+
+        var dropResult = await RunGitAsync($"stash drop {stashRef}", _localPath);
+        if (!dropResult.Success)
+        {
+            _log.Warn("spec-repo", $"stash drop 실패: {dropResult.Error}");
+        }
+
+        _log.Info("spec-repo", "스펙 저장소 pull 완료");
+        return true;
+    }
+
+    private async Task RestoreStashAfterFailedPullAsync(string stashRef)
+    {
+        var restoreResult = await RunGitAsync($"stash pop --index {stashRef}", _localPath);
+        if (!restoreResult.Success)
+        {
+            _log.Warn("spec-repo", $"pull 실패 후 stash 복원 실패: {restoreResult.Error}");
+        }
+    }
+
+    private async Task<SpecRecoverySummary> RestoreSpecsFromStashAsync(string stashRef)
+    {
+        var summary = new SpecRecoverySummary();
+        var changedFiles = await GetStashedFilesAsync(stashRef);
+
+        foreach (var relativePath in changedFiles)
+        {
+            if (!IsSpecJsonPath(relativePath))
+                continue;
+
+            var currentPath = Path.Combine(_localPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            var baseJson = await TryGetGitFileTextAsync($"{stashRef}^1", relativePath);
+            var localJson = await TryGetGitFileTextAsync(stashRef, relativePath);
+            var currentJson = File.Exists(currentPath) ? await File.ReadAllTextAsync(currentPath) : null;
+
+            if (localJson is null)
+            {
+                summary.SkippedFileCount++;
+                continue;
+            }
+
+            if (currentJson is null)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(currentPath)!);
+                await File.WriteAllTextAsync(currentPath, localJson);
+                summary.RestoredFileCount++;
+                continue;
+            }
+
+            var merge = MergeSpecJson(baseJson, localJson, currentJson);
+            if (!merge.Changed)
+                continue;
+
+            await File.WriteAllTextAsync(currentPath, merge.MergedJson);
+            summary.RestoredFieldCount += merge.RestoredPathCount;
+        }
+
+        return summary;
+    }
+
+    private async Task<List<string>> GetStashedFilesAsync(string stashRef)
+    {
+        var result = await RunGitAsync($"stash show --name-only --format= --include-untracked {stashRef}", _localPath);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.Output))
+            return [];
+
+        return result.Output
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private async Task<string?> TryGetGitFileTextAsync(string gitRef, string relativePath)
+    {
+        var result = await RunGitAsync($"show {gitRef}:{relativePath}", _localPath);
+        return result.Success ? result.Output : null;
+    }
+
+    private static bool IsSpecJsonPath(string relativePath)
+    {
+        if (!relativePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return relativePath.StartsWith("specs/", StringComparison.Ordinal)
+            || relativePath.StartsWith("docs/specs/", StringComparison.Ordinal);
+    }
+
+    internal static SpecJsonMergeResult MergeSpecJson(string? baseJson, string localJson, string currentJson)
+    {
+        JsonNode? baseNode = ParseJson(baseJson);
+        var localNode = ParseJson(localJson) ?? throw new InvalidOperationException("로컬 stash 스펙 JSON 파싱 실패");
+        var currentNode = ParseJson(currentJson) ?? throw new InvalidOperationException("현재 스펙 JSON 파싱 실패");
+
+        if (localNode is not JsonObject || currentNode is not JsonObject)
+            throw new InvalidOperationException("스펙 JSON 루트는 object여야 합니다.");
+
+        var mergedNode = currentNode.DeepClone();
+        var restoredPathCount = 0;
+
+        foreach (var path in SafeRestorePaths)
+        {
+            var baseValue = GetPathValue(baseNode, path);
+            var localValue = GetPathValue(localNode, path);
+            var currentValue = GetPathValue(currentNode, path);
+
+            var localChanged = !JsonDeepEquals(baseValue, localValue);
+            var remoteChanged = !JsonDeepEquals(baseValue, currentValue);
+            if (!localChanged || remoteChanged)
+                continue;
+
+            SetPathValue(mergedNode, path, localValue?.DeepClone());
+            restoredPathCount++;
+        }
+
+        if (restoredPathCount == 0)
+            return new SpecJsonMergeResult(false, currentJson, 0);
+
+        return new SpecJsonMergeResult(true, mergedNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), restoredPathCount);
+    }
+
+    private static JsonNode? ParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        return JsonNode.Parse(json);
+    }
+
+    private static JsonNode? GetPathValue(JsonNode? root, IReadOnlyList<string> path)
+    {
+        var current = root;
+        foreach (var segment in path)
+        {
+            if (current is not JsonObject obj || !obj.TryGetPropertyValue(segment, out current))
+                return null;
+        }
+
+        return current;
+    }
+
+    private static void SetPathValue(JsonNode root, IReadOnlyList<string> path, JsonNode? value)
+    {
+        if (path.Count == 0 || root is not JsonObject current)
+            return;
+
+        for (var i = 0; i < path.Count - 1; i++)
+        {
+            var segment = path[i];
+            if (current[segment] is not JsonObject child)
+            {
+                if (value is null)
+                    return;
+
+                child = new JsonObject();
+                current[segment] = child;
+            }
+
+            current = child;
+        }
+
+        var leaf = path[^1];
+        if (value is null)
+        {
+            current.Remove(leaf);
+            return;
+        }
+
+        current[leaf] = value;
+    }
+
+    private static bool JsonDeepEquals(JsonNode? left, JsonNode? right)
+    {
+        if (left is null && right is null)
+            return true;
+        if (left is null || right is null)
+            return false;
+
+        return JsonNode.DeepEquals(left, right);
     }
 
     /// <summary>
@@ -299,4 +547,13 @@ public class SpecRepoService
         public string Error { get; set; } = "";
         public int ExitCode { get; set; }
     }
+
+    private sealed class SpecRecoverySummary
+    {
+        public int RestoredFileCount { get; set; }
+        public int RestoredFieldCount { get; set; }
+        public int SkippedFileCount { get; set; }
+    }
+
+    internal sealed record SpecJsonMergeResult(bool Changed, string MergedJson, int RestoredPathCount);
 }

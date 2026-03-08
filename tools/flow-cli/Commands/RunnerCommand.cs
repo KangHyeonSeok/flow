@@ -317,6 +317,7 @@ public partial class FlowApp
             SpecRepository        = flowConfig.SpecRepository,
             SpecBranch            = flowConfig.SpecBranch,
             PollIntervalMinutes   = flowConfig.PollIntervalMinutes,
+            ReviewPollIntervalSeconds = flowConfig.ReviewPollIntervalSeconds,
             MaxConcurrentSpecs    = flowConfig.MaxConcurrentSpecs,
             LogDir                = flowConfig.LogDir,
             PidFile               = flowConfig.PidFile,

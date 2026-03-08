@@ -7,7 +7,8 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from './types';
-import { getSpecReviewState, getUserFeedbackState } from './reviewState';
+import { getSpecReviewState, getUserFeedbackState, UserQuestion } from './reviewState';
+import { saveQuestionAnswer } from './feedbackStore';
 
 const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
     { status: 'draft',             label: '초안',              icon: '○' },
@@ -115,6 +116,11 @@ export class KanbanPanel {
                 await this.changeSpecPriority(specId, newPriority);
                 break;
             }
+            case 'answerQuestion': {
+              const { specId, questionId, questionText, answer } = msg as { type: string; specId: string; questionId: string; questionText: string; answer: string };
+              await this.answerQuestion(specId, questionId, questionText, answer);
+              break;
+            }
         }
     }
 
@@ -196,6 +202,32 @@ export class KanbanPanel {
             vscode.window.showErrorMessage(`우선순위 변경 실패: ${String(err)}`);
         }
     }
+
+      private async answerQuestion(specId: string, questionId: string, questionText: string, answer: string): Promise<void> {
+        const spec = this.loader.findSpec(specId);
+        if (!spec) {
+          vscode.window.showWarningMessage(`스펙을 찾을 수 없습니다: ${specId}`);
+          return;
+        }
+
+        const feedback = getUserFeedbackState(spec);
+        const question = feedback.questions.find((item) => {
+          if (questionId && item.id === questionId) {
+            return true;
+          }
+
+          return item.question === questionText;
+        });
+
+        if (!question) {
+          vscode.window.showWarningMessage('저장할 질문을 찾을 수 없습니다. 새로고침 후 다시 시도하세요.');
+          return;
+        }
+
+        await saveQuestionAnswer(this.loader.specsDirectory, specId, question, answer);
+        await this.loader.reload();
+        vscode.window.showInformationMessage(`질문 응답을 저장했습니다: ${specId}`);
+      }
 
     /** 정리 */
     dispose(): void {
@@ -522,6 +554,78 @@ export class KanbanPanel {
     cursor: pointer;
     outline: none;
   }
+  .question-box {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(233, 30, 99, 0.28);
+    background: rgba(233, 30, 99, 0.08);
+  }
+  .question-type {
+    display: inline-flex;
+    margin-bottom: 5px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    background: rgba(233, 30, 99, 0.18);
+    color: #f8bbd0;
+  }
+  .question-text {
+    font-size: 11px;
+    line-height: 1.45;
+    margin-bottom: 4px;
+  }
+  .question-why {
+    font-size: 10px;
+    opacity: 0.72;
+    margin-bottom: 6px;
+  }
+  .question-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .question-suggestion-btn,
+  .question-save-btn {
+    border: 1px solid rgba(233, 30, 99, 0.32);
+    background: rgba(233, 30, 99, 0.12);
+    color: var(--fg);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .question-save-btn {
+    border-radius: 4px;
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border-color: var(--btn-bg);
+    white-space: nowrap;
+  }
+  .question-answer-input {
+    width: 100%;
+    min-height: 58px;
+    resize: vertical;
+    background: var(--input-bg);
+    color: var(--input-fg);
+    border: 1px solid rgba(233, 30, 99, 0.25);
+    border-radius: 4px;
+    padding: 6px;
+    font-size: 11px;
+    font-family: var(--vscode-font-family, 'Segoe UI', sans-serif);
+  }
+  .question-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .question-more {
+    font-size: 10px;
+    opacity: 0.65;
+  }
   /* ── 컨텍스트 메뉴 ── */
   .ctx-menu {
     position: fixed;
@@ -608,7 +712,7 @@ document.getElementById('board').addEventListener('click', (e) => {
   const card = e.target.closest('.card');
   if (!card) { return; }
   // status-select나 컨텍스트 메뉴 컨트롤 클릭이면 무시
-  if (e.target.closest('.action-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select')) { return; }
+  if (e.target.closest('.action-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select') || e.target.closest('.question-answer-input') || e.target.closest('.question-save-btn') || e.target.closest('.question-suggestion-btn')) { return; }
   setSelectedCard(card);
   vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
 });
@@ -667,6 +771,38 @@ document.getElementById('board').addEventListener('click', (e) => {
   if (action === 'open') {
     vscode.postMessage({ type: 'openSpec', specId: card.dataset.id });
   }
+  e.stopPropagation();
+});
+
+document.getElementById('board').addEventListener('click', (e) => {
+  const btn = e.target.closest('.question-suggestion-btn');
+  if (!btn) { return; }
+  const box = btn.closest('.question-box');
+  const input = box?.querySelector('.question-answer-input');
+  if (input) {
+    input.value = btn.dataset.answer || '';
+    input.focus();
+  }
+  e.stopPropagation();
+});
+
+document.getElementById('board').addEventListener('click', (e) => {
+  const btn = e.target.closest('.question-save-btn');
+  if (!btn) { return; }
+  const card = btn.closest('.card');
+  const box = btn.closest('.question-box');
+  const input = box?.querySelector('.question-answer-input');
+  if (!card || !input) { return; }
+  const answer = input.value.trim();
+  if (!answer) { return; }
+  btn.disabled = true;
+  vscode.postMessage({
+    type: 'answerQuestion',
+    specId: card.dataset.id,
+    questionId: btn.dataset.qId,
+    questionText: btn.dataset.question,
+    answer,
+  });
   e.stopPropagation();
 });
 
@@ -866,6 +1002,8 @@ function filterCards(query) {
         const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
             ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
             : '';
+        const inlineQuestion = feedback.openQuestions[0];
+        const questionBox = inlineQuestion ? this.renderQuestionBox(inlineQuestion, feedback.openQuestionCount) : '';
 
         const statusOptions = COLUMNS.map(c =>
             `<option value="${c.status}"${c.status === spec.status ? ' selected' : ''}>${c.label}</option>`
@@ -901,6 +1039,7 @@ function filterCards(query) {
   ${progressHtml}
   ${reviewBadge}
   ${reviewNote}
+  ${questionBox}
   <div class="card-footer">
     <div class="card-actions">
       <button class="action-btn" data-action="open" title="파일 열기">↗</button>
@@ -916,6 +1055,30 @@ function filterCards(query) {
   </div>
 </div>`;
     }
+
+  private renderQuestionBox(question: UserQuestion, openQuestionCount: number): string {
+    const typeHtml = question.type ? `<div class="question-type">${this.esc(question.type)}</div>` : '';
+    const whyHtml = question.why ? `<div class="question-why">${this.esc(question.why)}</div>` : '';
+    const suggestionsHtml = question.answerSuggestions && question.answerSuggestions.length > 0
+      ? `<div class="question-suggestions">${question.answerSuggestions.map((suggestion) => `<button class="question-suggestion-btn" data-answer="${this.esc(suggestion)}">${this.esc(suggestion)}</button>`).join('')}</div>`
+      : '';
+    const moreQuestionsHtml = openQuestionCount > 1
+      ? `<div class="question-more">나머지 ${openQuestionCount - 1}건은 상세 패널에서도 입력할 수 있습니다.</div>`
+      : '<div class="question-more">저장하면 질문 상태가 즉시 갱신됩니다.</div>';
+    const saveLabel = question.type === 'user-decision' ? '결정 저장' : '답변 저장';
+
+    return `<div class="question-box">
+  ${typeHtml}
+  <div class="question-text">❓ ${this.esc(question.question)}</div>
+  ${whyHtml}
+  ${suggestionsHtml}
+  <textarea class="question-answer-input" data-q-id="${this.esc(question.id)}" data-question="${this.esc(question.question)}" placeholder="여기서 바로 답변을 입력하거나 제안 답변을 선택하세요.">${this.esc(question.answer || '')}</textarea>
+  <div class="question-actions">
+  ${moreQuestionsHtml}
+  <button class="question-save-btn" data-q-id="${this.esc(question.id)}" data-question="${this.esc(question.question)}">${saveLabel}</button>
+  </div>
+</div>`;
+  }
 
     private esc(s: string): string {
         return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

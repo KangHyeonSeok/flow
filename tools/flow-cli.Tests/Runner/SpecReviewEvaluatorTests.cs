@@ -113,20 +113,24 @@ public class SpecReviewEvaluatorTests
     private static SpecNode CreateSpec(
         string status,
         List<SpecCondition> conditions,
-        Dictionary<string, object>? metadata = null) => new()
+        Dictionary<string, object>? metadata = null,
+        string? description = null,
+        List<string>? codeRefs = null) => new()
     {
         Id = "F-100",
         Title = "Spec review evaluator",
-        Description = "desc",
+        Description = description ?? "desc",
         Status = status,
         Conditions = conditions,
-        Metadata = metadata ?? new Dictionary<string, object>()
+        Metadata = metadata ?? new Dictionary<string, object>(),
+        CodeRefs = codeRefs ?? new List<string>()
     };
 
-    private static SpecCondition CreateCondition(string id, string status) => new()
+      private static SpecCondition CreateCondition(string id, string status, List<string>? codeRefs = null) => new()
     {
         Id = id,
         Description = id,
-        Status = status
+        Status = status,
+        CodeRefs = codeRefs ?? new List<string>()
     };
 }

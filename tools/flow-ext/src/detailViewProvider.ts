@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink, Condition, Spec } from './types';
 import { getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
+import { saveQuestionAnswer } from './feedbackStore';
 
 export class DetailViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'specDetail';
@@ -47,6 +48,8 @@ export class DetailViewProvider implements vscode.WebviewViewProvider {
                 await vscode.env.openExternal(vscode.Uri.parse(msg.url));
             } else if (msg.type === 'openDocLink') {
                 await this.openDocLink(msg.path);
+            } else if (msg.type === 'answerQuestion') {
+                await this.answerQuestion(msg.specId, msg.questionId, msg.questionText, msg.answer);
             }
         });
 
@@ -132,11 +135,24 @@ body {
                 const contextMethodsHtml = q.suggestedContextMethods && q.suggestedContextMethods.length > 0
                     ? `<div class="feedback-context-methods"><span class="feedback-context-label">컨텍스트 수집 방법:</span> ${q.suggestedContextMethods.map(m => `<span class="feedback-context-item">${this.escapeHtml(m)}</span>`).join('')}</div>`
                     : '';
+                const whyHtml = q.why
+                    ? `<div class="feedback-why">${this.escapeHtml(q.why)}</div>`
+                    : '';
+                const typeHtml = q.type
+                    ? `<span class="feedback-type">${this.escapeHtml(q.type)}</span>`
+                    : '';
+                const suggestionsHtml = q.answerSuggestions && q.answerSuggestions.length > 0
+                    ? `<div class="feedback-suggestions">${q.answerSuggestions.map((suggestion) => `<button class="feedback-suggestion-btn" data-answer="${this.escapeAttr(suggestion)}">${this.escapeHtml(suggestion)}</button>`).join('')}</div>`
+                    : '';
+                const saveLabel = q.type === 'user-decision' ? '결정 저장' : '답변 저장';
                 return `<div class="feedback-question">
-                    <div class="feedback-q-text">❓ ${this.escapeHtml(q.question)}</div>
+                    <div class="feedback-q-head">${typeHtml}<div class="feedback-q-text">❓ ${this.escapeHtml(q.question)}</div></div>
+                    ${whyHtml}
                     ${contextMethodsHtml}
+                    ${suggestionsHtml}
                     <div class="feedback-answer-area">
-                        <textarea class="feedback-answer-input" data-q-id="${this.escapeAttr(q.id || String(idx))}" placeholder="답변을 스펙 JSON의 metadata.questions[${idx}].answer 필드에 직접 입력하세요..." readonly></textarea>
+                        <textarea class="feedback-answer-input" data-q-id="${this.escapeAttr(q.id || String(idx))}" data-question="${this.escapeAttr(q.question)}" placeholder="여기서 바로 답변을 입력하거나 제안 답변을 선택하세요.">${this.escapeHtml(q.answer ?? '')}</textarea>
+                        <div class="feedback-actions"><button class="feedback-save-btn" data-q-id="${this.escapeAttr(q.id || String(idx))}" data-question="${this.escapeAttr(q.question)}">${saveLabel}</button></div>
                     </div>
                 </div>`;
             }).join('');
@@ -434,11 +450,29 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     margin-bottom: 6px;
 }
 .feedback-question:last-child { border-bottom: none; margin-bottom: 0; }
+.feedback-q-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.feedback-type {
+    display: inline-flex;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    background: rgba(233, 30, 99, 0.18);
+    color: #f8bbd0;
+}
 .feedback-q-text {
     font-size: 12px;
     font-weight: 500;
-    margin-bottom: 4px;
     color: var(--vscode-foreground);
+}
+.feedback-why {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 4px;
 }
 .feedback-context-methods {
     font-size: 10px;
@@ -456,18 +490,44 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     font-size: 10px;
 }
 .feedback-answer-area { margin-top: 4px; }
+.feedback-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0;
+}
+.feedback-suggestion-btn,
+.feedback-save-btn {
+    border: 1px solid rgba(233, 30, 99, 0.35);
+    border-radius: 999px;
+    background: rgba(233, 30, 99, 0.12);
+    color: var(--vscode-foreground);
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.feedback-save-btn {
+    border-radius: 4px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-color: var(--vscode-button-background);
+}
 .feedback-answer-input {
     width: 100%;
-    min-height: 40px;
+    min-height: 68px;
     background: var(--vscode-input-background);
-    color: var(--vscode-descriptionForeground);
+    color: var(--vscode-input-foreground);
     border: 1px solid rgba(233, 30, 99, 0.3);
     border-radius: 3px;
-    font-size: 10px;
-    padding: 4px;
-    resize: none;
+    font-size: 11px;
+    padding: 6px;
+    resize: vertical;
     font-family: var(--vscode-font-family);
-    cursor: default;
+}
+.feedback-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 6px;
 }
 .feedback-no-questions {
     font-size: 11px;
@@ -627,8 +687,68 @@ ${fileId ? `<button class="btn-open" data-spec="${this.escapeAttr(fileId)}">📄
             vscode.postMessage({ type: 'openSpec', specId: el.dataset.spec });
         });
     });
+    document.querySelectorAll('.feedback-suggestion-btn').forEach(el => {
+        el.addEventListener('click', () => {
+            const questionEl = el.closest('.feedback-question');
+            const input = questionEl?.querySelector('.feedback-answer-input');
+            if (input) {
+                input.value = el.dataset.answer || '';
+                input.focus();
+            }
+        });
+    });
+    document.querySelectorAll('.feedback-save-btn').forEach(el => {
+        el.addEventListener('click', () => {
+            const questionEl = el.closest('.feedback-question');
+            const input = questionEl?.querySelector('.feedback-answer-input');
+            const answer = input?.value?.trim() || '';
+            if (!answer) {
+                return;
+            }
+
+            el.disabled = true;
+            vscode.postMessage({
+                type: 'answerQuestion',
+                specId: ${JSON.stringify(spec?.id ?? '')},
+                questionId: el.dataset.qId,
+                questionText: el.dataset.question,
+                answer,
+            });
+        });
+    });
 </script>
 </body></html>`;
+    }
+
+    private async answerQuestion(specId: string, questionId: string, questionText: string, answer: string): Promise<void> {
+        if (!specId) {
+            vscode.window.showWarningMessage('답변을 저장할 스펙을 찾을 수 없습니다.');
+            return;
+        }
+
+        const spec = this.loader.findSpec(specId);
+        if (!spec) {
+            vscode.window.showWarningMessage(`스펙을 찾을 수 없습니다: ${specId}`);
+            return;
+        }
+
+        const feedback = getUserFeedbackState(spec);
+        const question = feedback.questions.find((item) => {
+            if (questionId && item.id === questionId) {
+                return true;
+            }
+
+            return item.question === questionText;
+        });
+
+        if (!question) {
+            vscode.window.showWarningMessage('저장할 질문을 찾을 수 없습니다. 새로고침 후 다시 시도하세요.');
+            return;
+        }
+
+        await saveQuestionAnswer(this.loader.specsDirectory, specId, question, answer);
+        await this.loader.reload();
+        vscode.window.showInformationMessage(`질문 응답을 저장했습니다: ${specId}`);
     }
 
     private async openCodeRef(codeRef: string): Promise<void> {

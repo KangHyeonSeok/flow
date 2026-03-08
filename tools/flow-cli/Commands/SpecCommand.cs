@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using Cocona;
+using FlowCLI.Services.Runner;
 using FlowCLI.Services.SpecGraph;
 using FlowCLI.Utils;
 
@@ -189,6 +191,82 @@ public partial class FlowApp
         }
     }
 
+    // ─── flow spec append-review ─────────────────────────────────────
+    [Command("spec-append-review", Description = "리뷰 JSON을 metadata.review에 반영합니다. requiresUserInput=false이면 queued로 재배치, true이면 needs-review 상태로 사용자 입력 대기합니다")]
+    public void SpecAppendReview(
+        [Argument(Description = "스펙 ID")] string id,
+        [Option("input-file", Description = "리뷰 JSON 파일 경로")] string inputFile = "",
+        [Option("reviewer", Description = "리뷰어 ID")] string reviewer = "copilot-cli-review",
+        [Option("reviewed-at", Description = "리뷰 시각 (ISO-8601, 생략 시 현재 UTC)")] string? reviewedAt = null,
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(inputFile))
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-append-review", "--input-file 값은 필수입니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            if (!File.Exists(inputFile))
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-append-review", $"리뷰 JSON 파일 '{inputFile}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var spec = SpecStore.Get(id);
+            if (spec == null)
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-append-review", $"스펙 '{id}'을(를) 찾을 수 없습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var rawJson = File.ReadAllText(inputFile);
+            if (!RunnerService.TryParseReviewAnalysisJson(rawJson, out var analysis, out var parseError))
+            {
+                JsonOutput.Write(JsonOutput.Error("spec-append-review", parseError ?? "리뷰 JSON 파싱에 실패했습니다."), pretty);
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var reviewedAtUtc = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(reviewedAt))
+            {
+                if (!DateTime.TryParse(reviewedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out reviewedAtUtc))
+                {
+                    JsonOutput.Write(JsonOutput.Error("spec-append-review", $"reviewed-at 값 '{reviewedAt}'은(는) 올바른 ISO-8601 형식이 아닙니다."), pretty);
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                reviewedAtUtc = reviewedAtUtc.ToUniversalTime();
+            }
+
+            RunnerService.ApplyReviewAnalysis(spec, analysis, reviewer, reviewedAtUtc);
+            var updated = SpecStore.Update(spec);
+
+            JsonOutput.Write(JsonOutput.Success("spec-append-review",
+                new
+                {
+                    id = updated.Id,
+                    status = updated.Status,
+                    reviewDisposition = GetMetadataString(updated, "reviewDisposition"),
+                    requiresUserInput = GetMetadataBool(updated, "requiresUserInput"),
+                    questionCount = CountStoredQuestions(updated),
+                    inputFile
+                },
+                $"스펙 '{updated.Id}'에 review 메타데이터를 반영했습니다."), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("spec-append-review", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
     private static string FormatSpecForAI(SpecNode spec)
     {
         var sb = new System.Text.StringBuilder();
@@ -288,6 +366,51 @@ public partial class FlowApp
         }
 
         return sb.ToString().TrimEnd();
+    }
+
+    private static bool GetMetadataBool(SpecNode spec, string key)
+    {
+        if (spec.Metadata == null || !spec.Metadata.TryGetValue(key, out var rawValue) || rawValue == null)
+        {
+            return false;
+        }
+
+        if (rawValue is bool boolValue)
+        {
+            return boolValue;
+        }
+
+        return bool.TryParse(rawValue.ToString(), out var parsed) && parsed;
+    }
+
+    private static string? GetMetadataString(SpecNode spec, string key)
+    {
+        if (spec.Metadata == null || !spec.Metadata.TryGetValue(key, out var rawValue) || rawValue == null)
+        {
+            return null;
+        }
+
+        return rawValue.ToString();
+    }
+
+    private static int CountStoredQuestions(SpecNode spec)
+    {
+        if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
+        {
+            return 0;
+        }
+
+        if (rawQuestions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.GetArrayLength();
+        }
+
+        if (rawQuestions is IEnumerable<object> questions)
+        {
+            return questions.Count();
+        }
+
+        return 0;
     }
 
     // ─── flow spec list ───────────────────────────────────────────────

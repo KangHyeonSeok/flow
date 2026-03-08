@@ -22,6 +22,14 @@ public class RunnerConfigDefaultsTests
         config.CopilotModel.Should().Be("claude-sonnet-4.6");
     }
 
+    [Fact]
+    public void RunnerConfig_DefaultReviewPollIntervalSeconds_IsThirty()
+    {
+        var config = new RunnerConfig();
+
+        config.ReviewPollIntervalSeconds.Should().Be(30);
+    }
+
     /// <summary>
     /// F-031-C5: MaxReschedulesPerPoll 기본값은 10이어야 한다.
     /// busy-wait 방지를 위한 cycle 상한 기본값을 검증한다.

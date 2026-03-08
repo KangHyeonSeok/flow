@@ -1,0 +1,120 @@
+using FlowCLI.Services.Runner;
+using FlowCLI.Services.SpecGraph;
+using FluentAssertions;
+
+namespace FlowCLI.Tests.Runner;
+
+public class RunnerReviewWorkflowTests
+{
+    [Fact]
+    public void ParseReviewAnalysis_ParsesMarkdownWrappedJson()
+    {
+        const string output = """
+        검토 결과입니다.
+        {
+          "summary": "머지 실패로 재시도 필요",
+          "failureReasons": ["main 브랜치와 충돌"],
+          "alternatives": ["충돌 범위를 줄여 재시도"],
+          "suggestedAttempts": ["최근 main 기준으로 다시 구현"],
+          "requiresUserInput": true,
+          "additionalInformationRequests": ["충돌 시 어떤 구현을 우선할지 결정 필요"],
+          "questions": [
+            {
+              "type": "user-decision",
+              "question": "신규 구현과 기존 구현 중 어느 쪽을 우선할까요?",
+              "why": "머지 충돌 해소 기준이 필요합니다."
+            }
+          ]
+        }
+        """;
+
+        var parsed = RunnerService.TryParseReviewAnalysis(output, out var analysis);
+
+        parsed.Should().BeTrue();
+        analysis.Summary.Should().Be("머지 실패로 재시도 필요");
+        analysis.RequiresUserInput.Should().BeTrue();
+        analysis.Questions.Should().ContainSingle();
+    }
+
+    [Fact]
+    public void TryParseReviewAnalysisJson_InvalidJson_ReturnsDetailedError()
+    {
+        const string output = """
+        {
+          "summary": "파싱 실패",
+          "failureReasons": ["쉼표 누락"]
+        """;
+
+        var parsed = RunnerService.TryParseReviewAnalysisJson(output, out _, out var errorMessage);
+
+        parsed.Should().BeFalse();
+        errorMessage.Should().NotBeNull();
+        errorMessage.Should().Contain("리뷰 JSON 파싱 실패");
+    }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WhenQuestionsExist_RequeuesAndFlagsUserInput()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-200",
+            NodeType = "feature",
+            Status = "needs-review",
+            Metadata = new Dictionary<string, object>()
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "사용자 판단 필요",
+            FailureReasons = ["정책 선택 필요"],
+            SuggestedAttempts = ["답변 후 재시도"],
+            RequiresUserInput = true,
+            Questions =
+            [
+                new SpecReviewQuestion
+                {
+                    Type = "user-decision",
+                    Question = "A와 B 중 어떤 동작이 맞나요?",
+                    Why = "정책 방향에 따라 구현이 달라집니다."
+                }
+            ]
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
+
+        // requiresUserInput=true → "needs-review" 유지 (사용자 입력 대기, 자동 재처리 금지)
+        spec.Status.Should().Be("needs-review");
+        spec.Metadata!["requiresUserInput"].Should().Be(true);
+        spec.Metadata["questionStatus"].Should().Be("waiting-user-input");
+        spec.Metadata["reviewDisposition"].Should().Be("needs-user-decision");
+    }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WithoutQuestions_RequeuesForRetry()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-201",
+            NodeType = "feature",
+            Status = "needs-review",
+            Metadata = new Dictionary<string, object>
+            {
+                ["questionStatus"] = "waiting-user-input"
+            }
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "사용자 입력 없이 재시도 가능",
+            FailureReasons = ["구현 범위 조정 필요"],
+            Alternatives = ["더 작은 변경으로 분리"],
+            SuggestedAttempts = ["queued 상태에서 재시도"],
+            RequiresUserInput = false
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
+
+        spec.Status.Should().Be("queued");
+        spec.Metadata!["requiresUserInput"].Should().Be(false);
+        spec.Metadata.Should().NotContainKey("questionStatus");
+        spec.Metadata["reviewDisposition"].Should().Be("retry-queued");
+    }
+}

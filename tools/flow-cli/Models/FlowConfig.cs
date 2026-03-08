@@ -25,6 +25,10 @@ public class FlowConfig
     [JsonPropertyName("pollIntervalMinutes")]
     public int PollIntervalMinutes { get; set; } = 5;
 
+    /// <summary>검토 대기 스펙 재검토 주기 (초)</summary>
+    [JsonPropertyName("reviewPollIntervalSeconds")]
+    public int ReviewPollIntervalSeconds { get; set; } = 30;
+
     /// <summary>동시 구현 스펙 수</summary>
     [JsonPropertyName("maxConcurrentSpecs")]
     public int MaxConcurrentSpecs { get; set; } = 1;

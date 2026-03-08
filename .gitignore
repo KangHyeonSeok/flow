@@ -38,3 +38,5 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 .github/prompts/speckit.tasks.prompt.md
 .github/prompts/speckit.taskstoissues.prompt.md
 .vscode/settings.json
+/.flow/worktrees
+/.flow/review

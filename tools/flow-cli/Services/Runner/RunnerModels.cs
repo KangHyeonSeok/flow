@@ -8,6 +8,9 @@ public class RunnerConfig
     /// <summary>스펙 그래프 pull 주기 (분)</summary>
     public int PollIntervalMinutes { get; set; } = 5;
 
+    /// <summary>검토 대기 스펙 재검토 주기 (초)</summary>
+    public int ReviewPollIntervalSeconds { get; set; } = 30;
+
     /// <summary>동시 구현 스펙 수</summary>
     public int MaxConcurrentSpecs { get; set; } = 1;
 
@@ -105,6 +108,34 @@ public class SpecWorkResult
     /// working → needs-review/verified/done/queued 전환 또는 needs-review → verified 전환 시 true.
     /// </summary>
     public bool TriggeredReschedule { get; set; }
+}
+
+/// <summary>
+/// Copilot CLI가 반환하는 검토 질문 항목.
+/// </summary>
+public class SpecReviewQuestion
+{
+    public string Id { get; set; } = "";
+    public string Type { get; set; } = "clarification";
+    public string Question { get; set; } = "";
+    public string Why { get; set; } = "";
+    public string Status { get; set; } = "open";
+    public string? RequestedAt { get; set; }
+    public string? RequestedBy { get; set; }
+}
+
+/// <summary>
+/// Copilot CLI 기반 검토 결과 모델.
+/// </summary>
+public class SpecReviewAnalysis
+{
+    public string Summary { get; set; } = "";
+    public List<string> FailureReasons { get; set; } = new();
+    public List<string> Alternatives { get; set; } = new();
+    public List<string> SuggestedAttempts { get; set; } = new();
+    public bool RequiresUserInput { get; set; }
+    public List<string> AdditionalInformationRequests { get; set; } = new();
+    public List<SpecReviewQuestion> Questions { get; set; } = new();
 }
 
 /// <summary>
