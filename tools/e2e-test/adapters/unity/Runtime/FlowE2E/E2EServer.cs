@@ -158,14 +158,17 @@ namespace FlowE2E
 
             try
             {
-                json = (path, method) switch
-                {
-                    ("/e2e/run", "POST") => HandleRun(request),
-                    ("/e2e/status", "GET") => HandleStatus(),
-                    ("/e2e/result", "GET") => HandleResult(),
-                    ("/e2e/health", "GET") => HandleHealth(),
-                    _ => throw new HttpException(404, $"Not found: {path}")
-                };
+                // Session-id suffix is accepted but ignored (single-session server)
+                if (method == "POST" && path == "/e2e/run")
+                    json = HandleRun(request);
+                else if (method == "GET" && (path == "/e2e/status" || path.StartsWith("/e2e/status/")))
+                    json = HandleStatus();
+                else if (method == "GET" && (path == "/e2e/result" || path.StartsWith("/e2e/result/")))
+                    json = HandleResult();
+                else if (method == "GET" && path == "/e2e/health")
+                    json = HandleHealth();
+                else
+                    throw new HttpException(404, $"Not found: {path}");
 
                 SendJson(response, 200, json);
             }
@@ -205,8 +208,12 @@ namespace FlowE2E
             _status = "running";
             _sessionId = $"e2e-{Guid.NewGuid():N}"[..12];
 
+            // Python sends {"scenario": {...}}; unwrap to the inner scenario JSON
+            // so ScenarioRequestWrapper can find the "steps" array directly.
+            var unwrapped = UnwrapScenario(body);
+
             // Queue scenario for main thread execution
-            _pendingScenario = body;
+            _pendingScenario = unwrapped;
 
             AddLog("info", $"Test session started: {_sessionId}");
 
@@ -411,6 +418,39 @@ namespace FlowE2E
             AddLog("info", $"Screenshot captured: {name}");
         }
 
+        private static string UnwrapScenario(string body)
+        {
+            // If the body has a "scenario" wrapper (sent by PythonBridge), extract it.
+            // We do a lightweight text search rather than a full JSON parse.
+            var trimmed = body.TrimStart();
+            const string key = "\"scenario\"";
+            var keyIdx = trimmed.IndexOf(key, StringComparison.Ordinal);
+            if (keyIdx >= 0)
+            {
+                var colonIdx = trimmed.IndexOf(':', keyIdx + key.Length);
+                if (colonIdx >= 0)
+                {
+                    var start = trimmed.IndexOf('{', colonIdx);
+                    if (start >= 0)
+                    {
+                        // Find the matching closing brace
+                        var depth = 0;
+                        for (var i = start; i < trimmed.Length; i++)
+                        {
+                            if (trimmed[i] == '{') depth++;
+                            else if (trimmed[i] == '}')
+                            {
+                                depth--;
+                                if (depth == 0)
+                                    return trimmed[start..(i + 1)];
+                            }
+                        }
+                    }
+                }
+            }
+            return body;
+        }
+
         // ─────────────────────────────────────────────
         // Logging
         // ─────────────────────────────────────────────
@@ -474,6 +514,7 @@ namespace FlowE2E
             public string error;
         }
 
+        [Serializable]
         private class LogEntry
         {
             public string timestamp;
