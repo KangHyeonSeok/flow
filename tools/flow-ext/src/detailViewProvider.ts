@@ -148,6 +148,8 @@ body {
             </div>`;
         }
 
+        let conditionsHtml = '';
+
         // C3: 자동 승격 이력 패널 - promotion.source, reason, confidence, promotedAt, plannerState
         let promotionHtml = '';
         if (spec?.metadata) {

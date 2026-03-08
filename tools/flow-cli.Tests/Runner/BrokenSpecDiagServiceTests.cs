@@ -68,7 +68,7 @@ public class BrokenSpecDiagServiceTests : IDisposable
                 new BrokenSpecDiagRecord
                 {
                     SpecId = "F-032",
-                    FilePath = @"d:\Projects\flow\.flow\spec-cache\specs\F-032.json",
+                    FilePath = Path.Combine(Path.GetTempPath(), $"nonexistent-{Guid.NewGuid():N}", "specs", "F-032.json"),
                     Status = "unresolved",
                     DetectedAt = DateTime.UtcNow.ToString("o"),
                     RepairAttempts = 1
