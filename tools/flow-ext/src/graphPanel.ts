@@ -126,6 +126,13 @@ export class GraphPanel {
                 await this.openSpecFile(specId);
                 break;
             }
+            case 'saveEdits': {
+                // C4: 편집 내용을 스펙 파일에 저장
+                const ops = msg.ops as Array<{type: string; [key: string]: unknown}>;
+                const result = await this.applyEditOps(ops);
+                this.panel.webview.postMessage({ type: 'saveEditsResult', ok: result.ok, errors: result.errors });
+                break;
+            }
         }
     }
 
@@ -420,6 +427,89 @@ export class GraphPanel {
             height: 10px;
             border-radius: 50%;
         }
+        /* C4/C5: 편집 모드 스타일 */
+        .toolbar button.edit-active {
+            background: var(--vscode-inputValidation-warningBorder, #d7a85d);
+            color: #fff;
+        }
+        .edit-mode-indicator {
+            display: none;
+            font-size: 11px;
+            color: var(--vscode-inputValidation-warningBorder, #d7a85d);
+            font-weight: 600;
+        }
+        /* Modal overlay */
+        .edit-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .edit-modal-overlay.visible { display: flex; }
+        .edit-modal {
+            background: var(--vscode-sideBar-background, #252526);
+            border: 1px solid var(--vscode-panel-border, #555);
+            border-radius: 6px;
+            padding: 16px;
+            min-width: 320px;
+            max-width: 480px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        .edit-modal h3 {
+            font-size: 14px;
+            margin: 0 0 12px 0;
+            color: var(--vscode-foreground, #d4d4d4);
+        }
+        .edit-modal label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: var(--vscode-descriptionForeground, #888);
+        }
+        .edit-modal input, .edit-modal select, .edit-modal textarea {
+            width: 100%;
+            background: var(--vscode-input-background, #3c3c3c);
+            color: var(--vscode-input-foreground, #ccc);
+            border: 1px solid var(--vscode-input-border, #555);
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-top: 3px;
+            box-sizing: border-box;
+        }
+        .edit-modal textarea { min-height: 60px; resize: vertical; font-family: inherit; }
+        .edit-modal .modal-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 12px;
+        }
+        .edit-modal .btn-primary {
+            background: var(--vscode-button-background, #0e639c);
+            color: var(--vscode-button-foreground, #fff);
+            border: none;
+            padding: 5px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .edit-modal .btn-cancel {
+            background: var(--vscode-button-secondaryBackground, #3a3d41);
+            color: var(--vscode-button-secondaryForeground, #ccc);
+            border: none;
+            padding: 5px 12px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        /* edge-source highlight */
+        .edge-source-highlight {
+            border-width: 4px !important;
+            border-color: #ffeb3b !important;
+        }
     </style>
 </head>
 <body>
@@ -465,6 +555,15 @@ export class GraphPanel {
             <div class="legend-item"><div class="legend-dot" style="background:#795548"></div> 완료</div>
             <div class="legend-item"><div class="legend-dot" style="background:#f44336"></div> 폐기</div>
         </div>
+        <div class="separator"></div>
+        <span class="edit-mode-indicator" id="editModeLabel" style="display:none">✏ 편집 모드</span>
+        <button id="btnToggleEdit" class="secondary" title="편집 모드 전환 (C4)">✏</button>
+        <button id="btnUndo" class="secondary" title="실행 취소 Ctrl+Z (C5)" disabled style="display:none">↩ Undo</button>
+        <button id="btnRedo" class="secondary" title="다시 실행 Ctrl+Y (C5)" disabled style="display:none">↪ Redo</button>
+        <button id="btnAddNode" class="secondary" title="노드 추가" style="display:none">+ 노드</button>
+        <button id="btnDeleteNode" class="secondary" title="선택 노드 삭제 (Delete)" style="display:none">🗑</button>
+        <button id="btnAddEdge" class="secondary" title="선택 노드→클릭 노드 의존성 추가" style="display:none">→ 의존</button>
+        <button id="btnSaveEdits" class="secondary" title="편집 내용을 스펙 파일에 저장" style="display:none">💾 저장</button>
     </div>
 
     <div class="main">
@@ -500,11 +599,17 @@ export class GraphPanel {
             throw new Error('cytoscape is not available in webview runtime');
         }
 
+        // ─── C6: 대규모 그래프 청크 로딩 (500+ 노드 지원) ───
+        const _CHUNK = 50;
+        const _totalElems = elements.length;
+        const _firstChunk = _totalElems > _CHUNK ? elements.slice(0, _CHUNK) : elements;
+        const _restElems  = _totalElems > _CHUNK ? elements.slice(_CHUNK) : [];
+
         let cy;
         try {
             cy = cytoscape({
                 container: cyContainer,
-                elements: elements,
+                elements: _firstChunk,
                 style: [
                 // Feature 노드
                 {
@@ -647,18 +752,11 @@ export class GraphPanel {
                     }
                 },
             ],
-                layout: {
-                    name: 'cose',
-                    animate: true,
-                    animationDuration: 500,
-                    nodeRepulsion: function() { return 8000; },
-                    idealEdgeLength: function() { return 80; },
-                    gravity: 0.3,
-                    padding: 30,
-                },
+                layout: { name: 'preset' },
                 minZoom: 0.2,
                 maxZoom: 4,
                 wheelSensitivity: 0.45,
+                textureOnViewport: _totalElems > 100,
             });
         } catch (e) {
             console.error('[SpecGraph] Cytoscape init failed', e);
@@ -666,10 +764,45 @@ export class GraphPanel {
             throw e;
         }
 
+        // C6: 청크 로딩 완료 후 레이아웃 실행
+        function runInitialLayout() {
+            const selLayout = document.getElementById('selLayout');
+            const layoutName = selLayout ? selLayout.value || 'cose' : 'cose';
+            cy.layout(getLayoutOptions(layoutName)).run();
+        }
+        if (_restElems.length > 0) {
+            let _chunkIdx = 0;
+            function _loadNextChunk() {
+                const start = _chunkIdx * _CHUNK;
+                const end = Math.min(start + _CHUNK, _restElems.length);
+                const chunk = _restElems.slice(start, end);
+                if (chunk.length > 0) {
+                    cy.batch(function() { cy.add(chunk); });
+                    _chunkIdx++;
+                }
+                if (_chunkIdx * _CHUNK < _restElems.length) {
+                    requestAnimationFrame(_loadNextChunk);
+                } else {
+                    runInitialLayout();
+                }
+            }
+            requestAnimationFrame(_loadNextChunk);
+        } else {
+            runInitialLayout();
+        }
+
         // ─── 노드 클릭 이벤트 ───
         cy.on('tap', 'node', function(evt) {
             const node = evt.target;
             const id = node.data('id');
+            // C4: 의존성 드래그&드롭 — 엣지 그리기 모드
+            if (window._editEdgeSource) {
+                if (id !== window._editEdgeSource && window._onEditEdgeTarget) {
+                    window._onEditEdgeTarget(window._editEdgeSource, id);
+                }
+                window._clearEditEdgeSource && window._clearEditEdgeSource();
+                return;
+            }
             showDetail(id);
             vscode.postMessage({ type: 'selectNode', nodeId: id });
         });
@@ -990,6 +1123,19 @@ export class GraphPanel {
             if (msg.type === 'focusNode') {
                 applyFocusFilter(msg.nodeId);
                 showDetail(msg.nodeId);
+            } else if (msg.type === 'saveEditsResult') {
+                // C4: 저장 결과 처리
+                if (msg.ok) {
+                    if (window._editSession) {
+                        window._editSession.pendingOps = [];
+                        window._editSession.undoStack = [];
+                        window._editSession.redoStack = [];
+                        if (window._updateUndoRedoButtons) { window._updateUndoRedoButtons(); }
+                    }
+                    alert('저장 완료. 스펙 파일이 업데이트되었습니다.');
+                } else {
+                    alert('저장 실패:\n' + (msg.errors || []).join('\n'));
+                }
             }
         });
 
@@ -1021,7 +1167,333 @@ export class GraphPanel {
         function escapeAttr(str) {
             return escapeHtml(str);
         }
+
+        // ════════════════════════════════════════════════════════
+        // C4: 편집 모드 - 노드 추가/수정/삭제, 의존성 드래그&드롭
+        // C5: Command 스택 기반 Undo/Redo
+        // ════════════════════════════════════════════════════════
+
+        // 편집 세션 상태
+        const _editSession = {
+            active: false,
+            pendingOps: [],
+            undoStack: [],
+            redoStack: [],
+        };
+        window._editSession = _editSession;
+        window._editEdgeSource = null;
+
+        // ─── C5: Command 클래스 ───
+        function AddNodeCmd(spec) {
+            this.spec = spec;
+            this.execute = function() {
+                const color = statusColors[spec.status] || '#9e9e9e';
+                cy.add({
+                    group: 'nodes',
+                    data: {
+                        id: spec.id,
+                        label: spec.id + '\n' + spec.title,
+                        shortLabel: (spec.id.split('-').pop()) || spec.id,
+                        nodeType: spec.nodeType,
+                        status: spec.status,
+                        color: color,
+                        borderColor: color,
+                        description: spec.description || '',
+                        featureId: spec.id,
+                    },
+                    position: { x: (cy.width() / 2) + (Math.random() - 0.5) * 200, y: (cy.height() / 2) + (Math.random() - 0.5) * 200 },
+                });
+                if (spec.parent && cy.getElementById(spec.parent).length > 0) {
+                    cy.add({ group: 'edges', data: { source: spec.parent, target: spec.id, type: 'parent' } });
+                }
+            };
+            this.undo = function() {
+                cy.remove(cy.getElementById(spec.id));
+            };
+            this.toOp = function() { return { type: 'addNode', spec: spec }; };
+        }
+
+        function EditNodeCmd(id, oldData, newData) {
+            this.id = id;
+            this.execute = function() {
+                const node = cy.getElementById(id);
+                if (!node.length) { return; }
+                const color = statusColors[newData.status] || '#9e9e9e';
+                node.data({ status: newData.status, nodeType: newData.nodeType, description: newData.description || '', color: color, borderColor: color, label: id + '\n' + newData.title });
+            };
+            this.undo = function() {
+                const node = cy.getElementById(id);
+                if (!node.length) { return; }
+                const color = statusColors[oldData.status] || '#9e9e9e';
+                node.data({ status: oldData.status, nodeType: oldData.nodeType, description: oldData.description || '', color: color, borderColor: color, label: id + '\n' + oldData.title });
+            };
+            this.toOp = function() { return { type: 'editNode', id: id, changes: newData }; };
+        }
+
+        function DeleteNodeCmd(id) {
+            this.id = id;
+            this._removed = null;
+            this.execute = function() {
+                this._removed = cy.getElementById(id).remove();
+            };
+            this.undo = function() {
+                if (this._removed) { cy.add(this._removed); }
+            };
+            this.toOp = function() { return { type: 'deleteNode', id: id }; };
+        }
+
+        function AddEdgeCmd(source, target) {
+            this.execute = function() {
+                cy.add({ group: 'edges', data: { source: source, target: target, type: 'dependency' } });
+            };
+            this.undo = function() {
+                cy.edges('[source="' + source + '"][target="' + target + '"][type="dependency"]').remove();
+            };
+            this.toOp = function() { return { type: 'addEdge', source: source, target: target }; };
+        }
+
+        // ─── C5: Command 실행/Undo/Redo ───
+        function executeEditCmd(cmd) {
+            cmd.execute();
+            _editSession.undoStack.push(cmd);
+            _editSession.redoStack = [];
+            _editSession.pendingOps.push(cmd.toOp());
+            _updateUndoRedoButtons();
+        }
+
+        function undoEditCmd() {
+            if (!_editSession.undoStack.length) { return; }
+            const cmd = _editSession.undoStack.pop();
+            cmd.undo();
+            _editSession.redoStack.push(cmd);
+            _editSession.pendingOps = _editSession.undoStack.map(function(c) { return c.toOp(); });
+            _updateUndoRedoButtons();
+        }
+
+        function redoEditCmd() {
+            if (!_editSession.redoStack.length) { return; }
+            const cmd = _editSession.redoStack.pop();
+            cmd.execute();
+            _editSession.undoStack.push(cmd);
+            _editSession.pendingOps.push(cmd.toOp());
+            _updateUndoRedoButtons();
+        }
+
+        function _updateUndoRedoButtons() {
+            const u = document.getElementById('btnUndo');
+            const r = document.getElementById('btnRedo');
+            if (u) { u.disabled = _editSession.undoStack.length === 0; }
+            if (r) { r.disabled = _editSession.redoStack.length === 0; }
+        }
+        window._updateUndoRedoButtons = _updateUndoRedoButtons;
+
+        // ─── Edge Draw Mode (C4: 의존성 드래그&드롭) ───
+        window._onEditEdgeTarget = function(source, target) {
+            executeEditCmd(new AddEdgeCmd(source, target));
+        };
+        window._clearEditEdgeSource = function() {
+            if (window._editEdgeSource) {
+                cy.getElementById(window._editEdgeSource).style({
+                    'border-width': '',
+                    'border-color': '',
+                });
+            }
+            window._editEdgeSource = null;
+            document.getElementById('cy').style.cursor = 'default';
+        };
+
+        function enterEdgeDrawMode(nodeId) {
+            window._clearEditEdgeSource();
+            window._editEdgeSource = nodeId;
+            cy.getElementById(nodeId).style({ 'border-width': 4, 'border-color': '#ffeb3b' });
+            document.getElementById('cy').style.cursor = 'crosshair';
+        }
+
+        // ─── C5: Keyboard Undo/Redo + Delete ───
+        document.addEventListener('keydown', function(e) {
+            if (!_editSession.active) { return; }
+            const tag = document.activeElement && document.activeElement.tagName;
+            if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') { return; }
+            if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+                undoEditCmd(); e.preventDefault();
+            } else if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+                redoEditCmd(); e.preventDefault();
+            } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                const sel = cy.$(':selected');
+                if (sel.length === 1 && sel.isNode()) {
+                    if (confirm('노드 "' + sel.data('id') + '"을(를) 삭제하시겠습니까?')) {
+                        executeEditCmd(new DeleteNodeCmd(sel.data('id')));
+                    }
+                    e.preventDefault();
+                }
+            }
+        });
+
+        // ─── Double-tap: Add / Edit node ───
+        cy.on('dbltap', 'node', function(evt) {
+            if (!_editSession.active) { return; }
+            const node = evt.target;
+            const id = node.data('id');
+            const titlePart = (node.data('label') || '').split('\n');
+            const title = titlePart.length > 1 ? titlePart.slice(1).join(' ') : '';
+            document.getElementById('modalTitle').textContent = '스펙 노드 편집';
+            document.getElementById('modalNodeId').value = id;
+            document.getElementById('modalNodeId').disabled = true;
+            document.getElementById('modalNodeTitle').value = title;
+            document.getElementById('modalNodeStatus').value = node.data('status') || 'draft';
+            document.getElementById('modalNodeType').value = node.data('nodeType') || 'feature';
+            document.getElementById('modalNodeDesc').value = node.data('description') || '';
+            document.getElementById('modalNodeParent').value = '';
+            const modal = document.getElementById('editModal');
+            modal.dataset.mode = 'edit';
+            modal.dataset.editId = id;
+            modal.classList.add('visible');
+        });
+
+        cy.on('dbltap', function(evt) {
+            if (!_editSession.active) { return; }
+            if (evt.target !== cy) { return; }
+            // Add new node
+            document.getElementById('modalTitle').textContent = '새 스펙 노드 추가';
+            document.getElementById('modalNodeId').value = 'F-' + String(Date.now()).slice(-4);
+            document.getElementById('modalNodeId').disabled = false;
+            document.getElementById('modalNodeTitle').value = '';
+            document.getElementById('modalNodeStatus').value = 'draft';
+            document.getElementById('modalNodeType').value = 'feature';
+            document.getElementById('modalNodeDesc').value = '';
+            document.getElementById('modalNodeParent').value = '';
+            const modal = document.getElementById('editModal');
+            modal.dataset.mode = 'add';
+            modal.dataset.editId = '';
+            modal.classList.add('visible');
+        });
+
+        // ─── Modal submit/cancel ───
+        document.getElementById('modalCancelBtn').addEventListener('click', function() {
+            document.getElementById('editModal').classList.remove('visible');
+            document.getElementById('modalNodeId').disabled = false;
+        });
+
+        document.getElementById('modalSubmitBtn').addEventListener('click', function() {
+            const modal = document.getElementById('editModal');
+            const mode = modal.dataset.mode;
+            const id = document.getElementById('modalNodeId').value.trim();
+            const title = document.getElementById('modalNodeTitle').value.trim();
+            const status = document.getElementById('modalNodeStatus').value;
+            const nodeType = document.getElementById('modalNodeType').value;
+            const description = document.getElementById('modalNodeDesc').value.trim();
+            const parent = document.getElementById('modalNodeParent').value.trim() || null;
+            if (!id || !title) { alert('ID와 제목을 입력하세요'); return; }
+
+            if (mode === 'add') {
+                if (cy.getElementById(id).length > 0) { alert('이미 존재하는 ID: ' + id); return; }
+                executeEditCmd(new AddNodeCmd({ id: id, title: title, status: status, nodeType: nodeType, description: description, parent: parent, dependencies: [] }));
+            } else {
+                const editId = modal.dataset.editId;
+                const node = cy.getElementById(editId);
+                if (!node.length) { return; }
+                const curLabel = (node.data('label') || '').split('\n');
+                const oldTitle = curLabel.length > 1 ? curLabel.slice(1).join(' ') : '';
+                const oldData = { title: oldTitle, status: node.data('status'), nodeType: node.data('nodeType'), description: node.data('description') || '' };
+                executeEditCmd(new EditNodeCmd(editId, oldData, { title: title, status: status, nodeType: nodeType, description: description }));
+            }
+            modal.classList.remove('visible');
+            document.getElementById('modalNodeId').disabled = false;
+        });
+
+        // ─── Edit Mode Toggle ───
+        document.getElementById('btnToggleEdit').addEventListener('click', function() {
+            _editSession.active = !_editSession.active;
+            const btn = document.getElementById('btnToggleEdit');
+            const editOnlyIds = ['btnUndo', 'btnRedo', 'btnAddNode', 'btnDeleteNode', 'btnAddEdge', 'btnSaveEdits'];
+            const label = document.getElementById('editModeLabel');
+            if (_editSession.active) {
+                btn.classList.add('edit-active');
+                btn.title = '편집 모드 종료';
+                editOnlyIds.forEach(function(id) { const el = document.getElementById(id); if (el) { el.style.display = ''; } });
+                if (label) { label.style.display = 'inline'; }
+            } else {
+                btn.classList.remove('edit-active');
+                btn.title = '편집 모드 전환';
+                editOnlyIds.forEach(function(id) { const el = document.getElementById(id); if (el) { el.style.display = 'none'; } });
+                if (label) { label.style.display = 'none'; }
+                window._clearEditEdgeSource();
+            }
+        });
+
+        document.getElementById('btnUndo').addEventListener('click', undoEditCmd);
+        document.getElementById('btnRedo').addEventListener('click', redoEditCmd);
+
+        document.getElementById('btnAddNode').addEventListener('click', function() {
+            document.getElementById('modalTitle').textContent = '새 스펙 노드 추가';
+            document.getElementById('modalNodeId').value = 'F-' + String(Date.now()).slice(-4);
+            document.getElementById('modalNodeId').disabled = false;
+            document.getElementById('modalNodeTitle').value = '';
+            document.getElementById('modalNodeStatus').value = 'draft';
+            document.getElementById('modalNodeType').value = 'feature';
+            document.getElementById('modalNodeDesc').value = '';
+            document.getElementById('modalNodeParent').value = '';
+            const modal = document.getElementById('editModal');
+            modal.dataset.mode = 'add';
+            modal.dataset.editId = '';
+            modal.classList.add('visible');
+        });
+
+        document.getElementById('btnDeleteNode').addEventListener('click', function() {
+            const sel = cy.$(':selected');
+            if (sel.length !== 1 || !sel.isNode()) { alert('삭제할 노드를 먼저 선택하세요'); return; }
+            if (confirm('노드 "' + sel.data('id') + '"을(를) 삭제하시겠습니까?')) {
+                executeEditCmd(new DeleteNodeCmd(sel.data('id')));
+            }
+        });
+
+        document.getElementById('btnAddEdge').addEventListener('click', function() {
+            const sel = cy.$(':selected');
+            if (sel.length !== 1 || !sel.isNode()) { alert('소스 노드를 먼저 선택한 후 클릭하세요'); return; }
+            enterEdgeDrawMode(sel.data('id'));
+            alert('타깃 노드를 클릭하면 의존성 엣지가 추가됩니다 (ESC로 취소)');
+        });
+
+        document.getElementById('btnSaveEdits').addEventListener('click', function() {
+            if (_editSession.pendingOps.length === 0) { alert('변경 사항이 없습니다'); return; }
+            vscode.postMessage({ type: 'saveEdits', ops: _editSession.pendingOps });
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && window._editEdgeSource) {
+                window._clearEditEdgeSource();
+            }
+        });
+
     </script>
+
+    <!-- C4: 편집 모드 모달 -->
+    <div id="editModal" class="edit-modal-overlay">
+        <div class="edit-modal">
+            <h3 id="modalTitle">노드 추가/편집</h3>
+            <label>ID<input id="modalNodeId" type="text" placeholder="F-999"></label>
+            <label>제목<input id="modalNodeTitle" type="text" placeholder="기능 제목"></label>
+            <label>상태<select id="modalNodeStatus">
+                <option value="draft">draft</option>
+                <option value="queued">queued</option>
+                <option value="working">working</option>
+                <option value="needs-review">needs-review</option>
+                <option value="verified">verified</option>
+                <option value="deprecated">deprecated</option>
+                <option value="done">done</option>
+            </select></label>
+            <label>타입<select id="modalNodeType">
+                <option value="feature">feature</option>
+                <option value="task">task</option>
+            </select></label>
+            <label>설명<textarea id="modalNodeDesc" placeholder="기능 설명 (선택)"></textarea></label>
+            <label>부모 ID<input id="modalNodeParent" type="text" placeholder="F-001 (선택)"></label>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="modalCancelBtn">취소</button>
+                <button class="btn-primary" id="modalSubmitBtn">확인</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>`;
     }
@@ -1104,6 +1576,105 @@ export class GraphPanel {
         const ng = Math.min(255, Math.round(g + (255 - g) * amount));
         const nb = Math.min(255, Math.round(b + (255 - b) * amount));
         return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
+    }
+
+    /**
+     * C4: 편집 ops를 스펙 파일에 적용한다.
+     * draft 상태 메모리 변경을 일괄 검증 후 저장.
+     */
+    private async applyEditOps(
+        ops: Array<{type: string; [key: string]: unknown}>,
+    ): Promise<{ok: boolean; errors: string[]}> {
+        const fs = require('fs') as typeof import('fs');
+        const pathMod = require('path') as typeof import('path');
+        const errors: string[] = [];
+        const specsDir = this.loader.specsDirectory;
+
+        // 유효성 검사 (저장 전)
+        for (const op of ops) {
+            if (op.type === 'addNode') {
+                const spec = op.spec as Record<string, unknown>;
+                if (!spec.id || typeof spec.id !== 'string') { errors.push('addNode: ID 없음'); continue; }
+                if (!spec.title || typeof spec.title !== 'string') { errors.push(`addNode ${spec.id}: title 없음`); }
+            }
+        }
+        if (errors.length > 0) { return { ok: false, errors }; }
+
+        // 적용
+        for (const op of ops) {
+            try {
+                if (op.type === 'addNode') {
+                    const spec = op.spec as Record<string, unknown>;
+                    const id = spec.id as string;
+                    const filePath = pathMod.join(specsDir, `${id}.json`);
+                    if (fs.existsSync(filePath)) { errors.push(`addNode: ${id} 이미 존재함`); continue; }
+                    const newSpec = {
+                        schemaVersion: 2,
+                        id,
+                        nodeType: spec.nodeType || 'feature',
+                        title: spec.title || id,
+                        description: spec.description || '',
+                        status: spec.status || 'draft',
+                        parent: spec.parent || null,
+                        dependencies: (spec.dependencies as string[]) || [],
+                        conditions: [],
+                        codeRefs: [],
+                        evidence: [],
+                        tags: [],
+                        metadata: {},
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    };
+                    fs.writeFileSync(filePath, JSON.stringify(newSpec, null, 2), 'utf-8');
+
+                } else if (op.type === 'editNode') {
+                    const id = op.id as string;
+                    const changes = op.changes as Record<string, unknown>;
+                    const filePath = pathMod.join(specsDir, `${id}.json`);
+                    if (!fs.existsSync(filePath)) { errors.push(`editNode: ${id} 없음`); continue; }
+                    const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+                    const updated = { ...existing, ...changes, updatedAt: new Date().toISOString() };
+                    fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+
+                } else if (op.type === 'deleteNode') {
+                    const id = op.id as string;
+                    const filePath = pathMod.join(specsDir, `${id}.json`);
+                    if (fs.existsSync(filePath)) { fs.unlinkSync(filePath); }
+
+                } else if (op.type === 'addEdge') {
+                    // 소스 spec의 dependencies에 target 추가
+                    const source = op.source as string;
+                    const target = op.target as string;
+                    const filePath = pathMod.join(specsDir, `${source}.json`);
+                    if (!fs.existsSync(filePath)) { errors.push(`addEdge: 소스 ${source} 없음`); continue; }
+                    const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+                    const deps = (existing.dependencies as string[]) || [];
+                    if (!deps.includes(target)) {
+                        existing.dependencies = [...deps, target];
+                        existing.updatedAt = new Date().toISOString();
+                        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
+                    }
+
+                } else if (op.type === 'removeEdge') {
+                    const source = op.source as string;
+                    const target = op.target as string;
+                    const filePath = pathMod.join(specsDir, `${source}.json`);
+                    if (fs.existsSync(filePath)) {
+                        const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+                        existing.dependencies = ((existing.dependencies as string[]) || []).filter((d: string) => d !== target);
+                        existing.updatedAt = new Date().toISOString();
+                        fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), 'utf-8');
+                    }
+                }
+            } catch (err) {
+                errors.push(`${op.type} ${String(op.id || op.source || '')}: ${String(err)}`);
+            }
+        }
+
+        if (errors.length === 0) {
+            await this.loader.reload();
+        }
+        return { ok: errors.length === 0, errors };
     }
 
     dispose(): void {
