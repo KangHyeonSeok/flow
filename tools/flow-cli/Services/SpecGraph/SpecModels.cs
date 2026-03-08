@@ -83,6 +83,7 @@ public class SpecCondition
 
     /// <summary>연결된 테스트 결과 목록 (F-014)</summary>
     [JsonPropertyName("tests")]
+    [JsonConverter(typeof(TestLinkJsonConverter))]
     public List<TestLink> Tests { get; set; } = new();
 
     [JsonPropertyName("metadata")]

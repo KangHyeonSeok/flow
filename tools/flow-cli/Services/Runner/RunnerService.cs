@@ -98,16 +98,20 @@ public class RunnerService
 
         _log.Info("cycle", "=== Runner 사이클 시작 ===");
 
-        // 0. 이전 크래시 복구
-        RecoverFromCrash();
-
-        // 1. 스펙 저장소 동기화 (F-080-C3: git clone/pull로 최신 스펙을 로컬 캐시로 가져옴)
+        // 0. 스펙 저장소 동기화 (크래시 복구보다 먼저 실행 — 최신 스펙 상태 기반 복구)
         _log.Info("sync", "스펙 저장소 동기화 시작");
         var synced = await SyncSpecRepoAsync();
         if (!synced)
         {
             _log.Error("sync", "스펙 저장소 동기화 실패, 사이클 중단");
             return results;
+        }
+
+        // 1. 이전 크래시 복구 (sync 후 실행 — 로컬 변경 없이 pull된 최신 상태에서 복구)
+        var crashRecovered = RecoverFromCrash();
+        if (crashRecovered > 0 && _specRepo != null)
+        {
+            await CommitSpecRepoAsync("[runner] Recover crashed specs to needs-review");
         }
 
         // 1.5. 검토 대기 스펙 자동 검증
@@ -1170,15 +1174,16 @@ public class RunnerService
 
     /// <summary>
     /// 비정상 종료 복구: working 상태의 스펙을 needs-review로 전환한다.</summary>
-    private void RecoverFromCrash()
+    private int RecoverFromCrash()
     {
         var allSpecs = _specStore.GetAll();
         var staleSpecs = allSpecs.Where(s => s.Status == "working").ToList();
 
-        if (staleSpecs.Count == 0) return;
+        if (staleSpecs.Count == 0) return 0;
 
         _log.Warn("recovery", $"비정상 종료된 작업 {staleSpecs.Count}개 발견, 복구 중...");
 
+        var recovered = 0;
         foreach (var spec in staleSpecs)
         {
             var prevInstanceId = spec.Metadata?.ContainsKey("runnerInstanceId") == true
@@ -1189,6 +1194,7 @@ public class RunnerService
             if (prevInstanceId != _instanceId)
             {
                 MarkSpecFailed(spec, $"Runner 인스턴스 비정상 종료 (이전 인스턴스: {prevInstanceId})");
+                recovered++;
 
                 // 잔여 worktree 정리 시도
                 try
@@ -1201,6 +1207,8 @@ public class RunnerService
                 }
             }
         }
+
+        return recovered;
     }
 
     /// <summary>PID 파일 기록</summary>

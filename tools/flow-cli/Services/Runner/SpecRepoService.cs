@@ -139,8 +139,6 @@ public class SpecRepoService
         }
         catch (Exception ex)
         {
-            _log.Error("spec-repo", $"스펙 저장소 동기화 예외: {ex.Message}");
-
             // 기존 캐시가 있으면 폴백 — 오래된 스펙으로 실행될 수 있음을 ERROR로 명시
             if (Directory.Exists(_specsDir) && Directory.GetFiles(_specsDir, "*.json").Length > 0)
             {
@@ -148,6 +146,7 @@ public class SpecRepoService
                 return true;
             }
 
+            _log.Error("spec-repo", $"스펙 저장소 동기화 예외, 사용 가능한 캐시 없음: {ex.Message}");
             return false;
         }
     }
@@ -250,19 +249,28 @@ public class SpecRepoService
             return false;
         }
 
-        var recovery = await RestoreSpecsFromStashAsync(stashRef);
-        if (recovery.RestoredFileCount > 0 || recovery.RestoredFieldCount > 0 || recovery.SkippedFileCount > 0)
+        try
         {
-            _log.Info(
-                "spec-repo",
-                $"stash 복구 완료: files={recovery.RestoredFileCount}, fields={recovery.RestoredFieldCount}, skipped={recovery.SkippedFileCount}"
-            );
+            var recovery = await RestoreSpecsFromStashAsync(stashRef);
+            if (recovery.RestoredFileCount > 0 || recovery.RestoredFieldCount > 0 || recovery.SkippedFileCount > 0)
+            {
+                _log.Info(
+                    "spec-repo",
+                    $"stash 복구 완료: files={recovery.RestoredFileCount}, fields={recovery.RestoredFieldCount}, skipped={recovery.SkippedFileCount}"
+                );
+            }
         }
-
-        var dropResult = await RunGitAsync($"stash drop {stashRef}", _localPath);
-        if (!dropResult.Success)
+        catch (Exception ex)
         {
-            _log.Warn("spec-repo", $"stash drop 실패: {dropResult.Error}");
+            _log.Warn("spec-repo", $"stash 복구 중 오류 발생 (pull은 완료됨, 원격 스펙 사용): {ex.Message}");
+        }
+        finally
+        {
+            var dropResult = await RunGitAsync($"stash drop {stashRef}", _localPath);
+            if (!dropResult.Success)
+            {
+                _log.Warn("spec-repo", $"stash drop 실패: {dropResult.Error}");
+            }
         }
 
         _log.Info("spec-repo", "스펙 저장소 pull 완료");
@@ -288,34 +296,47 @@ public class SpecRepoService
             if (!IsSpecJsonPath(relativePath))
                 continue;
 
-            var currentPath = Path.Combine(_localPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
-            var baseJson = await TryGetGitFileTextAsync($"{stashRef}^1", relativePath);
-            var localJson = await TryGetGitFileTextAsync(stashRef, relativePath);
-            var currentJson = File.Exists(currentPath) ? await File.ReadAllTextAsync(currentPath) : null;
-
-            if (localJson is null)
+            try
             {
+                await RestoreSingleSpecFromStashAsync(stashRef, relativePath, summary);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("spec-repo", $"stash 복구 중 파일 오류 (건너뜀): {relativePath} — {ex.Message}");
                 summary.SkippedFileCount++;
-                continue;
             }
-
-            if (currentJson is null)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(currentPath)!);
-                await File.WriteAllTextAsync(currentPath, localJson);
-                summary.RestoredFileCount++;
-                continue;
-            }
-
-            var merge = MergeSpecJson(baseJson, localJson, currentJson);
-            if (!merge.Changed)
-                continue;
-
-            await File.WriteAllTextAsync(currentPath, merge.MergedJson);
-            summary.RestoredFieldCount += merge.RestoredPathCount;
         }
 
         return summary;
+    }
+
+    private async Task RestoreSingleSpecFromStashAsync(string stashRef, string relativePath, SpecRecoverySummary summary)
+    {
+        var currentPath = Path.Combine(_localPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        var baseJson = await TryGetGitFileTextAsync($"{stashRef}^1", relativePath);
+        var localJson = await TryGetGitFileTextAsync(stashRef, relativePath);
+        var currentJson = File.Exists(currentPath) ? await File.ReadAllTextAsync(currentPath) : null;
+
+        if (localJson is null)
+        {
+            summary.SkippedFileCount++;
+            return;
+        }
+
+        if (currentJson is null)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(currentPath)!);
+            await File.WriteAllTextAsync(currentPath, localJson);
+            summary.RestoredFileCount++;
+            return;
+        }
+
+        var merge = MergeSpecJson(baseJson, localJson, currentJson);
+        if (!merge.Changed)
+            return;
+
+        await File.WriteAllTextAsync(currentPath, merge.MergedJson);
+        summary.RestoredFieldCount += merge.RestoredPathCount;
     }
 
     private async Task<List<string>> GetStashedFilesAsync(string stashRef)
@@ -512,7 +533,10 @@ public class SpecRepoService
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
+                    // UTF-8 인코딩 명시: 한글 등 멀티바이트 문자가 포함된 파일 내용을 정확히 읽기 위함
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8
                 }
             };
 
