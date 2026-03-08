@@ -25,9 +25,9 @@ public class CopilotService
     /// Copilot CLI를 호출하여 스펙을 구현한다.
     /// worktreePath에서 실행하여 해당 작업 디렉토리에서 코드를 생성/수정.
     /// </summary>
-    public async Task<CopilotResult> ImplementSpecAsync(string specId, string specJson, string worktreePath)
+    public async Task<CopilotResult> ImplementSpecAsync(string specId, string specJson, string worktreePath, string? previousReview = null)
     {
-        var prompt = BuildImplementPrompt(specId, specJson);
+        var prompt = BuildImplementPrompt(specId, specJson, previousReview);
         return await RunCopilotAsync(prompt, worktreePath, specId, "implement");
     }
 
@@ -208,13 +208,22 @@ public class CopilotService
         }
     }
 
-    private static string BuildImplementPrompt(string specId, string specJson)
+    private static string BuildImplementPrompt(string specId, string specJson, string? previousReview)
     {
+        var reviewSection = string.IsNullOrWhiteSpace(previousReview)
+            ? ""
+            : $"""
+
+
+                이전 구현 검토 결과 (참고하여 다른 접근 방식을 사용하세요):
+                {previousReview}
+                """;
+
         return $"""
             다음 스펙을 구현하세요. 스펙의 description과 conditions(수락 조건)를 모두 만족하도록 코드를 작성하세요.
             기존 프로젝트 구조와 코딩 패턴을 따르세요.
             구현 후 빌드가 통과하는지 확인하세요.
-
+            {reviewSection}
             스펙 ID: {specId}
             스펙 내용:
             {specJson}

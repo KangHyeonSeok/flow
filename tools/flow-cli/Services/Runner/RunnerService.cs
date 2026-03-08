@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FlowCLI.Services.SpecGraph;
 
@@ -37,6 +39,79 @@ public class RunnerService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    /// Runner 내부용 메타데이터 키 (Copilot에게 불필요)
+    private static readonly HashSet<string> PromptMetaExcludeKeys =
+    [
+        "runnerInstanceId", "runnerStartedAt", "implementationPlan",
+        "selectionReason", "lastCompletedAt", "lastCompletedBy",
+        "lastReviewAt", "lastReviewBy", "worktreePath", "worktreeBranch",
+        "review", "reviewDisposition", "plannerState", "questionStatus",
+        "lastError", "lastErrorAt", "lastVerifiedAt", "lastVerifiedBy",
+        "verificationSource", "lastAnsweredAt",
+    ];
+
+    /// <summary>
+    /// Copilot 프롬프트용 스펙 JSON 생성.
+    /// 구현에 불필요한 runner 내부 메타데이터, 빈 배열, 타임스탬프를 제거하여 토큰을 절약한다.
+    /// </summary>
+    private static string BuildSpecPromptJson(SpecNode spec)
+    {
+
+        var node = JsonSerializer.SerializeToNode(spec, SpecJsonOpts)!.AsObject();
+
+        // 구현에 불필요한 최상위 필드 제거
+        node.Remove("schemaVersion");
+        node.Remove("createdAt");
+        node.Remove("updatedAt");
+
+        // 항상 비어있거나 불필요한 관계 필드 제거 (빈 배열만)
+        RemoveIfEmptyArray(node, "supersedes");
+        RemoveIfEmptyArray(node, "supersededBy");
+        RemoveIfEmptyArray(node, "mutates");
+        RemoveIfEmptyArray(node, "mutatedBy");
+        RemoveIfEmptyArray(node, "changeLog");
+        RemoveIfEmptyArray(node, "githubRefs");
+        RemoveIfEmptyArray(node, "docLinks");
+        RemoveIfEmptyArray(node, "evidence");
+        RemoveIfEmptyArray(node, "codeRefs");
+        RemoveIfEmptyArray(node, "tags");
+
+        // 조건 내 불필요한 필드 제거
+        if (node["conditions"] is JsonArray conditions)
+        {
+            foreach (var cond in conditions)
+            {
+                if (cond is not JsonObject condObj) { continue; }
+                condObj.Remove("nodeType"); // 항상 "condition"으로 자명함
+                RemoveIfEmptyArray(condObj, "evidence");
+                RemoveIfEmptyArray(condObj, "tests");
+                RemoveIfEmptyArray(condObj, "codeRefs");
+                RemoveIfEmptyArray(condObj, "githubRefs");
+                RemoveIfEmptyArray(condObj, "docLinks");
+            }
+        }
+
+        // metadata: runner 내부 키 제거, 비어있으면 통째로 제거
+        if (node["metadata"] is JsonObject metadata)
+        {
+            foreach (var key in PromptMetaExcludeKeys)
+            {
+                metadata.Remove(key);
+            }
+            if (metadata.Count == 0)
+            {
+                node.Remove("metadata");
+            }
+        }
+
+        return node.ToJsonString(SpecJsonOpts);
+
+        static void RemoveIfEmptyArray(JsonObject obj, string key)
+        {
+            if (obj[key] is JsonArray arr && arr.Count == 0) { obj.Remove(key); }
+        }
+    }
 
     public RunnerService(string projectRoot, RunnerConfig config, string specCacheDir)
     {
@@ -487,8 +562,9 @@ public class RunnerService
             }
 
             // 3. Copilot으로 구현 시도
-            var specJson = JsonSerializer.Serialize(spec, SpecJsonOpts);
-            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, worktreePath);
+            var specJson = BuildSpecPromptJson(spec);
+            var previousReview = BuildPreviousReviewSection(spec);
+            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, worktreePath, previousReview);
 
             if (!copilotResult.Success)
             {
@@ -511,6 +587,12 @@ public class RunnerService
             }
 
             // 5. 메인 브랜치로 머지
+            // 머지 전: runner가 main 작업 디렉토리에 기록한 spec 파일의 uncommitted 변경사항을 버린다.
+            // worktree 브랜치도 같은 spec 파일을 수정·커밋하면 git이 머지를 거부하기 때문.
+            // runner는 머지 성공 후 즉시 status/metadata를 재작성하므로 이 변경사항은 복원된다.
+            var specRelPath = Path.GetRelativePath(_projectRoot, Path.Combine(_specStore.SpecsDir, $"{spec.Id}.json"))
+                .Replace('\\', '/');
+            await _git.DiscardLocalChangesAsync(specRelPath);
             var (mergeSuccess, hasConflict) = await _git.MergeToMainAsync(spec.Id, _config.MainBranch);
 
             if (!mergeSuccess && hasConflict)
@@ -827,6 +909,9 @@ public class RunnerService
         spec.Metadata["lastError"] = error;
         spec.Metadata["lastErrorAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["runnerInstanceId"] = _instanceId;
+        var attempts = GetMetadataInt(spec.Metadata, "implementationAttempts") + 1;
+        spec.Metadata["implementationAttempts"] = attempts;
+        _log.Warn("status", $"구현 실패 횟수: {attempts}", spec.Id);
         if (worktreePath != null)
         {
             spec.Metadata["worktreePath"] = worktreePath;
@@ -1374,16 +1459,15 @@ public class RunnerService
 
     private async Task<SpecWorkResult?> ReviewNextSpecAsync(CancellationToken cancellationToken)
     {
-        if (_specRepo == null)
+        // 로컬 모드(_specRepo == null)에서도 리뷰 루프가 동작하도록 sync는 optional로 처리한다.
+        if (_specRepo != null)
         {
-            return null;
-        }
-
-        var synced = await SyncSpecRepoAsync(cancellationToken);
-        if (!synced)
-        {
-            _log.Warn("review-loop", "검토 루프용 스펙 저장소 동기화 실패");
-            return null;
+            var synced = await SyncSpecRepoAsync(cancellationToken);
+            if (!synced)
+            {
+                _log.Warn("review-loop", "검토 루프용 스펙 저장소 동기화 실패");
+                return null;
+            }
         }
 
         var candidate = FindNextReviewCandidate();
@@ -1402,7 +1486,7 @@ public class RunnerService
 
         _log.Info("review-loop", $"검토 대기 스펙 분석 시작: {candidate.Id}", candidate.Id);
 
-        var specJson = JsonSerializer.Serialize(candidate, SpecJsonOpts);
+        var specJson = BuildSpecPromptJson(candidate);
         var reviewContext = BuildReviewContext(candidate);
         var reviewResult = await _copilot.ReviewSpecAsync(candidate, specJson, reviewContext, _projectRoot, _instanceId);
 
@@ -1533,13 +1617,49 @@ public class RunnerService
         }
     }
 
-    internal static void ApplyReviewAnalysis(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, DateTime reviewedAtUtc)
+    internal static void ApplyReviewAnalysis(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, DateTime reviewedAtUtc, int maxAttempts = 3)
     {
+        const string RetryLimitQuestionId = "retry-limit-reached";
         spec.Metadata ??= new Dictionary<string, object>();
 
         var reviewedAt = reviewedAtUtc.ToString("o");
         var questions = BuildReviewQuestions(spec, analysis, reviewerId, reviewedAt);
         var hasOpenQuestions = questions.Any(q => string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
+
+        // 사용자가 retry-limit-reached 질문에 답변한 경우 시도 카운터 초기화 (새 예산 부여)
+        var hasAnsweredRetryLimit = questions.Any(q =>
+            q.Id == RetryLimitQuestionId &&
+            !string.Equals(q.Status, "open", StringComparison.OrdinalIgnoreCase));
+        if (hasAnsweredRetryLimit)
+        {
+            spec.Metadata["implementationAttempts"] = 0;
+        }
+
+        // 최대 시도 횟수 초과 시 사용자 개입 강제 (자동 requeue 차단)
+        if (!hasOpenQuestions && maxAttempts > 0)
+        {
+            var attempts = GetMetadataInt(spec.Metadata, "implementationAttempts");
+            if (attempts >= maxAttempts)
+            {
+                questions.Add(new SpecReviewQuestion
+                {
+                    Id = RetryLimitQuestionId,
+                    Type = "user-decision",
+                    Question = $"자동 구현이 {attempts}회 연속 실패했습니다. 계속 자동 재시도할까요, 아니면 스펙을 수정해야 할까요?",
+                    Why = $"자동 재시도 한도({maxAttempts}회)에 도달했습니다. 사용자의 결정이 필요합니다.",
+                    Status = "open",
+                    RequestedAt = reviewedAt,
+                    RequestedBy = reviewerId
+                });
+                hasOpenQuestions = true;
+            }
+        }
+
+        // 재배치 시 시도 카운터 초기화
+        if (!hasOpenQuestions)
+        {
+            spec.Metadata["implementationAttempts"] = 0;
+        }
 
         // 미해결 질문이 있으면 "needs-review" 상태 유지, 없으면 "queued"로 재배치한다.
         spec.Status = hasOpenQuestions ? "needs-review" : "queued";
@@ -1848,6 +1968,114 @@ public class RunnerService
         }
 
         return null;
+    }
+
+    private static string? BuildPreviousReviewSection(SpecNode spec)
+    {
+        if (spec.Metadata == null) return null;
+        if (!spec.Metadata.TryGetValue("review", out var reviewObj)) return null;
+
+        var sb = new StringBuilder();
+
+        // review 객체에서 관련 필드 추출
+        string? summary = null;
+        List<string>? failureReasons = null;
+        List<string>? suggestedAttempts = null;
+
+        if (reviewObj is JsonElement reviewEl && reviewEl.ValueKind == JsonValueKind.Object)
+        {
+            summary = GetString(reviewEl, "summary");
+            failureReasons = GetStringArray(reviewEl, "failureReasons");
+            suggestedAttempts = GetStringArray(reviewEl, "suggestedAttempts");
+        }
+        else if (reviewObj is System.Text.Json.Nodes.JsonObject reviewNode)
+        {
+            summary = reviewNode["summary"]?.GetValue<string>();
+            failureReasons = reviewNode["failureReasons"]?.AsArray().Select(n => n?.GetValue<string>()).OfType<string>().ToList();
+            suggestedAttempts = reviewNode["suggestedAttempts"]?.AsArray().Select(n => n?.GetValue<string>()).OfType<string>().ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(summary))
+            sb.AppendLine($"검토 요약: {summary}");
+
+        if (failureReasons is { Count: > 0 })
+        {
+            sb.AppendLine("실패 원인:");
+            foreach (var r in failureReasons) sb.AppendLine($"  - {r}");
+        }
+
+        if (suggestedAttempts is { Count: > 0 })
+        {
+            sb.AppendLine("권장 접근 방법:");
+            foreach (var a in suggestedAttempts) sb.AppendLine($"  - {a}");
+        }
+
+        // 답변된 질문 포함
+        if (spec.Metadata.TryGetValue("questions", out var questionsObj))
+        {
+            var answered = ExtractAnsweredQuestions(questionsObj);
+            if (answered.Count > 0)
+            {
+                sb.AppendLine("사용자 답변:");
+                foreach (var (q, a) in answered)
+                {
+                    sb.AppendLine($"  Q: {q}");
+                    sb.AppendLine($"  A: {a}");
+                }
+            }
+        }
+
+        var result = sb.ToString().Trim();
+        return string.IsNullOrEmpty(result) ? null : result;
+    }
+
+    private static List<(string Question, string Answer)> ExtractAnsweredQuestions(object questionsObj)
+    {
+        var result = new List<(string, string)>();
+        try
+        {
+            if (questionsObj is JsonElement je && je.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in je.EnumerateArray())
+                {
+                    var status = GetString(item, "status");
+                    var answer = GetString(item, "answer");
+                    if (!string.Equals(status, "open", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(answer))
+                    {
+                        var question = GetString(item, "question") ?? "";
+                        result.Add((question, answer));
+                    }
+                }
+            }
+            else if (questionsObj is System.Text.Json.Nodes.JsonArray arr)
+            {
+                foreach (var item in arr)
+                {
+                    if (item is not System.Text.Json.Nodes.JsonObject obj) continue;
+                    var status = obj["status"]?.GetValue<string>();
+                    var answer = obj["answer"]?.GetValue<string>();
+                    if (!string.Equals(status, "open", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(answer))
+                    {
+                        var question = obj["question"]?.GetValue<string>() ?? "";
+                        result.Add((question!, answer!));
+                    }
+                }
+            }
+        }
+        catch { /* ignore */ }
+        return result;
+    }
+
+    private static int GetMetadataInt(Dictionary<string, object> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var val)) return 0;
+        return val switch
+        {
+            int i => i,
+            long l => (int)l,
+            JsonElement je when je.ValueKind == JsonValueKind.Number => je.TryGetInt32(out var n) ? n : 0,
+            _ => int.TryParse(val?.ToString(), out var parsed) ? parsed : 0
+        };
     }
 
     private static string BuildReviewContext(SpecNode spec)

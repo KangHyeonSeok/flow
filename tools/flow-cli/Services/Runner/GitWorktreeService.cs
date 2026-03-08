@@ -139,6 +139,15 @@ public class GitWorktreeService
     }
 
     /// <summary>
+    /// 특정 파일의 uncommitted 변경사항을 버린다 (git checkout -- path).
+    /// 파일이 없거나 변경사항이 없으면 무시한다.
+    /// </summary>
+    public async Task DiscardLocalChangesAsync(string relativePath)
+    {
+        await RunGitAsync($"checkout -- \"{relativePath}\"");
+    }
+
+    /// <summary>
     /// worktree 브랜치를 메인 브랜치에 머지한다.
     /// </summary>
     public async Task<(bool Success, bool HasConflict)> MergeToMainAsync(string specId, string mainBranch)

@@ -2,16 +2,16 @@
   "schemaVersion": 2,
   "id": "F-040",
   "nodeType": "feature",
-  "title": "E2E \uD14C\uC2A4\uD2B8 \uD504\uB808\uC784\uC6CC\uD06C",
-  "description": "\uC2DC\uB098\uB9AC\uC624 \uAE30\uBC18 E2E \uD14C\uC2A4\uD2B8\uB97C \uC2E4\uD589\uD558\uB294 Python \uD504\uB808\uC784\uC6CC\uD06C. YAML \uC2DC\uB098\uB9AC\uC624 \uC815\uC758, Flutter/Unity \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130, \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9\u00B7\uC2E4\uD589\u00B7\uAC80\uC99D\u00B7\uB9AC\uD3EC\uD305 \uD30C\uC774\uD504\uB77C\uC778\uC744 \uC81C\uACF5\uD55C\uB2E4. flow test e2e \uBA85\uB839\uC73C\uB85C CLI\uC5D0\uC11C \uC2E4\uD589.",
-  "status": "queued",
+  "title": "E2E 테스트 프레임워크",
+  "description": "시나리오 기반 E2E 테스트를 실행하는 Python 프레임워크. YAML 시나리오 정의, Flutter/Unity 플랫폼 어댑터, 시나리오 탐색·실행·검증·리포팅 파이프라인을 제공한다. flow test e2e 명령으로 CLI에서 실행.",
+  "status": "working",
   "parent": "F-001",
   "dependencies": [],
   "conditions": [
     {
       "id": "F-040-C1",
       "nodeType": "condition",
-      "description": "Given YAML \uC2DC\uB098\uB9AC\uC624 \uD30C\uC77C, When flow test e2e \uC2E4\uD589, Then PythonBridge\uB97C \uD1B5\uD574 \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9\u00B7\uC2E4\uD589\u00B7\uACB0\uACFC \uC218\uC9D1",
+      "description": "Given YAML 시나리오 파일, When flow test e2e 실행, Then PythonBridge를 통해 시나리오 탐색·실행·결과 수집",
       "status": "verified",
       "codeRefs": [
         "tools/flow-cli/Commands/TestCommand.cs",
@@ -23,7 +23,7 @@
     {
       "id": "F-040-C2",
       "nodeType": "condition",
-      "description": "Given Flutter/Unity \uD504\uB85C\uC81D\uD2B8, When \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130 \uB85C\uB4DC, Then \uAC01 \uD50C\uB7AB\uD3FC\uBCC4 E2E \uD14C\uC2A4\uD2B8 \uD658\uACBD \uAD6C\uC131",
+      "description": "Given Flutter/Unity 프로젝트, When 플랫폼 어댑터 로드, Then 각 플랫폼별 E2E 테스트 환경 구성",
       "status": "working",
       "codeRefs": [
         "tools/e2e-test/adapters/",
@@ -35,7 +35,7 @@
     {
       "id": "F-040-C3",
       "nodeType": "condition",
-      "description": "Given \uD14C\uC2A4\uD2B8 \uACB0\uACFC, When \uB9AC\uD3EC\uD305 \uBAA8\uB4C8 \uC2E4\uD589, Then \uC131\uACF5/\uC2E4\uD328/\uC2A4\uD0B5 \uC694\uC57D \uCD9C\uB825",
+      "description": "Given 테스트 결과, When 리포팅 모듈 실행, Then 성공/실패/스킵 요약 출력",
       "status": "working",
       "codeRefs": [
         "tools/e2e-test/e2e_test/"
@@ -46,7 +46,7 @@
     {
       "id": "F-040-C4",
       "nodeType": "condition",
-      "description": "Given \uC2DC\uB098\uB9AC\uC624 \uB514\uB809\uD1A0\uB9AC, When \uC2DC\uB098\uB9AC\uC624 \uD0D0\uC0C9(discovery), Then YAML \uD30C\uC77C \uC790\uB3D9 \uBC1C\uACAC \uBC0F \uD30C\uC2F1",
+      "description": "Given 시나리오 디렉토리, When 시나리오 탐색(discovery), Then YAML 파일 자동 발견 및 파싱",
       "status": "working",
       "codeRefs": [
         "tools/e2e-test/scenarios/"
@@ -73,12 +73,12 @@
   "mutatedBy": [],
   "changeLog": [],
   "metadata": {
-    "runnerInstanceId": "runner-26808-043410",
-    "runnerStartedAt": "2026-03-08T02:21:39.5099421Z",
+    "runnerInstanceId": "runner-58008-133901",
+    "runnerStartedAt": "2026-03-08T14:01:39.2740618Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
-      "approach": "AI Runner\uAC00 \u0027F-040: E2E \uD14C\uC2A4\uD2B8 \uD504\uB808\uC784\uC6CC\uD06C\u0027 \uAD6C\uD604\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.",
-      "startedAt": "2026-03-08T02:21:39.5099433Z"
+      "approach": "AI Runner가 'F-040: E2E 테스트 프레임워크' 구현을 시작합니다.",
+      "startedAt": "2026-03-08T14:01:39.2740628Z"
     },
     "lastCompletedAt": "2026-03-08T01:48:16.0041410Z",
     "lastCompletedBy": "runner-7472-011050",
@@ -86,19 +86,19 @@
       "source": "copilot-cli-review",
       "reviewedAt": "2026-03-08T04:45:27.9258811Z",
       "reviewedBy": "runner-40844-044047",
-      "summary": "Runner \uC778\uC2A4\uD134\uC2A4 \uBE44\uC815\uC0C1 \uC885\uB8CC\uB85C E2E \uC2E4\uD589\uC774 \uC911\uB2E8\uB418\uC5B4 \uC7AC\uC791\uC5C5\uC774 \uD544\uC694\uD569\uB2C8\uB2E4.",
+      "summary": "Runner 인스턴스 비정상 종료로 E2E 실행이 중단되어 재작업이 필요합니다.",
       "failureReasons": [
-        "Runner \uC778\uC2A4\uD134\uC2A4\uAC00 \uBE44\uC815\uC0C1\uC801\uC73C\uB85C \uC885\uB8CC\uB418\uC5B4 \uC2DC\uB098\uB9AC\uC624 \uC2E4\uD589\uC774 \uC911\uB2E8\uB428",
-        "\uC790\uB3D9 \uAC80\uD1A0 \uACB0\uACFC\uAC00 \uAD6C\uC870\uD654\uB41C JSON\uC73C\uB85C \uD574\uC11D\uB418\uC9C0 \uC54A\uC544 \uC7AC\uC2DC\uB3C4\uAC00 \uD544\uC694\uD568"
+        "Runner 인스턴스가 비정상적으로 종료되어 시나리오 실행이 중단됨",
+        "자동 검토 결과가 구조화된 JSON으로 해석되지 않아 재시도가 필요함"
       ],
       "alternatives": [
-        "\uC2E4\uD589 \uB85C\uADF8\uC640 runner \uC0C1\uD0DC\uB97C \uBD84\uC11D\uD558\uC5EC \uC6D0\uC778 \uD30C\uC545 \uD6C4 \uC7AC\uC2DC\uC791\uD558\uC5EC \uC7AC\uC2DC\uB3C4",
-        "\uB85C\uCEEC \uB610\uB294 \uACA9\uB9AC\uB41C \uD658\uACBD\uC5D0\uC11C \uC218\uB3D9\uC73C\uB85C \uC2DC\uB098\uB9AC\uC624\uB97C \uC2E4\uD589\uD574 \uBB38\uC81C\uB97C \uC7AC\uD604 \uBC0F \uB514\uBC84\uAE45"
+        "실행 로그와 runner 상태를 분석하여 원인 파악 후 재시작하여 재시도",
+        "로컬 또는 격리된 환경에서 수동으로 시나리오를 실행해 문제를 재현 및 디버깅"
       ],
       "suggestedAttempts": [
-        "runner \uC885\uB8CC \uC6D0\uC778\uC744 \uBD84\uC11D\uD55C \uB4A4 \uC7AC\uC2DC\uC791",
-        "PythonBridge\uC640 \uD50C\uB7AB\uD3FC \uC5B4\uB311\uD130 \uB4F1 \uC758\uC874 \uC11C\uBE44\uC2A4 \uC0C1\uD0DC \uC810\uAC80 \uD6C4 queued \uC0C1\uD0DC\uC5D0\uC11C \uC7AC\uC2E4\uD589",
-        "\uC790\uB3D9 \uAC80\uD1A0 \uD504\uB86C\uD504\uD2B8\uB97C \uC7AC\uC2E4\uD589\uD558\uC5EC \uCD9C\uB825\uC774 JSON \uC2A4\uD0A4\uB9C8\uC640 \uC77C\uCE58\uD558\uB294\uC9C0 \uD655\uC778"
+        "runner 종료 원인을 분석한 뒤 재시작",
+        "PythonBridge와 플랫폼 어댑터 등 의존 서비스 상태 점검 후 queued 상태에서 재실행",
+        "자동 검토 프롬프트를 재실행하여 출력이 JSON 스키마와 일치하는지 확인"
       ],
       "additionalInformationRequests": []
     },
@@ -106,8 +106,8 @@
       {
         "id": "F-040-Q2",
         "type": "user-decision",
-        "question": "\uC790\uB3D9 \uC7AC\uC2DC\uC791 \uD6C4 \uC7AC\uC2DC\uB3C4\uD560\uAE4C\uC694, \uC544\uB2C8\uBA74 \uC6B0\uC120 \uC218\uB3D9 \uB514\uBC84\uAE45\uC744 \uC9C4\uD589\uD560\uAE4C\uC694?",
-        "why": "\uC7AC\uC2DC\uC791-\uC7AC\uC2DC\uB3C4\uB294 \uBE60\uB978 \uD68C\uBCF5\uC5D0 \uC720\uB9AC\uD558\uC9C0\uB9CC \uADFC\uBCF8 \uC6D0\uC778\uC744 \uB193\uCE60 \uC218 \uC788\uACE0, \uC218\uB3D9 \uB514\uBC84\uAE45\uC740 \uC2DC\uAC04\uC774 \uAC78\uB9AC\uB098 \uBB38\uC81C\uC758 \uADFC\uBCF8 \uD574\uACB0\uC5D0 \uB3C4\uC6C0\uC774 \uB429\uB2C8\uB2E4.",
+        "question": "자동 재시작 후 재시도할까요, 아니면 우선 수동 디버깅을 진행할까요?",
+        "why": "재시작-재시도는 빠른 회복에 유리하지만 근본 원인을 놓칠 수 있고, 수동 디버깅은 시간이 걸리나 문제의 근본 해결에 도움이 됩니다.",
         "status": "answered",
         "requestedAt": "2026-03-08T04:45:27.9258811Z",
         "requestedBy": "runner-40844-044047",
@@ -117,8 +117,8 @@
       {
         "id": "F-040-Q4",
         "type": "missing-info",
-        "question": "\uC2E4\uD589 \uB2F9\uC2DC\uC758 \uB9AC\uC18C\uC2A4(\uBA54\uBAA8\uB9AC/CPU) \uC0AC\uC6A9\uB7C9 \uC2A4\uB0C5\uC0F7",
-        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "question": "실행 당시의 리소스(메모리/CPU) 사용량 스냅샷",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
         "status": "answered",
         "requestedAt": "2026-03-08T04:45:27.9258811Z",
         "requestedBy": "runner-40844-044047",
@@ -128,8 +128,8 @@
       {
         "id": "F-040-Q5",
         "type": "missing-info",
-        "question": "\uD574\uB2F9 \uC2DC\uB098\uB9AC\uC624\uC5D0\uC11C \uC0AC\uC6A9\uB41C \uD50C\uB7AB\uD3FC(adapters) \uC124\uC815 \uBC0F \uBC84\uC804 \uC815\uBCF4",
-        "why": "\uCD94\uAC00 \uC815\uBCF4 \uC5C6\uC774\uB294 \uB2E4\uC74C \uAD6C\uD604 \uC2DC\uB3C4\uB97C \uD655\uC815\uD558\uAE30 \uC5B4\uB835\uC2B5\uB2C8\uB2E4.",
+        "question": "해당 시나리오에서 사용된 플랫폼(adapters) 설정 및 버전 정보",
+        "why": "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
         "status": "answered",
         "requestedAt": "2026-03-08T04:45:27.9258811Z",
         "requestedBy": "runner-40844-044047",
@@ -142,16 +142,16 @@
     "lastReviewAt": "2026-03-08T04:45:27.9258811Z",
     "lastReviewBy": "runner-40844-044047",
     "selectionReason": {
-      "selectedAt": "2026-03-08T02:21:39.5092615Z",
+      "selectedAt": "2026-03-08T14:01:39.2731317Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
-      "totalCandidates": 25
+      "totalCandidates": 7
     },
-    "lastError": "Runner \uC778\uC2A4\uD134\uC2A4 \uBE44\uC815\uC0C1 \uC885\uB8CC (\uC774\uC804 \uC778\uC2A4\uD134\uC2A4: runner-9752-021805)",
+    "lastError": "Runner 인스턴스 비정상 종료 (이전 인스턴스: runner-9752-021805)",
     "lastErrorAt": "2026-03-08T04:34:11.5186260Z",
     "lastAnsweredAt": "2026-03-08T10:25:00.000Z"
   },
   "createdAt": "2026-02-01T00:00:00Z",
-  "updatedAt": "2026-03-08T10:25:00.000Z"
+  "updatedAt": "2026-03-08T14:01:39.2742374Z"
 }

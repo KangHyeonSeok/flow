@@ -53,7 +53,7 @@ export class KanbanPanel {
         loader: SpecLoader,
         workspaceRoot: string,
     ): KanbanPanel {
-        const column = vscode.ViewColumn.One;
+        const column = vscode.ViewColumn.Active;
 
         if (KanbanPanel.currentPanel) {
             KanbanPanel.currentPanel.panel.reveal(column);
@@ -63,7 +63,7 @@ export class KanbanPanel {
         const panel = vscode.window.createWebviewPanel(
             KanbanPanel.viewType,
             '칸반 보드',
-            column,
+            { viewColumn: column, preserveFocus: false },
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
@@ -532,18 +532,6 @@ export class KanbanPanel {
     transition: background 0.1s;
   }
   .action-btn:hover { background: var(--card-hover); }
-  .detail-btn {
-    background: var(--vscode-button-secondaryBackground, transparent);
-    border: 1px solid var(--border);
-    color: var(--fg);
-    border-radius: 3px;
-    padding: 2px 8px;
-    font-size: 10px;
-    cursor: pointer;
-    transition: background 0.1s;
-    white-space: nowrap;
-  }
-  .detail-btn:hover { background: var(--card-hover); }
   /* ── 상태 변경 드롭다운 ── */
   .status-select {
     background: var(--input-bg);
@@ -724,7 +712,7 @@ document.getElementById('board').addEventListener('mousedown', (e) => {
   const card = e.target.closest('.card');
   if (!card) { return; }
   // 컨트롤 클릭이면 무시 (버튼/드롭다운 등)
-  if (e.target.closest('.detail-btn') || e.target.closest('.status-select') || e.target.closest('.priority-select') || e.target.closest('.question-answer-input') || e.target.closest('.question-save-btn') || e.target.closest('.question-suggestion-btn')) { return; }
+  if (e.target.closest('.status-select') || e.target.closest('.priority-select') || e.target.closest('.question-answer-input') || e.target.closest('.question-save-btn') || e.target.closest('.question-suggestion-btn')) { return; }
   setSelectedCard(card);
   vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
 });
@@ -773,15 +761,6 @@ document.querySelectorAll('.ctx-status').forEach(el => {
   });
 });
 
-// ── 상세 표시 버튼 (mousedown: VS Code 포커스-클릭 우회)
-document.getElementById('board').addEventListener('mousedown', (e) => {
-  const btn = e.target.closest('.detail-btn');
-  if (!btn) { return; }
-  const card = btn.closest('.card');
-  if (!card) { return; }
-  vscode.postMessage({ type: 'selectSpec', specId: card.dataset.id });
-  e.stopPropagation();
-});
 
 document.getElementById('board').addEventListener('click', (e) => {
   const btn = e.target.closest('.question-suggestion-btn');
@@ -1052,7 +1031,6 @@ function filterCards(query) {
   ${questionBox}
   <div class="card-footer">
     <div class="card-actions">
-      <button class="detail-btn" data-action="detail" title="스펙 상세 보기">상세 표시</button>
     </div>
   </div>
   <div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;">

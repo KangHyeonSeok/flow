@@ -75,6 +75,9 @@ public class RunnerConfig
 
     /// <summary>한 poll 주기 내 최대 즉시 재스케줄 사이클 수 (F-031-C5). busy-wait 방지 상한.</summary>
     public int MaxReschedulesPerPoll { get; set; } = 10;
+
+    /// <summary>스펙 자동 구현 최대 연속 실패 횟수. 초과 시 사용자 개입이 필요한 질문을 자동 생성한다. 0이면 비활성화.</summary>
+    public int MaxImplementationAttempts { get; set; } = 3;
 }
 
 /// <summary>

@@ -65,6 +65,8 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
         metadata.questionStatus = 'waiting-user-input';
     } else {
         delete metadata.questionStatus;
+        // 모든 질문이 답변됨 → 리뷰 루프와 무관하게 즉시 queued로 복귀
+        spec.status = 'queued';
     }
 
     if (reviewMetadata) {

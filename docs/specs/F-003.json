@@ -4,7 +4,7 @@
   "nodeType": "feature",
   "title": "공통 JSON 요청 스키마 및 디스패처 도입",
   "description": "모든 flow 명령이 공유할 JSON 요청 envelope와 내부 디스패처를 정의한다. 명령 식별자, 서브커맨드, payload, 옵션, 실행 컨텍스트를 공통 모델로 표준화하고, 단일 진입점에서 적절한 명령 핸들러로 위임하는 기반 작업이다.",
-  "status": "queued",
+  "status": "needs-review",
   "parent": "F-002",
   "dependencies": [],
   "conditions": [
@@ -62,15 +62,15 @@
   "changeLog": [],
   "metadata": {
     "workItemType": "task",
-    "runnerInstanceId": "runner-30896-021108",
-    "runnerStartedAt": "2026-03-08T02:14:52.3929419Z",
+    "runnerInstanceId": "runner-58008-133901",
+    "runnerStartedAt": "2026-03-08T13:48:29.3710489Z",
     "implementationPlan": {
       "triggeredFrom": "queued",
       "approach": "AI Runner가 'F-003: 공통 JSON 요청 스키마 및 디스패처 도입' 구현을 시작합니다.",
-      "startedAt": "2026-03-08T02:14:52.3929434Z"
+      "startedAt": "2026-03-08T13:48:29.3710502Z"
     },
-    "lastCompletedAt": "2026-03-08T02:15:53.5883448Z",
-    "lastCompletedBy": "runner-30896-021108",
+    "lastCompletedAt": "2026-03-08T13:55:20.8632916Z",
+    "lastCompletedBy": "runner-58008-133901",
     "review": {
       "source": "copilot-cli-review",
       "reviewedAt": "2026-03-08T02:37:41.2927880Z",
@@ -119,14 +119,16 @@
     "lastReviewAt": "2026-03-08T02:37:41.2927880Z",
     "lastReviewBy": "runner-4380-023636",
     "selectionReason": {
-      "selectedAt": "2026-03-08T02:14:52.3921746Z",
+      "selectedAt": "2026-03-08T13:48:29.3697975Z",
       "issuePriorityScore": 0,
       "isFallback": true,
       "rank": 1,
-      "totalCandidates": 27
+      "totalCandidates": 10
     },
-    "lastAnsweredAt": "2026-03-08T10:24:00.000Z"
+    "lastAnsweredAt": "2026-03-08T10:24:00.000Z",
+    "worktreePath": "d:\\Projects\\flow\\.flow\\worktrees\\F-003",
+    "worktreeBranch": "runner/F-003"
   },
   "createdAt": "2026-03-07T04:04:25.0823518Z",
-  "updatedAt": "2026-03-08T10:24:00.000Z"
+  "updatedAt": "2026-03-08T13:55:20.8640214Z"
 }

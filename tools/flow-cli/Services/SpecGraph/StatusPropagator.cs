@@ -16,6 +16,7 @@ public class StatusPropagator
 
     /// <summary>
     /// 특정 스펙의 상태 변경을 전파하고, 변경이 필요한 스펙 목록을 반환합니다.
+    /// 소스 스펙 자체도 결과에 포함하며, BFS로 transitive downstream까지 전파합니다.
     /// 실제 저장은 호출자가 수행합니다 (side-effect free).
     /// </summary>
     public List<(string Id, string OldStatus, string NewStatus)> Propagate(
@@ -23,22 +24,35 @@ public class StatusPropagator
     {
         var changes = new List<(string Id, string OldStatus, string NewStatus)>();
 
-        if (!graph.Nodes.ContainsKey(changedId))
+        if (!graph.Nodes.TryGetValue(changedId, out var changedNode))
             return changes;
 
-        // 1. 의존하는 노드들을 needs-review로 전환
-        if (graph.ReverseDag.TryGetValue(changedId, out var dependents))
+        // 1. 소스 스펙 자체 상태 변경 포함
+        if (changedNode.Status != newStatus)
+            changes.Add((changedId, changedNode.Status, newStatus));
+
+        // 2. BFS로 transitive downstream → needs-review 전파
+        var visited = new HashSet<string> { changedId };
+        var queue = new Queue<string>();
+
+        if (graph.ReverseDag.TryGetValue(changedId, out var directDeps))
+            foreach (var dep in directDeps)
+                queue.Enqueue(dep);
+
+        while (queue.Count > 0)
         {
-            foreach (var depId in dependents)
-            {
-                if (graph.Nodes.TryGetValue(depId, out var depNode))
-                {
-                    if (depNode.Status != "needs-review" && depNode.Status != "deprecated" && depNode.Status != "done")
-                    {
-                        changes.Add((depId, depNode.Status, "needs-review"));
-                    }
-                }
-            }
+            var current = queue.Dequeue();
+            if (!visited.Add(current)) continue;
+            if (!graph.Nodes.TryGetValue(current, out var node)) continue;
+            if (node.Status == "done" || node.Status == "deprecated") continue;
+
+            if (node.Status != "needs-review")
+                changes.Add((current, node.Status, "needs-review"));
+
+            if (graph.ReverseDag.TryGetValue(current, out var nextDeps))
+                foreach (var dep in nextDeps)
+                    if (!visited.Contains(dep))
+                        queue.Enqueue(dep);
         }
 
         return changes;
