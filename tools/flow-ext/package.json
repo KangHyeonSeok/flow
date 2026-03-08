@@ -2,7 +2,7 @@
   "name": "flow-ext",
   "displayName": "Flow",
   "description": "Flow 통합 확장 - 스펙 그래프 시각화, 칸반 보드, Flow Runner 데몬 관리",
-  "version": "0.1.61",
+  "version": "0.1.66",
   "publisher": "flow-team",
   "repository": {
     "type": "git",

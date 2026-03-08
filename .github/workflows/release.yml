@@ -67,9 +67,10 @@ jobs:
           CSPROJ=tools/flow-cli/flow-cli.csproj
           PROPS="-p:Version=$VER -p:AssemblyVersion=$VER -p:FileVersion=$VER"
 
-          dotnet publish $CSPROJ -c Release -r win-x64   --self-contained -o build-win   $PROPS
-          dotnet publish $CSPROJ -c Release -r linux-x64  --self-contained -o build-linux $PROPS
-          dotnet publish $CSPROJ -c Release -r osx-arm64  --self-contained -o build-osx   $PROPS
+          dotnet publish $CSPROJ -c Release -r win-x64    --self-contained -o build-win       $PROPS
+          dotnet publish $CSPROJ -c Release -r linux-x64  --self-contained -o build-linux     $PROPS
+          dotnet publish $CSPROJ -c Release -r osx-arm64  --self-contained -o build-osx-arm64 $PROPS
+          dotnet publish $CSPROJ -c Release -r osx-x64    --self-contained -o build-osx-x64   $PROPS
 
       - name: Build Flow Extension (.vsix)
         run: |
@@ -101,9 +102,11 @@ jobs:
           # Flow CLI 단일 파일 바이너리 포함
           cp build-win/flow.exe        temp-release/.flow/bin/flow.exe
           cp build-linux/flow          temp-release/.flow/bin/flow-linux
-          cp build-osx/flow            temp-release/.flow/bin/flow-osx-arm64
+          cp build-osx-arm64/flow      temp-release/.flow/bin/flow-osx-arm64
+          cp build-osx-x64/flow        temp-release/.flow/bin/flow-osx-x64
           chmod +x temp-release/.flow/bin/flow-linux
           chmod +x temp-release/.flow/bin/flow-osx-arm64
+          chmod +x temp-release/.flow/bin/flow-osx-x64
           cp flow-ext-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
           cp -r tools/e2e-test temp-release/.flow/e2e-test
           find temp-release/.flow/e2e-test -type d -name "__pycache__" -prune -exec rm -rf {} +
@@ -118,8 +121,10 @@ jobs:
             cp -r .github/skills/flow-spec-graph temp-release/.github/skills/
           fi
           cp flow.ps1 temp-release/
+          cp flow temp-release/
+          chmod +x temp-release/flow
           cd temp-release
-          zip -r ../flow.zip .flow/ .github/ flow.ps1
+          zip -r ../flow.zip .flow/ .github/ flow.ps1 flow
           cd ..
           rm -rf temp-release
 

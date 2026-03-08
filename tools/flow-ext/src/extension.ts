@@ -520,9 +520,29 @@ function spawnDaemonBackground(workspaceRoot: string, output: vscode.OutputChann
     return true;
 }
 
+function getWorkspaceFlowCandidates(workspaceRoot: string): string[] {
+    const path = require('path') as typeof import('path');
+
+    if (process.platform === 'win32') {
+        return [path.join(workspaceRoot, '.flow', 'bin', 'flow.exe')];
+    }
+
+    if (process.platform === 'darwin') {
+        return [
+            path.join(workspaceRoot, '.flow', 'bin', 'flow'),
+            path.join(workspaceRoot, '.flow', 'bin', 'flow-osx-arm64'),
+            path.join(workspaceRoot, '.flow', 'bin', 'flow-osx-x64'),
+        ];
+    }
+
+    return [
+        path.join(workspaceRoot, '.flow', 'bin', 'flow'),
+        path.join(workspaceRoot, '.flow', 'bin', 'flow-linux'),
+    ];
+}
+
 /** flow CLI 실행 경로를 반환한다. 설정값 → PATH 순으로 탐색. */
 function resolveFlowExecutable(workspaceRoot: string): string | null {
-    const path = require('path') as typeof import('path');
     const fs = require('fs') as typeof import('fs');
 
     // 1. 사용자 설정
@@ -530,8 +550,11 @@ function resolveFlowExecutable(workspaceRoot: string): string | null {
     if (configPath && fs.existsSync(configPath)) { return configPath; }
 
     // 2. 워크스페이스 빌드 산출물 우선 사용
-    const flowExeBin = path.join(workspaceRoot, '.flow', 'bin', process.platform === 'win32' ? 'flow.exe' : process.platform === 'darwin' ? 'flow-osx-arm64' : 'flow-linux');
-    if (fs.existsSync(flowExeBin)) { return flowExeBin; }
+    for (const flowExeBin of getWorkspaceFlowCandidates(workspaceRoot)) {
+        if (fs.existsSync(flowExeBin)) { return flowExeBin; }
+    }
+
+    const path = require('path') as typeof import('path');
 
     // 3. 워크스페이스 루트의 flow.ps1 (Windows fallback)
     const flowPs1 = path.join(workspaceRoot, 'flow.ps1');

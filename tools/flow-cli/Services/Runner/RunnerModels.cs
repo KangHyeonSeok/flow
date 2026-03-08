@@ -69,6 +69,9 @@ public class RunnerConfig
 
     /// <summary>GitHub 이슈 연동 활성화</summary>
     public bool GitHubIssuesEnabled { get; set; } = false;
+
+    /// <summary>한 poll 주기 내 최대 즉시 재스케줄 사이클 수 (F-031-C5). busy-wait 방지 상한.</summary>
+    public int MaxReschedulesPerPoll { get; set; } = 10;
 }
 
 /// <summary>
@@ -90,12 +93,18 @@ public class SpecWorkResult
 {
     public string SpecId { get; set; } = "";
     public bool Success { get; set; }
-    public string Action { get; set; } = ""; // implement | merge-resolve | error-fix
+    public string Action { get; set; } = ""; // implement | merge-resolve | error-fix | auto-verify | repair
     public string? ErrorMessage { get; set; }
     public string StartedAt { get; set; } = "";
     public string CompletedAt { get; set; } = "";
     public string? WorktreePath { get; set; }
     public string? BranchName { get; set; }
+
+    /// <summary>
+    /// 이 결과가 즉시 재스케줄을 유발하는 상태 전환을 포함하는지 여부 (F-031-C1).
+    /// working → needs-review/verified/done/queued 전환 또는 needs-review → verified 전환 시 true.
+    /// </summary>
+    public bool TriggeredReschedule { get; set; }
 }
 
 /// <summary>

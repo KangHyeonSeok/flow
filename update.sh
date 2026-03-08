@@ -250,6 +250,32 @@ else
     exit 1
 fi
 
+# 플랫폼별 flow CLI 바이너리 실행 권한 부여
+UNAME_S=$(uname -s 2>/dev/null || echo "")
+UNAME_M=$(uname -m 2>/dev/null || echo "")
+if [ "$UNAME_S" = "Darwin" ]; then
+    MAC_BIN=""
+    if [ "$UNAME_M" = "arm64" ] && [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-arm64"
+    elif [ -f "$FLOW_DIR/bin/flow-osx-x64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-x64"
+    elif [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-arm64"
+    fi
+
+    if [ -n "$MAC_BIN" ]; then
+        chmod +x "$MAC_BIN"
+        cp "$MAC_BIN" "$FLOW_DIR/bin/flow"
+        chmod +x "$FLOW_DIR/bin/flow"
+    fi
+elif [ "$UNAME_S" = "Linux" ]; then
+    if [ -f "$FLOW_DIR/bin/flow-linux" ]; then
+        chmod +x "$FLOW_DIR/bin/flow-linux"
+        cp "$FLOW_DIR/bin/flow-linux" "$FLOW_DIR/bin/flow"
+        chmod +x "$FLOW_DIR/bin/flow"
+    fi
+fi
+
 # RAG 데이터베이스 복구
 if [ -n "$DB_BACKUP_DIR" ] && [ -d "$DB_BACKUP_DIR/db" ]; then
     step "RAG 데이터베이스 복구 중..."
@@ -276,6 +302,12 @@ fi
 # flow.ps1 복사 (있으면)
 if [ -f "$TEMP_DIR/flow.ps1" ]; then
     cp "$TEMP_DIR/flow.ps1" "./flow.ps1"
+fi
+
+# Unix launcher 복사 (있으면)
+if [ -f "$TEMP_DIR/flow" ]; then
+    cp "$TEMP_DIR/flow" "./flow"
+    chmod +x "./flow"
 fi
 
 # 필수 디렉토리 사전 생성

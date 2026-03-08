@@ -128,14 +128,34 @@ public class BrokenSpecDiagService
     public void MarkResolved(string filePath)
     {
         var cache = LoadCache();
-        var record = cache.Records.Find(r => r.FilePath == filePath && r.Status == "unresolved");
-        if (record != null)
+        var specId = Path.GetFileNameWithoutExtension(filePath);
+        var resolvedAt = DateTime.UtcNow.ToString("o");
+        var records = cache.Records
+            .Where(r => r.Status == "unresolved" &&
+                        (string.Equals(r.FilePath, filePath, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(r.SpecId, specId, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        if (records.Count > 0)
         {
-            record.Status = "resolved";
-            record.ResolvedAt = DateTime.UtcNow.ToString("o");
-            record.LastCheckedAt = record.ResolvedAt;
+            foreach (var record in records)
+            {
+                record.Status = "resolved";
+                record.ResolvedAt = resolvedAt;
+                record.LastCheckedAt = resolvedAt;
+                record.FilePath = filePath;
+                try
+                {
+                    record.FileMtime = File.GetLastWriteTimeUtc(filePath).ToString("o");
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+
             SaveCache(cache);
-            _log.Info("diag-cache", $"손상 스펙 복구 완료: {record.SpecId}", record.SpecId);
+            _log.Info("diag-cache", $"손상 스펙 복구 완료: {specId}", specId);
         }
     }
 
@@ -159,8 +179,45 @@ public class BrokenSpecDiagService
     /// <summary>
     /// 미해결 진단 레코드 반환.
     /// </summary>
-    public List<BrokenSpecDiagRecord> GetUnresolved()
-        => LoadCache().Records.Where(r => r.Status == "unresolved").ToList();
+    public List<BrokenSpecDiagRecord> GetUnresolved(string specsDir)
+    {
+        var cache = LoadCache();
+        var changed = false;
+        var unresolvedBySpec = new Dictionary<string, BrokenSpecDiagRecord>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var record in cache.Records.Where(r => r.Status == "unresolved"))
+        {
+            NormalizeFilePath(record, specsDir, ref changed);
+
+            if (!unresolvedBySpec.TryGetValue(record.SpecId, out var existing))
+            {
+                unresolvedBySpec[record.SpecId] = record;
+                continue;
+            }
+
+            changed = true;
+            if (IsPreferredRecord(record, existing))
+            {
+                record.RepairAttempts = Math.Max(record.RepairAttempts, existing.RepairAttempts);
+                unresolvedBySpec[record.SpecId] = record;
+            }
+            else
+            {
+                existing.RepairAttempts = Math.Max(existing.RepairAttempts, record.RepairAttempts);
+            }
+        }
+
+        if (changed)
+        {
+            var keep = unresolvedBySpec.Values.ToHashSet();
+            cache.Records = cache.Records
+                .Where(r => r.Status != "unresolved" || keep.Contains(r))
+                .ToList();
+            SaveCache(cache);
+        }
+
+        return unresolvedBySpec.Values.ToList();
+    }
 
     // ── Fresh Scan ─────────────────────────────────────────────
 
@@ -196,6 +253,46 @@ public class BrokenSpecDiagService
     }
 
     // ── 유틸리티 ───────────────────────────────────────────────
+
+    private static void NormalizeFilePath(BrokenSpecDiagRecord record, string specsDir, ref bool changed)
+    {
+        if (string.IsNullOrWhiteSpace(record.SpecId))
+            return;
+
+        var currentPath = Path.Combine(specsDir, $"{record.SpecId}.json");
+        if (!File.Exists(currentPath))
+            return;
+
+        if (string.Equals(record.FilePath, currentPath, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!File.Exists(record.FilePath))
+        {
+            record.FilePath = currentPath;
+            try
+            {
+                record.FileMtime = File.GetLastWriteTimeUtc(currentPath).ToString("o");
+            }
+            catch
+            {
+                // ignore
+            }
+
+            changed = true;
+        }
+    }
+
+    private static bool IsPreferredRecord(BrokenSpecDiagRecord candidate, BrokenSpecDiagRecord current)
+    {
+        var candidateExists = !string.IsNullOrWhiteSpace(candidate.FilePath) && File.Exists(candidate.FilePath);
+        var currentExists = !string.IsNullOrWhiteSpace(current.FilePath) && File.Exists(current.FilePath);
+        if (candidateExists != currentExists)
+            return candidateExists;
+
+        var candidateStamp = candidate.LastCheckedAt ?? candidate.DetectedAt ?? "";
+        var currentStamp = current.LastCheckedAt ?? current.DetectedAt ?? "";
+        return string.CompareOrdinal(candidateStamp, currentStamp) > 0;
+    }
 
     /// <summary>
     /// JSON 내용과 오류 메시지에서 line/column을 계산한다.

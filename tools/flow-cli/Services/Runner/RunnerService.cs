@@ -195,34 +195,83 @@ public class RunnerService
     /// <summary>
     /// Runner를 데몬 모드로 실행한다 (주기적 폴링).
     /// 처리할 스펙이 없으면 30초마다 재확인하고, 스펙이 처리된 경우 설정된 주기(PollIntervalMinutes)만큼 대기한다.
+    /// F-031: 상태 전환 직후 기본 poll 대기 없이 즉시 다음 후보를 재평가한다.
     /// </summary>
     public async Task RunDaemonAsync(CancellationToken cancellationToken = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         WritePidFile();
-        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 주기: {_config.PollIntervalMinutes}분, 유휴 재확인: 30초)");
+        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 주기: {_config.PollIntervalMinutes}분, 유휴 재확인: 30초, 최대 즉시 재스케줄: {_config.MaxReschedulesPerPoll}회)");
 
         try
         {
             while (!_cts.Token.IsCancellationRequested)
             {
-                List<SpecWorkResult> results = [];
+                var allResults = new List<SpecWorkResult>();
+
+                // 메인 전체 사이클 실행 (sync + auto-verify + repair + github + 후보 탐색 + 처리)
+                List<SpecWorkResult> latestBatch = [];
                 try
                 {
-                    results = await RunOnceAsync();
+                    latestBatch = await RunOnceAsync();
+                    allResults.AddRange(latestBatch);
                 }
                 catch (Exception ex)
                 {
                     _log.Error("daemon", $"사이클 실행 중 오류: {ex.Message}");
                 }
 
-                // 처리된 스펙이 있으면 설정된 주기 대기, 없으면 30초 후 재확인
-                var delay = results.Count > 0
+                // F-031-C1/C5: 상태 전환이 발생한 경우 즉시 재스케줄 루프
+                int rescheduleCount = 0;
+                while (!_cts.Token.IsCancellationRequested &&
+                       latestBatch.Any(r => r.TriggeredReschedule))
+                {
+                    // C5: cycle 상한 도달 시 busy-wait 방지를 위해 idle 대기로 전환
+                    if (rescheduleCount >= _config.MaxReschedulesPerPoll)
+                    {
+                        _log.Warn("reschedule",
+                            $"즉시 재스케줄 사이클 상한 도달 ({_config.MaxReschedulesPerPoll}회) — idle 대기 정책 전환 (F-031-C5)");
+                        break;
+                    }
+
+                    rescheduleCount++;
+                    _log.Info("reschedule",
+                        $"상태 전환 감지 → 즉시 재스케줄 시작 (사이클 {rescheduleCount}/{_config.MaxReschedulesPerPoll}, F-031-C1)");
+
+                    // C2: 최신 스펙 그래프로 후보 재평가 (stale 캐시 미사용)
+                    List<SpecWorkResult> rescheduleResults = [];
+                    try
+                    {
+                        rescheduleResults = await RunRescheduleAsync();
+                        allResults.AddRange(rescheduleResults);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Error("reschedule", $"즉시 재스케줄 사이클 오류: {ex.Message}");
+                        break;
+                    }
+
+                    // C4: 후속 후보 없으면 idle 대기로 전환하며 사유 기록
+                    if (!rescheduleResults.Any(r => r.TriggeredReschedule))
+                    {
+                        string skipReason = rescheduleResults.Count == 0 || !rescheduleResults.Any(r => r.Action is "implement" or "auto-verify" or "repair")
+                            ? "처리 가능한 후속 후보 없음"
+                            : "추가 상태 전환 없음 — 현재 사이클 처리 완료";
+                        _log.Info("reschedule",
+                            $"즉시 재스케줄 종료 — {skipReason} (총 {rescheduleCount}회 완료, idle 대기 정책 전환, F-031-C4)");
+                        RecordRescheduleSkipReason(skipReason, rescheduleCount);
+                    }
+
+                    latestBatch = rescheduleResults;
+                }
+
+                // 전체 사이클에서 처리된 스펙이 있으면 설정된 주기 대기, 없으면 30초 후 재확인
+                var delay = allResults.Count > 0
                     ? TimeSpan.FromMinutes(_config.PollIntervalMinutes)
                     : TimeSpan.FromSeconds(30);
 
-                if (results.Count == 0)
+                if (allResults.Count == 0)
                     _log.Info("daemon", $"구현 대상 스펙 없음 — 30초 후 재확인");
 
                 try
@@ -239,6 +288,105 @@ public class RunnerService
         {
             RemovePidFile();
             _log.Info("daemon", "데몬 종료");
+        }
+    }
+
+    /// <summary>
+    /// F-031: 상태 전환 후 즉시 재스케줄 경량 사이클.
+    /// git sync 없이 최신 in-memory 스펙 그래프로 다음 후보를 재평가한다 (C2).
+    /// auto-verify → 후보 탐색 → 처리 순으로 실행한다 (C3: review handoff 메타데이터 보존).
+    /// </summary>
+    private async Task<List<SpecWorkResult>> RunRescheduleAsync()
+    {
+        var results = new List<SpecWorkResult>();
+
+        // C3: needs-review 스펙 자동 검증 (verified 전환 시 의존 스펙 unblock 가능)
+        var autoVerified = await AutoVerifyReviewedSpecsAsync();
+        results.AddRange(autoVerified);
+
+        // C2: 최신 스펙 그래프 기반 후보 탐색 (stale 캐시/이전 선택 결과 재사용 금지)
+        var targets = FindTargetSpecs();
+        if (targets.Count == 0)
+        {
+            // C4: 후보 없음 사유를 선택 메타데이터에 기록
+            LogNoRescheduleCandidates();
+            return results;
+        }
+
+        _log.Info("reschedule", $"즉시 재스케줄 후보 {targets.Count}개 발견 — 처리 시작");
+
+        var batch = targets.Take(_config.MaxConcurrentSpecs).ToList();
+        foreach (var spec in batch)
+        {
+            if (_cts?.Token.IsCancellationRequested == true) break;
+            var result = await ProcessSpecAsync(spec);
+            results.Add(result);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// F-031-C4: 즉시 재스케줄이 불가한 사유를 로그와 selection metadata에 기록한다.
+    /// 대기열 스펙이 있으나 의존성 미충족/사용자 입력 필요로 처리 불가한 경우 포함.
+    /// </summary>
+    private void LogNoRescheduleCandidates()
+    {
+        var allSpecs = _specStore.GetAll();
+        var queuedSpecs = allSpecs.Where(s => _config.TargetStatuses.Contains(s.Status)).ToList();
+
+        string skipReason;
+        if (queuedSpecs.Count == 0)
+        {
+            skipReason = "대기열에 처리 대상 스펙 없음";
+        }
+        else
+        {
+            var blockedByDeps = queuedSpecs.Count(s =>
+            {
+                var completedIds = allSpecs
+                    .Where(x => x.Status is "verified" or "done")
+                    .Select(x => x.Id)
+                    .ToHashSet();
+                var allIds = allSpecs.Select(x => x.Id).ToHashSet();
+                return s.Dependencies.Any(dep => allIds.Contains(dep) && !completedIds.Contains(dep));
+            });
+            var needsInput = queuedSpecs.Count(IsRequiresUserInput);
+            skipReason = $"대기열 스펙 {queuedSpecs.Count}개 중 처리 가능 후보 없음 " +
+                         $"(의존성 미충족: {blockedByDeps}개, 사용자 입력 필요: {needsInput}개)";
+        }
+
+        _log.Info("reschedule", $"즉시 재스케줄 후보 없음 — {skipReason} (F-031-C4)");
+
+        // C4: selection metadata에 skip 사유 기록 (첫 번째 대기 스펙에 기록)
+        var firstQueued = queuedSpecs.OrderBy(s => s.Id).FirstOrDefault();
+        if (firstQueued != null)
+        {
+            firstQueued.Metadata ??= new Dictionary<string, object>();
+            firstQueued.Metadata["lastRescheduleSkipReason"] = skipReason;
+            firstQueued.Metadata["lastRescheduleSkipAt"] = DateTime.UtcNow.ToString("o");
+            _specStore.Update(firstQueued);
+        }
+    }
+
+    /// <summary>
+    /// F-031-C4: 재스케줄 종료 사유를 runner 로그와 selection metadata에 기록한다.
+    /// </summary>
+    private void RecordRescheduleSkipReason(string reason, int completedCycles)
+    {
+        var allSpecs = _specStore.GetAll();
+        var firstQueued = allSpecs
+            .Where(s => _config.TargetStatuses.Contains(s.Status))
+            .OrderBy(s => s.Id)
+            .FirstOrDefault();
+
+        if (firstQueued != null)
+        {
+            firstQueued.Metadata ??= new Dictionary<string, object>();
+            firstQueued.Metadata["lastRescheduleSkipReason"] = reason;
+            firstQueued.Metadata["lastRescheduleSkipAt"] = DateTime.UtcNow.ToString("o");
+            firstQueued.Metadata["lastRescheduleCompletedCycles"] = completedCycles;
+            _specStore.Update(firstQueued);
         }
     }
 
@@ -269,6 +417,7 @@ public class RunnerService
                 result.Success = false;
                 result.ErrorMessage = "Worktree 생성 실패";
                 MarkSpecFailed(spec, result.ErrorMessage);
+                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
                 return FinalizeResult(result);
             }
 
@@ -281,6 +430,7 @@ public class RunnerService
                 result.Success = false;
                 result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 구현 실패";
                 MarkSpecFailed(spec, result.ErrorMessage);
+                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
                 await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
@@ -292,6 +442,7 @@ public class RunnerService
                 result.Success = false;
                 result.ErrorMessage = "변경사항 커밋 실패";
                 MarkSpecFailed(spec, result.ErrorMessage);
+                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
                 await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
@@ -322,6 +473,7 @@ public class RunnerService
                     result.Success = false;
                     result.ErrorMessage = "머지 충돌 해결 실패";
                     MarkSpecFailed(spec, result.ErrorMessage);
+                    result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
                     await _git.RemoveWorktreeAsync(spec.Id);
                     return FinalizeResult(result);
                 }
@@ -331,6 +483,7 @@ public class RunnerService
                 result.Success = false;
                 result.ErrorMessage = "머지 실패";
                 MarkSpecFailed(spec, result.ErrorMessage);
+                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
                 await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
@@ -349,6 +502,7 @@ public class RunnerService
             }
 
             result.Success = true;
+            result.TriggeredReschedule = true; // F-031-C1: working → needs-review/verified 전환
             return FinalizeResult(result);
         }
         catch (Exception ex)
@@ -357,6 +511,7 @@ public class RunnerService
             result.Success = false;
             result.ErrorMessage = ex.Message;
             MarkSpecFailed(spec, ex.Message);
+            result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
 
             // worktree 정리 시도
             try { await _git.RemoveWorktreeAsync(spec.Id); } catch { }
@@ -667,7 +822,8 @@ public class RunnerService
                 Success = true,
                 Action = "auto-verify",
                 StartedAt = timestamp,
-                CompletedAt = timestamp
+                CompletedAt = timestamp,
+                TriggeredReschedule = true // F-031-C1: needs-review → verified 전환
             });
         }
 
@@ -695,7 +851,7 @@ public class RunnerService
         var freshBroken = _diagService.ScanAndUpdate(_specStore.SpecsDir);
 
         // 진단 캐시의 미해결 항목과 합산
-        var unresolved = _diagService.GetUnresolved();
+        var unresolved = _diagService.GetUnresolved(_specStore.SpecsDir);
 
         if (unresolved.Count == 0)
             return results;

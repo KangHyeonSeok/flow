@@ -220,10 +220,18 @@ fi
 UNAME_S=$(uname -s 2>/dev/null || echo "")
 UNAME_M=$(uname -m 2>/dev/null || echo "")
 if [ "$UNAME_S" = "Darwin" ]; then
-    if [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
-        chmod +x "$FLOW_DIR/bin/flow-osx-arm64"
-        # arm64/x86_64 모두 동일 바이너리 사용 (Rosetta 경유)
-        cp "$FLOW_DIR/bin/flow-osx-arm64" "$FLOW_DIR/bin/flow"
+    MAC_BIN=""
+    if [ "$UNAME_M" = "arm64" ] && [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-arm64"
+    elif [ -f "$FLOW_DIR/bin/flow-osx-x64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-x64"
+    elif [ -f "$FLOW_DIR/bin/flow-osx-arm64" ]; then
+        MAC_BIN="$FLOW_DIR/bin/flow-osx-arm64"
+    fi
+
+    if [ -n "$MAC_BIN" ]; then
+        chmod +x "$MAC_BIN"
+        cp "$MAC_BIN" "$FLOW_DIR/bin/flow"
         chmod +x "$FLOW_DIR/bin/flow"
     fi
 elif [ "$UNAME_S" = "Linux" ]; then
@@ -251,6 +259,12 @@ fi
 # flow.ps1 복사 (있으면)
 if [ -f "$TEMP_DIR/flow.ps1" ]; then
     cp "$TEMP_DIR/flow.ps1" "./flow.ps1"
+fi
+
+# Unix launcher 복사 (있으면)
+if [ -f "$TEMP_DIR/flow" ]; then
+    cp "$TEMP_DIR/flow" "./flow"
+    chmod +x "./flow"
 fi
 
 # 필수 디렉토리 사전 생성

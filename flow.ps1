@@ -55,10 +55,25 @@ if ($args.Count -gt 0 -and $args[0] -eq "vlm") {
 
 # 플랫폼에 따라 적절한 바이너리 선택
 if ($IsLinux) {
-	$flowBin = "$PSScriptRoot/.flow/bin/flow-linux"
+	$linuxCandidates = @(
+		"$PSScriptRoot/.flow/bin/flow",
+		"$PSScriptRoot/.flow/bin/flow-linux"
+	)
+	$flowBin = $linuxCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 } elseif ($IsMacOS) {
-	$flowBin = "$PSScriptRoot/.flow/bin/flow-osx-arm64"
+	$macCandidates = @(
+		"$PSScriptRoot/.flow/bin/flow",
+		"$PSScriptRoot/.flow/bin/flow-osx-arm64",
+		"$PSScriptRoot/.flow/bin/flow-osx-x64"
+	)
+	$flowBin = $macCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 } else {
 	$flowBin = "$PSScriptRoot/.flow/bin/flow.exe"
 }
+
+if (-not $flowBin -or -not (Test-Path $flowBin)) {
+	Write-Error "Flow executable not found under .flow/bin. Run the appropriate install/update/build step for this platform."
+	exit 1
+}
+
 & $flowBin @args
