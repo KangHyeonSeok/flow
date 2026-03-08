@@ -7,7 +7,8 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_COLORS, GitHubRef, DocLink } from './types';
-import { getConditionManualVerificationItems, getSpecReviewState } from './reviewState';
+import { getConditionManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
+import { saveQuestionAnswer } from './feedbackStore';
 
 export class SpecViewProvider {
     public static currentPanel: SpecViewProvider | undefined;
@@ -16,6 +17,8 @@ export class SpecViewProvider {
     private readonly panel: vscode.WebviewPanel;
     private disposables: vscode.Disposable[] = [];
     private currentSpecId: string | null = null;
+    /** 저장 전 드래프트 답변: specId → questionId → text */
+    private readonly draftAnswers = new Map<string, Map<string, string>>();
 
     private constructor(
         panel: vscode.WebviewPanel,
@@ -213,7 +216,7 @@ export class SpecViewProvider {
         for (const spec of sortedSpecs) {
             const depth = this.getDepth(spec, allSpecs);
             const isFocused = spec.id === focusedId;
-            contentHtml += this.renderSpec(spec, depth, isFocused, allSpecs);
+            contentHtml += this.renderSpec(spec, depth, isFocused, allSpecs, this.draftAnswers.get(spec.id));
         }
 
         return /*html*/ `<!DOCTYPE html>
@@ -486,6 +489,106 @@ export class SpecViewProvider {
             color: #ffb74d;
         }
 
+        /* 사용자 피드백 패널 */
+        .feedback-callout {
+            margin: 14px 0 16px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(233, 30, 99, 0.45);
+            background: rgba(233, 30, 99, 0.07);
+        }
+        .feedback-callout-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #f48fb1;
+            margin-bottom: 8px;
+        }
+        .feedback-last-answered {
+            font-size: 11px;
+            color: var(--fg-secondary);
+            margin-bottom: 8px;
+        }
+        .feedback-question {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(233, 30, 99, 0.2);
+            margin-bottom: 6px;
+        }
+        .feedback-question:last-child { border-bottom: none; margin-bottom: 0; }
+        .feedback-q-head {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .feedback-type {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-size: 10px;
+            background: rgba(233, 30, 99, 0.18);
+            color: #f8bbd0;
+            flex-shrink: 0;
+        }
+        .feedback-q-text {
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .feedback-why {
+            font-size: 12px;
+            color: var(--fg-secondary);
+            margin-bottom: 4px;
+        }
+        .feedback-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 6px 0;
+        }
+        .feedback-suggestion-btn {
+            border: 1px solid rgba(233, 30, 99, 0.35);
+            border-radius: 999px;
+            background: rgba(233, 30, 99, 0.1);
+            color: var(--fg-primary);
+            padding: 3px 12px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .feedback-suggestion-btn:hover { background: rgba(233, 30, 99, 0.2); }
+        .feedback-answer-area { margin-top: 6px; }
+        .feedback-answer-input {
+            width: 100%;
+            min-height: 60px;
+            background: var(--vscode-input-background, #3c3c3c);
+            color: var(--fg-primary);
+            border: 1px solid rgba(233, 30, 99, 0.3);
+            border-radius: 4px;
+            font-size: 12px;
+            padding: 6px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .feedback-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 6px;
+        }
+        .feedback-save-btn {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 14px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .feedback-save-btn:hover { opacity: 0.9; }
+        .feedback-no-questions {
+            font-size: 12px;
+            color: var(--fg-secondary);
+        }
+
         /* 코드 참조 */
         .code-refs {
             list-style: none;
@@ -670,6 +773,36 @@ export class SpecViewProvider {
                 }
             });
         });
+
+        // 제안 답변 버튼 클릭 → textarea에 삽입
+        document.querySelectorAll('.feedback-suggestion-btn').forEach(el => {
+            el.addEventListener('click', () => {
+                const area = el.closest('.feedback-answer-area') || el.closest('.feedback-question')?.querySelector('.feedback-answer-area');
+                const input = area?.querySelector('.feedback-answer-input');
+                if (input) {
+                    input.value = el.dataset.answer || '';
+                    input.focus();
+                }
+            });
+        });
+
+        // 답변 저장 버튼
+        document.querySelectorAll('.feedback-save-btn').forEach(el => {
+            el.addEventListener('click', () => {
+                const question = el.closest('.feedback-question');
+                const input = question?.querySelector('.feedback-answer-input');
+                const answer = input?.value?.trim() || '';
+                if (!answer) { return; }
+                el.disabled = true;
+                vscode.postMessage({
+                    type: 'answerQuestion',
+                    specId: el.dataset.specId,
+                    questionId: el.dataset.qId,
+                    questionText: el.dataset.question,
+                    answer,
+                });
+            });
+        });
     </script>
 </body>
 </html>`;
@@ -735,11 +868,12 @@ export class SpecViewProvider {
     }
 
     /** 개별 스펙 카드 렌더링 */
-    private renderSpec(spec: Spec, depth: number, isFocused: boolean, allSpecs: Spec[]): string {
+    private renderSpec(spec: Spec, depth: number, isFocused: boolean, allSpecs: Spec[], drafts?: Map<string, string>): string {
         const color = STATUS_COLORS[spec.status] || '#888';
         const headingTag = depth === 0 ? 'h2' : depth === 1 ? 'h3' : 'h4';
         const focusedClass = isFocused ? ' focused' : '';
         const review = getSpecReviewState(spec);
+        const feedback = getUserFeedbackState(spec);
 
         // 조건 달성률
         const totalCond = review.totalConditions;
@@ -791,6 +925,37 @@ export class SpecViewProvider {
                 <div class="review-callout-title">검증 상태</div>
                 <div>${review.requiresManualVerification ? `수동 검증 ${review.manualVerificationItems.length}건 필요` : '모든 조건 충족, Runner 자동 검증 대상'}</div>
                 ${review.requiresManualVerification ? `<ul class="review-callout-items">${review.manualVerificationItems.map((item) => `<li><strong>${esc(item.label)}</strong>${item.reason ? ` - ${esc(item.reason)}` : ''}</li>`).join('')}</ul>` : ''}
+            </div>`;
+        }
+
+        let feedbackHtml = '';
+        if (feedback.requiresUserInput || feedback.openQuestionCount > 0) {
+            const lastAnsweredRow = feedback.lastAnsweredAt
+                ? `<div class="feedback-last-answered">🕐 마지막 답변: ${esc(feedback.lastAnsweredAt)}</div>`
+                : '';
+            const questionsHtml = feedback.openQuestions.map((q, idx) => {
+                const typeHtml = q.type ? `<span class="feedback-type">${esc(q.type)}</span>` : '';
+                const whyHtml = q.why ? `<div class="feedback-why">${esc(q.why)}</div>` : '';
+                const suggestionsHtml = q.answerSuggestions && q.answerSuggestions.length > 0
+                    ? `<div class="feedback-suggestions">${q.answerSuggestions.map(s => `<button class="feedback-suggestion-btn" data-answer="${escAttr(s)}">${esc(s)}</button>`).join('')}</div>`
+                    : '';
+                const saveLabel = q.type === 'user-decision' ? '결정 저장' : '답변 저장';
+                const qId = q.id || String(idx);
+                return `<div class="feedback-question">
+                    <div class="feedback-q-head">${typeHtml}<div class="feedback-q-text">❓ ${esc(q.question)}</div></div>
+                    ${whyHtml}
+                    ${suggestionsHtml}
+                    <div class="feedback-answer-area">
+                        <textarea class="feedback-answer-input" data-q-id="${escAttr(qId)}" data-question="${escAttr(q.question)}" placeholder="여기서 바로 답변을 입력하거나 제안 답변을 선택하세요.">${esc(q.answer ?? '')}</textarea>
+                        <div class="feedback-actions"><button class="feedback-save-btn" data-spec-id="${escAttr(spec.id)}" data-q-id="${escAttr(qId)}" data-question="${escAttr(q.question)}">${saveLabel}</button></div>
+                    </div>
+                </div>`;
+            }).join('');
+            feedbackHtml = `
+            <div class="feedback-callout">
+                <div class="feedback-callout-title">❓ 사용자 판단 필요</div>
+                ${lastAnsweredRow}
+                ${questionsHtml || '<div class="feedback-no-questions">대기 중인 미해결 질문이 없습니다.</div>'}
             </div>`;
         }
 
@@ -857,6 +1022,7 @@ export class SpecViewProvider {
                 ${updatedAt ? `<span class="meta-date">업데이트: ${updatedAt}</span>` : ''}
             </div>
             <div class="spec-description">${esc(spec.description)}</div>
+            ${feedbackHtml}
             ${reviewHtml}
             ${conditionsHtml}
             ${codeRefsHtml}
@@ -928,7 +1094,56 @@ body {
             case 'openDocLink':
                 await this.openDocLink(msg.path as string);
                 break;
+            case 'draftAnswer': {
+                const specId = msg.specId as string;
+                const qId = msg.questionId as string;
+                const text = msg.text as string;
+                if (!this.draftAnswers.has(specId)) {
+                    this.draftAnswers.set(specId, new Map());
+                }
+                if (text) {
+                    this.draftAnswers.get(specId)!.set(qId, text);
+                } else {
+                    this.draftAnswers.get(specId)!.delete(qId);
+                }
+                break;
+            }
+            case 'answerQuestion':
+                await this.answerQuestion(
+                    msg.specId as string,
+                    msg.questionId as string,
+                    msg.questionText as string,
+                    msg.answer as string,
+                );
+                break;
         }
+    }
+
+    private async answerQuestion(specId: string, questionId: string, questionText: string, answer: string): Promise<void> {
+        if (!specId) {
+            vscode.window.showWarningMessage('답변을 저장할 스펙을 찾을 수 없습니다.');
+            return;
+        }
+
+        const graph = await this.loader.getGraph();
+        const spec = graph.specs.find(s => s.id === specId);
+        if (!spec) {
+            vscode.window.showWarningMessage(`스펙을 찾을 수 없습니다: ${specId}`);
+            return;
+        }
+
+        const feedback = getUserFeedbackState(spec);
+        const question = feedback.questions.find(q => (questionId && q.id === questionId) || q.question === questionText);
+        if (!question) {
+            vscode.window.showWarningMessage('저장할 질문을 찾을 수 없습니다. 새로고침 후 다시 시도하세요.');
+            return;
+        }
+
+        await saveQuestionAnswer(this.loader.specsDirectory, specId, question, answer);
+        // 저장 성공 후 드래프트 제거
+        this.draftAnswers.get(specId)?.delete(question.id || questionId);
+        await this.loader.reload();
+        vscode.window.showInformationMessage(`질문 응답을 저장했습니다: ${specId}`);
     }
 
     private async openCodeRef(codeRef: string): Promise<void> {

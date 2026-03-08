@@ -148,9 +148,52 @@ public class SpecStore
         if (!File.Exists(path))
             throw new InvalidOperationException($"Spec '{spec.Id}'가 존재하지 않습니다.");
 
+        // 사용자 답변 필드 보존: runner가 스펙을 로드한 뒤 사용자가 저장한 답변이
+        // runner의 덮어쓰기로 유실되지 않도록 디스크 버전에서 병합한다.
+        PreserveUserAnswerFields(spec, path);
+
         spec.UpdatedAt = DateTime.UtcNow.ToString("o");
         SaveSpec(spec);
         return spec;
+    }
+
+    /// <summary>
+    /// 디스크에 저장된 사용자 답변 관련 metadata 필드를 인메모리 스펙에 병합한다.
+    /// runner가 스펙을 로드한 뒤 사용자가 저장한 답변이 runner의 덮어쓰기로 유실되지 않도록 한다.
+    /// </summary>
+    private static void PreserveUserAnswerFields(SpecNode spec, string path)
+    {
+        try
+        {
+            var diskJson = File.ReadAllText(path);
+            using var doc = JsonDocument.Parse(diskJson);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("metadata", out var diskMeta) || diskMeta.ValueKind != JsonValueKind.Object)
+                return;
+
+            spec.Metadata ??= new Dictionary<string, object>();
+
+            // runner가 절대 직접 쓰지 않는 필드 → 항상 디스크 버전 우선 (사용자 답변 보존)
+            var alwaysFromDisk = new[] { "questions", "lastAnsweredAt" };
+            foreach (var key in alwaysFromDisk)
+            {
+                if (diskMeta.TryGetProperty(key, out var diskVal))
+                    spec.Metadata[key] = JsonSerializer.Deserialize<object>(diskVal.GetRawText(), ReadOptions)!;
+            }
+
+            // runner가 명시적으로 설정하지 않은 경우에만 디스크 값 보존
+            var onlyIfMissing = new[] { "requiresUserInput", "questionStatus", "reviewDisposition", "plannerState" };
+            foreach (var key in onlyIfMissing)
+            {
+                if (!spec.Metadata.ContainsKey(key) && diskMeta.TryGetProperty(key, out var diskVal))
+                    spec.Metadata[key] = JsonSerializer.Deserialize<object>(diskVal.GetRawText(), ReadOptions)!;
+            }
+        }
+        catch
+        {
+            // 디스크 읽기/파싱 실패 시 무시 (기존 동작 유지)
+        }
     }
 
     /// <summary>
