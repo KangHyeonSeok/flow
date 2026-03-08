@@ -56,6 +56,16 @@ public class GitWorktreeService
     }
 
     /// <summary>
+    /// 스펙 ID에 해당하는 worktree 절대 경로를 반환한다.
+    /// </summary>
+    public string GetWorktreePath(string specId) => Path.Combine(_worktreeBaseDir, specId);
+
+    /// <summary>
+    /// 스펙 ID에 해당하는 브랜치 이름을 반환한다.
+    /// </summary>
+    public string GetBranchName(string specId) => $"runner/{specId}";
+
+    /// <summary>
     /// worktree 삭제 및 브랜치 정리
     /// </summary>
     public async Task<bool> RemoveWorktreeAsync(string specId)

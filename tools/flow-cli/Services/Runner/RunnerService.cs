@@ -491,9 +491,8 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 구현 실패";
-                MarkSpecFailed(spec, result.ErrorMessage);
+                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
                 result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
-                await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
 
@@ -503,9 +502,8 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "변경사항 커밋 실패";
-                MarkSpecFailed(spec, result.ErrorMessage);
+                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
                 result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
-                await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
 
@@ -534,9 +532,8 @@ public class RunnerService
                     await _git.AbortMergeAsync();
                     result.Success = false;
                     result.ErrorMessage = "머지 충돌 해결 실패";
-                    MarkSpecFailed(spec, result.ErrorMessage);
+                    MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
                     result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
-                    await _git.RemoveWorktreeAsync(spec.Id);
                     return FinalizeResult(result);
                 }
             }
@@ -544,15 +541,13 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "머지 실패";
-                MarkSpecFailed(spec, result.ErrorMessage);
+                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
                 result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
-                await _git.RemoveWorktreeAsync(spec.Id);
                 return FinalizeResult(result);
             }
 
-            // 6. 성공 → worktree 정리 및 스펙 상태 업데이트
-            await _git.RemoveWorktreeAsync(spec.Id);
-            MarkSpecCompleted(spec);
+            // 6. 성공 → 스펙 상태 업데이트 (worktree는 검토 완료 후 정리)
+            MarkSpecCompleted(spec, worktreePath, branchName);
 
             // 7. 프로젝트 변경사항 push
             await _git.PushAsync(_config.RemoteName, _config.MainBranch);
@@ -572,11 +567,14 @@ public class RunnerService
             _log.Error("process", $"스펙 처리 중 예외: {ex.Message}", spec.Id);
             result.Success = false;
             result.ErrorMessage = ex.Message;
-            MarkSpecFailed(spec, ex.Message);
+            // worktree가 존재하는 경우 경로를 메타데이터에 보존
+            var exWorktreePath = _git.GetWorktreePath(spec.Id);
+            var exWorktreeBranch = _git.GetBranchName(spec.Id);
+            var exWorktreeExists = Directory.Exists(exWorktreePath);
+            MarkSpecFailed(spec, ex.Message,
+                exWorktreeExists ? exWorktreePath : null,
+                exWorktreeExists ? exWorktreeBranch : null);
             result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
-
-            // worktree 정리 시도
-            try { await _git.RemoveWorktreeAsync(spec.Id); } catch { }
 
             return FinalizeResult(result);
         }
@@ -788,21 +786,31 @@ public class RunnerService
     /// <summary>
     /// 스펙을 실패로 마킹
     /// </summary>
-    private void MarkSpecFailed(SpecNode spec, string error)
+    private void MarkSpecFailed(SpecNode spec, string error, string? worktreePath = null, string? worktreeBranch = null)
     {
         spec.Status = "needs-review";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastError"] = error;
         spec.Metadata["lastErrorAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["runnerInstanceId"] = _instanceId;
+        if (worktreePath != null)
+        {
+            spec.Metadata["worktreePath"] = worktreePath;
+            spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
+        }
+        else
+        {
+            spec.Metadata.Remove("worktreePath");
+            spec.Metadata.Remove("worktreeBranch");
+        }
         _specStore.Update(spec);
         _log.Error("status", $"스펙 상태 변경: needs-review (오류: {error})", spec.Id);
     }
 
     /// <summary>
-    /// 스펙을 구현 완료로 마킹한다.
+    /// 스펙을 구현 완료로 마킹한다. worktreePath/worktreeBranch가 제공되면 메타데이터에 저장한다.
     /// </summary>
-    private void MarkSpecCompleted(SpecNode spec)
+    private void MarkSpecCompleted(SpecNode spec, string? worktreePath = null, string? worktreeBranch = null)
     {
         var prevStatus = spec.Status;
         var review = SpecReviewEvaluator.Evaluate(spec);
@@ -827,6 +835,8 @@ public class RunnerService
             spec.Metadata["lastVerifiedAt"] = DateTime.UtcNow.ToString("o");
             spec.Metadata["lastVerifiedBy"] = _instanceId;
             spec.Metadata["verificationSource"] = "runner-completion";
+            spec.Metadata.Remove("worktreePath");
+            spec.Metadata.Remove("worktreeBranch");
             _specStore.Update(spec);
             _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
             return;
@@ -835,15 +845,22 @@ public class RunnerService
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
+
+        if (worktreePath != null)
+        {
+            spec.Metadata["worktreePath"] = worktreePath;
+            spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
+        }
+
         _specStore.Update(spec);
 
         if (review.RequiresManualVerification)
         {
-            _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 수동 검증 필요)", spec.Id);
+            _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 수동 검증 필요, worktree: {worktreePath})", spec.Id);
             return;
         }
 
-        _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 검토 대기)", spec.Id);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 검토 대기, worktree: {worktreePath})", spec.Id);
     }
 
     private void MarkSpecVerified(SpecNode spec, string verificationSource)
@@ -856,6 +873,8 @@ public class RunnerService
         spec.Metadata["verificationSource"] = verificationSource;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+        spec.Metadata.Remove("worktreePath");
+        spec.Metadata.Remove("worktreeBranch");
         _specStore.Update(spec);
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
     }
@@ -874,8 +893,31 @@ public class RunnerService
         spec.Metadata.Remove("questionStatus");
         spec.Metadata.Remove("reviewDisposition");
         spec.Metadata.Remove("requiresUserInput");
+        spec.Metadata.Remove("worktreePath");
+        spec.Metadata.Remove("worktreeBranch");
         _specStore.Update(spec);
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → done ({reason})", spec.Id);
+    }
+
+    /// <summary>
+    /// 스펙 메타데이터에 기록된 worktree를 정리한다. verified/done/queued 전환 시 호출.
+    /// </summary>
+    private async Task CleanupWorktreeFromMetadataAsync(SpecNode spec)
+    {
+        if (spec.Metadata == null) return;
+        if (!spec.Metadata.TryGetValue("worktreePath", out var pathObj)) return;
+        var path = pathObj?.ToString();
+        if (string.IsNullOrEmpty(path)) return;
+
+        _log.Info("worktree-cleanup", $"검토 완료 후 worktree 정리: {path}", spec.Id);
+        try
+        {
+            await _git.RemoveWorktreeAsync(spec.Id);
+        }
+        catch (Exception ex)
+        {
+            _log.Warn("worktree-cleanup", $"worktree 정리 실패: {ex.Message}", spec.Id);
+        }
     }
 
     private async Task<List<SpecWorkResult>> AutoVerifyReviewedSpecsAsync()
@@ -896,6 +938,7 @@ public class RunnerService
             if (IsTaskSpec(spec))
             {
                 var completedAt = DateTime.UtcNow.ToString("o");
+                await CleanupWorktreeFromMetadataAsync(spec);
                 MarkSpecDone(spec, "needs-review", "task 타입 최종 상태 정리");
 
                 results.Add(new SpecWorkResult
@@ -917,6 +960,7 @@ public class RunnerService
             }
 
             var timestamp = DateTime.UtcNow.ToString("o");
+            await CleanupWorktreeFromMetadataAsync(spec);
             MarkSpecVerified(spec, "runner-review-pass");
 
             results.Add(new SpecWorkResult
@@ -1193,18 +1237,13 @@ public class RunnerService
             // 현재 인스턴스가 아닌 이전 인스턴스의 작업만 복구
             if (prevInstanceId != _instanceId)
             {
-                MarkSpecFailed(spec, $"Runner 인스턴스 비정상 종료 (이전 인스턴스: {prevInstanceId})");
+                // worktree가 존재하면 경로를 메타데이터에 보존 (검토 에이전트가 확인 가능)
+                var crashWorktreePath = _git.GetWorktreePath(spec.Id);
+                var crashWorktreeExists = Directory.Exists(crashWorktreePath);
+                MarkSpecFailed(spec, $"Runner 인스턴스 비정상 종료 (이전 인스턴스: {prevInstanceId})",
+                    crashWorktreeExists ? crashWorktreePath : null,
+                    crashWorktreeExists ? _git.GetBranchName(spec.Id) : null);
                 recovered++;
-
-                // 잔여 worktree 정리 시도
-                try
-                {
-                    _ = _git.RemoveWorktreeAsync(spec.Id).GetAwaiter().GetResult();
-                }
-                catch
-                {
-                    _log.Warn("recovery", $"잔여 worktree 정리 실패: {spec.Id}", spec.Id);
-                }
             }
         }
 
@@ -1346,6 +1385,12 @@ public class RunnerService
             result.ErrorMessage = "spec-append-review 결과가 스펙에 반영되지 않았습니다.";
             _log.Warn("review-loop", result.ErrorMessage, candidate.Id);
             return FinalizeResult(result);
+        }
+
+        // 검토 완료 후 queued로 재배치된 경우 worktree 정리 (needs-review+requiresUserInput은 보존)
+        if (string.Equals(reviewedSpec!.Status, "queued", StringComparison.OrdinalIgnoreCase))
+        {
+            await CleanupWorktreeFromMetadataAsync(reviewedSpec);
         }
 
         var commitMsg = IsRequiresUserInput(reviewedSpec!)
