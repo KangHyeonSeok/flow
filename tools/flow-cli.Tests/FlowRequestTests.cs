@@ -203,4 +203,104 @@ public class FlowRequestTests
         request.Options.Should().ContainKey("status");
         request.Metadata.Should().ContainKey("source");
     }
+
+    // ─── F-003-C2: NormalizeCommand 복합 라우팅 ───────────────────────────
+
+    [Theory]
+    [InlineData("spec", "list", "spec-list")]
+    [InlineData("spec", "create", "spec-create")]
+    [InlineData("spec", "get", "spec-get")]
+    [InlineData("spec", "validate", "spec-validate")]
+    [InlineData("spec", "graph", "spec-graph")]
+    [InlineData("spec", "impact", "spec-impact")]
+    [InlineData("spec", "propagate", "spec-propagate")]
+    [InlineData("spec", "check-refs", "spec-check-refs")]
+    [InlineData("spec", "order", "spec-order")]
+    [InlineData("spec", "init", "spec-init")]
+    [InlineData("spec", "append-review", "spec-append-review")]
+    [InlineData("runner", "start", "runner-start")]
+    [InlineData("runner", "status", "runner-status")]
+    [InlineData("runner", "stop", "runner-stop")]
+    [InlineData("runner", "logs", "runner-logs")]
+    public void C2_NormalizeCommand_CompoundCommands_ResolvesCorrectly(string command, string subcommand, string expected)
+    {
+        var result = FlowApp.NormalizeCommand(command, subcommand);
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("build", null, "build")]
+    [InlineData("config", null, "config")]
+    [InlineData("test", null, "test")]
+    [InlineData("spec-list", null, "spec-list")]
+    [InlineData("BUILD", null, "build")]
+    [InlineData("SPEC", "LIST", "spec-list")]
+    public void C2_NormalizeCommand_NonCompoundCommands_ReturnsFlatCommand(string command, string? subcommand, string expected)
+    {
+        var result = FlowApp.NormalizeCommand(command, subcommand);
+
+        result.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("spec", null)]
+    [InlineData("spec", "")]
+    [InlineData("runner", null)]
+    [InlineData("runner", "")]
+    public void C3_NormalizeCommand_CompoundWithoutSubcommand_ReturnsNull(string command, string? subcommand)
+    {
+        // F-003-C3: subcommand 누락 시 SCHEMA_ERROR를 반환해야 함을 알리기 위해 null 반환
+        var result = FlowApp.NormalizeCommand(command, subcommand);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void C3_Dispatcher_SpecWithoutSubcommand_WritesSchemaError()
+    {
+        // F-003-C3: "spec" 명령에 subcommand 없으면 실행 전 SCHEMA_ERROR 반환
+        var output = CaptureConsoleOutput(() =>
+        {
+            var app = new FlowApp();
+            var request = new FlowRequest { Command = "spec" };
+            app.RouteRequest(request, false, "test");
+        });
+
+        var result = JsonSerializer.Deserialize<CommandResult>(output, JsonOutput.Read);
+        result.Should().NotBeNull();
+        result!.Success.Should().BeFalse();
+        result.Error.Should().NotBeNull();
+        result.Error!.Code.Should().Be("SCHEMA_ERROR");
+    }
+
+    [Fact]
+    public void C3_Dispatcher_UnknownCommand_WritesUnknownCommandError()
+    {
+        // F-003-C3: 알 수 없는 명령은 UNKNOWN_COMMAND 오류 반환
+        var output = CaptureConsoleOutput(() =>
+        {
+            var app = new FlowApp();
+            var request = new FlowRequest { Command = "not-a-real-command" };
+            app.RouteRequest(request, false, "test");
+        });
+
+        var result = JsonSerializer.Deserialize<CommandResult>(output, JsonOutput.Read);
+        result.Should().NotBeNull();
+        result!.Success.Should().BeFalse();
+        result.Error!.Code.Should().Be("UNKNOWN_COMMAND");
+    }
+
+    // ─── 헬퍼 ────────────────────────────────────────────────────────────
+
+    private static string CaptureConsoleOutput(Action action)
+    {
+        var sb = new System.Text.StringBuilder();
+        using var writer = new System.IO.StringWriter(sb);
+        var original = Console.Out;
+        Console.SetOut(writer);
+        try { action(); }
+        finally { Console.SetOut(original); }
+        return sb.ToString().Trim();
+    }
 }

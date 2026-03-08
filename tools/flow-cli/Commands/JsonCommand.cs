@@ -111,7 +111,33 @@ public partial class FlowApp
         // pretty 옵션은 요청 options에서도 읽을 수 있음
         pretty = pretty || GetOption(opts, "pretty", false);
 
-        switch (request.Command.ToLowerInvariant())
+        // F-003-C2: 복합 command+subcommand → 플랫 명령으로 정규화 (호환 정책)
+        // "spec" + "list" → "spec-list", "runner" + "start" → "runner-start"
+        var effectiveCommand = NormalizeCommand(request.Command, request.Subcommand);
+        if (effectiveCommand == null)
+        {
+            // subcommand 누락: SCHEMA_ERROR 반환 (C3)
+            var compoundCmd = request.Command.ToLowerInvariant();
+            var supported = compoundCmd == "spec"
+                ? new[] { "init", "create", "get", "list", "delete", "validate", "graph", "impact", "propagate", "check-refs", "order", "append-review" }
+                : new[] { "start", "status", "stop", "logs" };
+            JsonOutput.Write(new CommandResult
+            {
+                Success = false,
+                Command = compoundCmd,
+                Error = new ErrorInfo
+                {
+                    Code = ErrorCodes.SchemaError,
+                    Message = $"'{compoundCmd}' 명령은 'subcommand' 필드가 필요합니다.",
+                    Details = new { supported_subcommands = supported }
+                },
+                ExitCode = 1
+            }, pretty);
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        switch (effectiveCommand)
         {
             case "build":
                 // F-004-C2: 타입 불일치 사전 검출
@@ -321,11 +347,12 @@ public partial class FlowApp
                             supported = new[]
                             {
                                 "build", "config", "db-add", "db-query", "test",
-                                "runner-start", "runner-status", "runner-stop", "runner-logs",
-                                "human-input", "spec-init", "spec-create", "spec-get",
+                                "spec", "spec-init", "spec-create", "spec-get",
                                 "spec-list", "spec-delete", "spec-validate", "spec-graph",
                                 "spec-impact", "spec-propagate", "spec-check-refs", "spec-order",
-                                "spec-append-review"
+                                "spec-append-review",
+                                "runner", "runner-start", "runner-status", "runner-stop", "runner-logs",
+                                "human-input"
                             }
                         }
                     },
@@ -464,5 +491,23 @@ public partial class FlowApp
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// F-003-C2: 복합 command+subcommand를 플랫 명령 이름으로 정규화한다 (호환 정책).
+    /// "spec"/"runner" 명령은 subcommand가 필수이며, 다른 명령은 command를 그대로 반환한다.
+    /// subcommand가 누락된 경우 null을 반환하여 호출자가 SCHEMA_ERROR를 처리하도록 한다.
+    /// </summary>
+    internal static string? NormalizeCommand(string command, string? subcommand)
+    {
+        var cmd = command.ToLowerInvariant();
+        if (cmd is "spec" or "runner")
+        {
+            var sub = subcommand?.Trim().ToLowerInvariant() ?? "";
+            if (string.IsNullOrEmpty(sub))
+                return null; // subcommand 누락 → 호출자가 SCHEMA_ERROR 반환
+            return $"{cmd}-{sub}";
+        }
+        return cmd;
     }
 }
