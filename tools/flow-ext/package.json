@@ -140,26 +140,6 @@
         "command": "flowExt.testC_nonceOnly",
         "title": "TestC: nonce only",
         "icon": "$(beaker)"
-      },
-      {
-        "command": "flowExt.testKanban_step1",
-        "title": "KanbanTest Step1: ViewColumn.One",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "flowExt.testKanban_step2",
-        "title": "KanbanTest Step2: retainContext+mousedown",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "flowExt.testKanban_step3",
-        "title": "KanbanTest Step3: 싱글톤",
-        "icon": "$(beaker)"
-      },
-      {
-        "command": "flowExt.testKanban_step4",
-        "title": "KanbanTest Step4: html 다중교체",
-        "icon": "$(beaker)"
       }
     ],
     "keybindings": [],
@@ -228,26 +208,6 @@
         },
         {
           "command": "flowExt.testC_nonceOnly",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testKanban_step1",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testKanban_step2",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testKanban_step3",
-          "when": "view == specTree",
-          "group": "navigation@99"
-        },
-        {
-          "command": "flowExt.testKanban_step4",
           "when": "view == specTree",
           "group": "navigation@99"
         },

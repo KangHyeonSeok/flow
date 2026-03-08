@@ -88,10 +88,6 @@ export class KanbanPanel {
     /** Webview → Extension 메시지 핸들링 */
     private async handleMessage(msg: { type: string; [key: string]: unknown }): Promise<void> {
         switch (msg.type) {
-            case '__jsError': {
-                vscode.window.showErrorMessage(`[칸반 JS 에러] line ${msg.line}: ${msg.msg}`);
-                break;
-            }
             case 'selectSpec': {
                 const specId = msg.specId as string;
                 vscode.commands.executeCommand('specGraph.showDetail', specId);
@@ -687,17 +683,7 @@ export class KanbanPanel {
 </div>
 
 <script>
-// acquireVsCodeApi()는 반드시 가장 먼저 한 번만 호출해야 한다.
 const vscode = acquireVsCodeApi();
-// JS 에러를 extension으로 보고 (vscode 취득 후 정의)
-window.onerror = function(msg, src, line, col, err) {
-  try { vscode.postMessage({ type: '__jsError', msg: String(msg), line: line }); } catch(e) {}
-  const d = document.createElement('div');
-  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:6px 10px;font-size:11px;z-index:9999;';
-  d.textContent = 'JS Error line ' + line + ': ' + msg;
-  document.body.prepend(d);
-  return false;
-};
 let ctxSpecId = null;
 
 const STATUS_COLORS = {
