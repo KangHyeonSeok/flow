@@ -61,6 +61,29 @@ function Resolve-VSCodeCli {
     return $candidates | Select-Object -First 1
 }
 
+function Remove-LegacyFlowExtensions {
+    param(
+        [string]$VsCodeCli
+    )
+
+    $legacyExtensionIds = @(
+        'flow-team.spec-graph'
+    )
+
+    foreach ($extensionId in $legacyExtensionIds) {
+        Write-Host "[INFO] 이전 확장 제거 시도: $extensionId" -ForegroundColor Gray
+        $uninstallOutput = & $VsCodeCli --uninstall-extension $extensionId 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[INFO] 제거 완료: $extensionId" -ForegroundColor Gray
+            continue
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($uninstallOutput)) {
+            Write-Host $uninstallOutput.TrimEnd() -ForegroundColor DarkGray
+        }
+    }
+}
+
 function Write-ReloadSignal {
     param(
         [string]$ProjectRootPath,
@@ -188,6 +211,7 @@ try {
 
         Write-Host "[5/5] VS Code 확장 강제 설치..." -ForegroundColor White
         Write-Host "[INFO] VS Code CLI: $vsCodeCli" -ForegroundColor Gray
+        Remove-LegacyFlowExtensions -VsCodeCli $vsCodeCli
         & $vsCodeCli --install-extension $destPath --force
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERROR] VS Code 확장 설치 실패" -ForegroundColor Red

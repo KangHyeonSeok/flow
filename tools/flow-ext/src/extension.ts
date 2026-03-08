@@ -24,11 +24,14 @@ let daemonStatusBarItem: vscode.StatusBarItem;
 let reloadStatusBarItem: vscode.StatusBarItem;
 let daemonPollTimer: NodeJS.Timeout | undefined;
 let reloadSignalWatcher: vscode.FileSystemWatcher | undefined;
+const LEGACY_EXTENSION_ID = 'flow-team.spec-graph';
 
 export function activate(context: vscode.ExtensionContext): void {
     output = vscode.window.createOutputChannel('Flow');
     context.subscriptions.push(output);
     output.appendLine('[activate] Flow extension activated');
+
+    notifyLegacyExtensionConflict();
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     const workspaceRoot = workspaceFolders?.[0]?.uri.fsPath;
@@ -769,4 +772,21 @@ async function updatePendingPushContext(gitRoot: string): Promise<void> {
 
 export function deactivate(): void {
     // cleanup handled by disposables
+}
+
+function notifyLegacyExtensionConflict(): void {
+    const legacyExtension = vscode.extensions.getExtension(LEGACY_EXTENSION_ID);
+    if (!legacyExtension) {
+        return;
+    }
+
+    output.appendLine(`[activate] legacy extension detected: ${LEGACY_EXTENSION_ID}`);
+    void vscode.window.showWarningMessage(
+        '기존 Spec Graph 확장이 함께 설치되어 있어 사이드바 아이콘이 중복될 수 있습니다. legacy 확장을 제거하세요.',
+        '확장 창 열기'
+    ).then((choice) => {
+        if (choice === '확장 창 열기') {
+            void vscode.commands.executeCommand('workbench.view.extensions');
+        }
+    });
 }

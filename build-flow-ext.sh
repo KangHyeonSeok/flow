@@ -52,6 +52,18 @@ resolve_vscode_cli() {
     return 1
 }
 
+remove_legacy_flow_extensions() {
+    local vscode_cli="$1"
+    local legacy_extension_ids=(
+        "flow-team.spec-graph"
+    )
+
+    for extension_id in "${legacy_extension_ids[@]}"; do
+        echo "[INFO] attempting to remove legacy extension: $extension_id"
+        "$vscode_cli" --uninstall-extension "$extension_id" || true
+    done
+}
+
 write_reload_signal() {
     local version_text="$1"
     local signal_dir="$PROJECT_ROOT/.flow"
@@ -182,6 +194,7 @@ echo "  .vsix: $dest_path"
 if vscode_cli="$(resolve_vscode_cli 2>/dev/null)"; then
     echo "[5/5] installing extension..."
     echo "[INFO] VS Code CLI: $vscode_cli"
+    remove_legacy_flow_extensions "$vscode_cli"
     "$vscode_cli" --install-extension "$dest_path" --force
     echo "[INFO] install complete"
 else

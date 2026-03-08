@@ -134,7 +134,7 @@ export class SpecTreeItem extends vscode.TreeItem {
         if (spec) {
             const feedback = getUserFeedbackState(spec);
             const questionBadge = feedback.openQuestionCount > 0
-                ? ` ❓${feedback.openQuestionCount}`
+                ? ` 질문 ${feedback.openQuestionCount}개`
                 : '';
             this.description = `[${status}]${spec.tags.length > 0 ? ' ' + spec.tags.join(', ') : ''}${questionBadge}`;
         } else if (condition) {
@@ -190,7 +190,7 @@ export class BrokenSpecTreeItem extends SpecTreeItem {
     constructor(public readonly record: BrokenSpecDiagRecord) {
         super(); // no spec/condition — renders as 'Unknown' base, then we override below
 
-        this.label = `⚠ ${record.specId}`;
+        this.label = record.specId;
         const locInfo = record.line != null
             ? ` (line ${record.line}${record.column != null ? `:${record.column}` : ''})`
             : '';
