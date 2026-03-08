@@ -296,6 +296,17 @@ public partial class FlowApp
                     pretty: pretty);
                 break;
 
+            case "spec-append-review":
+                // F-003-C2/C3: spec-append-review 핸들러 위임. input-file 필수 검증.
+                if (RejectIfInvalid(ValidateRequiredFields(opts, "input-file"), "spec-append-review", pretty)) break;
+                SpecAppendReview(
+                    id: args.Length > 0 ? args[0] : GetOption(opts, "id", ""),
+                    inputFile: GetOption(opts, "input-file", ""),
+                    reviewer: GetOption(opts, "reviewer", "copilot-cli-review"),
+                    reviewedAt: GetOption<string?>(opts, "reviewed-at", null),
+                    pretty: pretty);
+                break;
+
             default:
                 JsonOutput.Write(new CommandResult
                 {
@@ -314,7 +325,8 @@ public partial class FlowApp
                                 "runner-start", "runner-status", "runner-stop", "runner-logs",
                                 "human-input", "spec-init", "spec-create", "spec-get",
                                 "spec-list", "spec-delete", "spec-validate", "spec-graph",
-                                "spec-impact", "spec-propagate", "spec-check-refs", "spec-order"
+                                "spec-impact", "spec-propagate", "spec-check-refs", "spec-order",
+                                "spec-append-review"
                             }
                         }
                     },

@@ -133,4 +133,74 @@ public class FlowRequestTests
         deserialized.Payload!.Value.GetProperty("title").GetString().Should().Be("Feature X");
         deserialized.Metadata.Should().ContainKey("requestId");
     }
+
+    // ─── F-003-C2/C3: 디스패처 검증 (ValidateRequiredFields / ValidateOptionTypes) ──
+
+    [Fact]
+    public void C2_C3_ValidateRequiredFields_MissingKey_ReturnsError()
+    {
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["title"] = JsonDocument.Parse("\"Test\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateRequiredFields(opts, "title", "content");
+
+        errors.Should().ContainSingle(e => e.Contains("content"));
+    }
+
+    [Fact]
+    public void C3_ValidateRequiredFields_AllPresent_ReturnsEmpty()
+    {
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["input-file"] = JsonDocument.Parse("\"/tmp/review.json\"").RootElement,
+            ["id"] = JsonDocument.Parse("\"F-001\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateRequiredFields(opts, "input-file", "id");
+
+        errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void C3_ValidateOptionTypes_TypeMismatch_ReturnsError()
+    {
+        var opts = new Dictionary<string, JsonElement>
+        {
+            ["timeout"] = JsonDocument.Parse("\"not-a-number\"").RootElement
+        };
+
+        var errors = FlowApp.ValidateOptionTypes(opts, new Dictionary<string, Type>
+        {
+            ["timeout"] = typeof(int)
+        });
+
+        errors.Should().ContainSingle(e => e.Contains("timeout"));
+    }
+
+    [Fact]
+    public void C1_Deserialize_SampleRunnerPayload_ParsesCorrectly()
+    {
+        // 사용자 제공 샘플 JSON 페이로드
+        var json = """
+            {
+                "command": "spec",
+                "subcommand": "list",
+                "arguments": [],
+                "options": { "status": "queued", "json": true },
+                "payload": {},
+                "metadata": { "source": "runner" }
+            }
+            """;
+
+        var request = JsonSerializer.Deserialize<FlowRequest>(json, JsonOutput.Read);
+
+        request.Should().NotBeNull();
+        request!.Command.Should().Be("spec");
+        request.Subcommand.Should().Be("list");
+        request.Arguments.Should().BeEmpty();
+        request.Options.Should().ContainKey("status");
+        request.Metadata.Should().ContainKey("source");
+    }
 }
