@@ -21,7 +21,7 @@ public class RunnerConfig
     public string PidFile { get; set; } = "runner.pid";
 
     /// <summary>Copilot CLI 기본 모델</summary>
-    public string CopilotModel { get; set; } = "claude-sonnet-4.6";
+    public string CopilotModel { get; set; } = "gpt-5.4";
 
     /// <summary>Copilot CLI 실행 파일명 (CopilotCliPath 미설정 시 사용)</summary>
     public string CopilotCommand { get; set; } = "copilot";
@@ -78,6 +78,39 @@ public class RunnerConfig
 
     /// <summary>스펙 자동 구현 최대 연속 실패 횟수. 초과 시 사용자 개입이 필요한 질문을 자동 생성한다. 0이면 비활성화.</summary>
     public int MaxImplementationAttempts { get; set; } = 3;
+}
+
+public sealed class RunnerQueuePlan
+{
+    public string[] TargetStatuses { get; init; } = [];
+    public int TotalCandidates { get; init; }
+    public int ReadyCount { get; init; }
+    public int BlockedCount { get; init; }
+    public string? NextSpecId { get; init; }
+    public List<RunnerQueueCandidate> ReadySpecs { get; init; } = [];
+    public List<RunnerBlockedSpec> BlockedSpecs { get; init; } = [];
+}
+
+public sealed class RunnerQueueCandidate
+{
+    public string SpecId { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Status { get; init; } = "";
+    public int Rank { get; init; }
+    public double IssuePriorityScore { get; init; }
+    public bool IsFallback { get; init; }
+    public int DependencyCount { get; init; }
+    public string[] Dependencies { get; init; } = [];
+}
+
+public sealed class RunnerBlockedSpec
+{
+    public string SpecId { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string Reason { get; init; } = "";
+    public string[] UnmetDependencies { get; init; } = [];
+    public int OpenQuestionCount { get; init; }
 }
 
 /// <summary>

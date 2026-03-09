@@ -7,19 +7,19 @@ namespace FlowCLI.Tests;
 public class RunnerConfigDefaultsTests
 {
     [Fact]
-    public void FlowConfig_DefaultCopilotModel_IsClaudeSonnet46()
+    public void FlowConfig_DefaultCopilotModel_IsGPT54()
     {
         var config = new FlowConfig();
 
-        config.CopilotModel.Should().Be("claude-sonnet-4.6");
+        config.CopilotModel.Should().Be("gpt-5.4");
     }
 
     [Fact]
-    public void RunnerConfig_DefaultCopilotModel_IsClaudeSonnet46()
+    public void RunnerConfig_DefaultCopilotModel_IsGPT54()
     {
         var config = new RunnerConfig();
 
-        config.CopilotModel.Should().Be("claude-sonnet-4.6");
+        config.CopilotModel.Should().Be("gpt-5.4");
     }
 
     [Fact]

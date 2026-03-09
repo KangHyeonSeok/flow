@@ -13,16 +13,36 @@ public class SpecValidator
     {
         "draft", "queued", "working", "needs-review", "verified", "deprecated", "done"
     };
+    private static readonly HashSet<string> ValidConditionStatuses = new()
+    {
+        "draft", "needs-review", "verified"
+    };
     private static readonly HashSet<string> ValidNodeTypes = new() { "feature", "condition", "task" };
     private static readonly HashSet<string> ValidEvidenceTypes = new()
     {
         "screenshot", "log", "metric", "test-result"
     };
-
-    /// <summary>changeLog.type 허용 값</summary>
-    private static readonly HashSet<string> ValidChangeLogTypes = new()
+    private static readonly HashSet<string> ValidActivityRoles = new()
     {
-        "create", "mutate", "supersede", "deprecate", "restore"
+        "planner", "developer", "test-validator", "tester", "system", "user"
+    };
+    private static readonly HashSet<string> ValidActivityOutcomes = new()
+    {
+        "handoff", "requeue", "needs-review", "verified", "done", "blocked"
+    };
+    private static readonly HashSet<string> ValidActivityKinds = new()
+    {
+        "create", "mutate", "supersede", "deprecate", "restore", "implementation", "validation", "verification", "recovery"
+    };
+    private static readonly HashSet<string> ValidActivityIssues = new()
+    {
+        "spec-misaligned-test", "trivial-test", "non-deterministic-test", "incorrect-result-interpretation",
+        "missing-evidence", "execution-crash", "test-failed", "user-input-required", "user-test-required"
+    };
+    private static readonly HashSet<string> ValidConditionUpdateReasons = new()
+    {
+        "automated-tests-passed", "manual-tests-passed", "test-failed", "user-input-required",
+        "user-test-required", "missing-evidence", "execution-crash", "reset-for-requeue"
     };
 
     /// <summary>
@@ -72,7 +92,7 @@ public class SpecValidator
             else if (!ConditionIdPattern.IsMatch(cond.Id))
                 result.Warnings.Add(Warning(spec.Id, $"조건 ID '{cond.Id}' 가 표준 형식(F-NNN-CN)이 아닙니다."));
 
-            if (!ValidStatuses.Contains(cond.Status))
+            if (!ValidConditionStatuses.Contains(cond.Status))
                 result.Errors.Add(Error(spec.Id, $"conditions[{cond.Id}].status", $"유효하지 않은 상태: {cond.Status}"));
         }
 
@@ -98,14 +118,17 @@ public class SpecValidator
             }
         }
 
-        // 10. 관계 메타데이터 검사 (F-022)
+        // 10. activity 검사
+        ValidateActivity(spec, result);
+
+        // 11. 관계 메타데이터 검사 (F-022)
         ValidateRelationFields(spec, result);
 
         return result;
     }
 
     /// <summary>
-    /// 단일 스펙의 관계 필드(supersedes/supersededBy/mutates/mutatedBy/changeLog)를 검사합니다.
+    /// 단일 스펙의 관계 필드(supersedes/supersededBy/mutates/mutatedBy/activity)를 검사합니다.
     /// </summary>
     private void ValidateRelationFields(SpecNode spec, ValidationResult result)
     {
@@ -125,23 +148,62 @@ public class SpecValidator
             result.Errors.Add(Error(spec.Id, "supersedes/mutates",
                 $"동일 스펙을 supersedes와 mutates에 동시에 지정할 수 없습니다: {string.Join(", ", overlap)}"));
 
-        // changeLog 항목 필수 필드 검사
-        for (int i = 0; i < spec.ChangeLog.Count; i++)
-        {
-            var entry = spec.ChangeLog[i];
+    }
 
-            if (!ValidChangeLogTypes.Contains(entry.Type))
-                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].type",
-                    $"유효하지 않은 changeLog 타입: '{entry.Type}'. 허용: {string.Join(", ", ValidChangeLogTypes)}"));
+    private void ValidateActivity(SpecNode spec, ValidationResult result)
+    {
+        for (int i = 0; i < spec.Activity.Count; i++)
+        {
+            var entry = spec.Activity[i];
 
             if (string.IsNullOrWhiteSpace(entry.At))
-                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].at", "changeLog.at(변경 시각)은 필수입니다."));
+                result.Errors.Add(Error(spec.Id, $"activity[{i}].at", "activity.at은 필수입니다."));
 
-            if (string.IsNullOrWhiteSpace(entry.Author))
-                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].author", "changeLog.author(변경 주체)는 필수입니다."));
+            if (!ValidActivityRoles.Contains(entry.Role))
+                result.Errors.Add(Error(spec.Id, $"activity[{i}].role",
+                    $"유효하지 않은 activity.role: '{entry.Role}'. 허용: {string.Join(", ", ValidActivityRoles)}"));
 
             if (string.IsNullOrWhiteSpace(entry.Summary))
-                result.Errors.Add(Error(spec.Id, $"changeLog[{i}].summary", "changeLog.summary(변경 요약)는 필수입니다."));
+                result.Errors.Add(Error(spec.Id, $"activity[{i}].summary", "activity.summary는 필수입니다."));
+
+            if (!ValidActivityOutcomes.Contains(entry.Outcome))
+                result.Errors.Add(Error(spec.Id, $"activity[{i}].outcome",
+                    $"유효하지 않은 activity.outcome: '{entry.Outcome}'. 허용: {string.Join(", ", ValidActivityOutcomes)}"));
+
+            if (!string.IsNullOrWhiteSpace(entry.Kind) && !ValidActivityKinds.Contains(entry.Kind))
+                result.Errors.Add(Error(spec.Id, $"activity[{i}].kind",
+                    $"유효하지 않은 activity.kind: '{entry.Kind}'. 허용: {string.Join(", ", ValidActivityKinds)}"));
+
+            for (int issueIndex = 0; issueIndex < entry.Issues.Count; issueIndex++)
+            {
+                var issue = entry.Issues[issueIndex];
+                if (!ValidActivityIssues.Contains(issue))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].issues[{issueIndex}]",
+                        $"유효하지 않은 activity issue: '{issue}'. 허용: {string.Join(", ", ValidActivityIssues)}"));
+            }
+
+            for (int updateIndex = 0; updateIndex < entry.ConditionUpdates.Count; updateIndex++)
+            {
+                var update = entry.ConditionUpdates[updateIndex];
+                if (string.IsNullOrWhiteSpace(update.ConditionId))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].conditionUpdates[{updateIndex}].conditionId", "conditionId는 필수입니다."));
+
+                if (!ValidConditionStatuses.Contains(update.Status))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].conditionUpdates[{updateIndex}].status",
+                        $"유효하지 않은 condition update status: '{update.Status}'. 허용: {string.Join(", ", ValidConditionStatuses)}"));
+
+                if (!string.IsNullOrWhiteSpace(update.Reason) && !ValidConditionUpdateReasons.Contains(update.Reason))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].conditionUpdates[{updateIndex}].reason",
+                        $"유효하지 않은 condition update reason: '{update.Reason}'. 허용: {string.Join(", ", ValidConditionUpdateReasons)}"));
+            }
+
+            if (entry.StatusChange != null)
+            {
+                if (!ValidStatuses.Contains(entry.StatusChange.From))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].statusChange.from", $"유효하지 않은 상태: {entry.StatusChange.From}"));
+                if (!ValidStatuses.Contains(entry.StatusChange.To))
+                    result.Errors.Add(Error(spec.Id, $"activity[{i}].statusChange.to", $"유효하지 않은 상태: {entry.StatusChange.To}"));
+            }
         }
     }
 
@@ -266,32 +328,30 @@ public class SpecValidator
 
     /// <summary>
     /// Planner 자동 queued 승격 가능 여부를 검증한다 (F-019-C5).
-    /// supersedes 또는 mutates 관계가 있지만 changeLog에 기록되지 않은 경우 오류를 반환한다.
+    /// supersedes 또는 mutates 관계가 있지만 activity에 기록되지 않은 경우 오류를 반환한다.
     /// </summary>
     public ValidationResult ValidateAutoQueueEligibility(SpecNode spec)
     {
         var result = new ValidationResult();
 
-        // C5: supersedes가 있으면 changeLog에 supersede 항목 필요
+        // C5: supersedes가 있으면 activity에 supersede 항목 필요
         if (spec.Supersedes.Count > 0)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "supersede", StringComparison.OrdinalIgnoreCase));
-            if (!hasLog)
+            bool hasActivity = HasRelationActivity(spec, "supersede");
+            if (!hasActivity)
                 result.Errors.Add(Error(spec.Id, "supersedes",
-                    "supersedes 관계가 changeLog에 기록되지 않았습니다. " +
-                    "자동 승격 전에 changeLog에 type='supersede' 항목을 추가하세요."));
+                    "supersedes 관계가 activity에 기록되지 않았습니다. " +
+                    "자동 승격 전에 activity.kind='supersede' 항목을 추가하세요."));
         }
 
-        // C5: mutates가 있으면 changeLog에 mutate 항목 필요
+        // C5: mutates가 있으면 activity에 mutate 항목 필요
         if (spec.Mutates.Count > 0)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "mutate", StringComparison.OrdinalIgnoreCase));
-            if (!hasLog)
+            bool hasActivity = HasRelationActivity(spec, "mutate");
+            if (!hasActivity)
                 result.Errors.Add(Error(spec.Id, "mutates",
-                    "mutates 관계가 changeLog에 기록되지 않았습니다. " +
-                    "자동 승격 전에 changeLog에 type='mutate' 항목을 추가하세요."));
+                    "mutates 관계가 activity에 기록되지 않았습니다. " +
+                    "자동 승격 전에 activity.kind='mutate' 항목을 추가하세요."));
         }
 
         // F-021-C4: supersededBy/mutatedBy가 있으면 대응하는 방향 포인터도 필요
@@ -310,38 +370,41 @@ public class SpecValidator
 
     /// <summary>
     /// F-021-C4: 새 스펙이 기존 스펙을 부분적으로 변형하거나 확장할 때 관계 유형이 명시되어야 함을 검증한다.
-    /// supersedes/mutates 중 하나는 있지만 changeLog 또는 bidirectional link가 불완전하면 오류를 반환한다.
+    /// supersedes/mutates 중 하나는 있지만 activity 또는 bidirectional link가 불완전하면 오류를 반환한다.
     /// 관계가 모두 불명확(parent/dep/supersedes/mutates 모두 없고 다른 스펙과 유사한 제목)하면 경고를 추가한다.
     /// </summary>
     public ValidationResult ValidateRelationCompleteness(SpecNode spec, IReadOnlyList<SpecNode> allSpecs)
     {
         var result = new ValidationResult();
 
-        // supersedes는 있는데 supersede changeLog가 없으면 관계 불명확
+        // supersedes는 있는데 supersede activity가 없으면 관계 불명확
         foreach (var targetId in spec.Supersedes)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "supersede", StringComparison.OrdinalIgnoreCase)
-                && e.RelatedIds.Contains(targetId));
-            if (!hasLog)
+            bool hasActivity = HasRelationActivity(spec, "supersede", targetId);
+            if (!hasActivity)
                 result.Errors.Add(Error(spec.Id, "supersedes",
-                    $"supersedes[{targetId}] 관계에 대한 changeLog(type=supersede, relatedIds∋{targetId}) 가 없습니다. " +
+                    $"supersedes[{targetId}] 관계에 대한 activity(kind=supersede, relatedIds∋{targetId}) 가 없습니다. " +
                     "관계가 불명확하면 auto-queue 승격이 금지됩니다."));
         }
 
-        // mutates는 있는데 mutate changeLog가 없으면 관계 불명확
+        // mutates는 있는데 mutate activity가 없으면 관계 불명확
         foreach (var targetId in spec.Mutates)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "mutate", StringComparison.OrdinalIgnoreCase)
-                && e.RelatedIds.Contains(targetId));
-            if (!hasLog)
+            bool hasActivity = HasRelationActivity(spec, "mutate", targetId);
+            if (!hasActivity)
                 result.Errors.Add(Error(spec.Id, "mutates",
-                    $"mutates[{targetId}] 관계에 대한 changeLog(type=mutate, relatedIds∋{targetId}) 가 없습니다. " +
+                    $"mutates[{targetId}] 관계에 대한 activity(kind=mutate, relatedIds∋{targetId}) 가 없습니다. " +
                     "관계가 불명확하면 auto-queue 승격이 금지됩니다."));
         }
 
         return result;
+    }
+
+    private static bool HasRelationActivity(SpecNode spec, string kind, string? relatedId = null)
+    {
+        return spec.Activity.Any(entry =>
+            string.Equals(entry.Kind, kind, StringComparison.OrdinalIgnoreCase)
+            && (relatedId == null || entry.RelatedIds.Contains(relatedId)));
     }
 
     private static ValidationError Error(string specId, string field, string message)

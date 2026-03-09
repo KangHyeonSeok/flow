@@ -10,18 +10,22 @@ public class GitWorktreeService
 {
     private readonly string _projectRoot;
     private readonly string _worktreeBaseDir;
+    private readonly string _mainBranch;
     private readonly RunnerLogService _log;
 
-    public GitWorktreeService(string projectRoot, string flowRoot, string worktreeSubDir, RunnerLogService log)
+    public GitWorktreeService(string projectRoot, string flowRoot, string worktreeSubDir, string mainBranch, RunnerLogService log)
     {
         _projectRoot = projectRoot;
         _worktreeBaseDir = Path.Combine(flowRoot, worktreeSubDir);
+        _mainBranch = mainBranch;
         _log = log;
         Directory.CreateDirectory(_worktreeBaseDir);
     }
 
     /// <summary>
-    /// 스펙 ID 기반으로 worktree를 생성한다.
+    /// 스펙 ID 기반으로 worktree를 생성하거나 기존 worktree를 재사용한다.
+    /// 기존 worktree가 있으면 main을 rebase하여 최신 상태로 갱신한다.
+    /// rebase 실패(충돌) 시 삭제 후 새로 생성한다.
     /// 브랜치: runner/{specId}, 경로: .flow/worktrees/{specId}
     /// </summary>
     public async Task<(bool Success, string WorktreePath, string BranchName)> CreateWorktreeAsync(string specId)
@@ -29,14 +33,32 @@ public class GitWorktreeService
         var branchName = $"runner/{specId}";
         var worktreePath = Path.Combine(_worktreeBaseDir, specId);
 
-        // 기존 worktree가 있으면 정리
+        // 기존 worktree가 있으면 재사용 시도
         if (Directory.Exists(worktreePath))
         {
-            _log.Warn("worktree-create", $"기존 worktree 발견, 정리 중: {worktreePath}", specId);
+            _log.Info("worktree-reuse", $"기존 worktree 발견, rebase 시도: {worktreePath}", specId);
+
+            // uncommitted 변경사항 커밋 (rebase 전 필요)
+            var stashResult = await RunGitAsync("stash", worktreePath);
+            var hasStash = stashResult.Success && !stashResult.Output.Contains("No local changes");
+
+            // main 기준으로 rebase
+            var rebaseResult = await RunGitAsync($"rebase {_mainBranch}", worktreePath);
+            if (rebaseResult.Success)
+            {
+                if (hasStash) await RunGitAsync("stash pop", worktreePath);
+                _log.Info("worktree-reuse", $"기존 worktree rebase 성공, 재사용: {worktreePath} (branch: {branchName})", specId);
+                return (true, worktreePath, branchName);
+            }
+
+            // rebase 실패 → abort 후 삭제하고 새로 생성
+            _log.Warn("worktree-reuse", $"rebase 실패, 워크트리 재생성: {rebaseResult.Error}", specId);
+            await RunGitAsync("rebase --abort", worktreePath);
+            if (hasStash) await RunGitAsync("stash pop", worktreePath);
             await RemoveWorktreeAsync(specId);
         }
 
-        // 브랜치 생성 (이미 있으면 삭제 후 재생성)
+        // 브랜치가 남아있으면 삭제
         var branchExists = await RunGitAsync($"branch --list {branchName}");
         if (!string.IsNullOrWhiteSpace(branchExists.Output))
         {

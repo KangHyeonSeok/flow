@@ -125,7 +125,7 @@ public partial class FlowApp
     }
 
     // ─── flow spec append-review ─────────────────────────────────────
-    [Command("spec-append-review", Description = "리뷰 JSON을 metadata.review에 반영합니다. 미해결 질문이 있으면 needs-review 상태로 사용자 입력을 대기하고, 없으면 queued로 재배치합니다")]
+    [Command("spec-append-review", Description = "리뷰 JSON을 metadata.review에 반영합니다. 미해결 질문이 있으면 사용자 입력을 대기하고, 그 외 경우에도 review loop 공통 규칙으로 상태를 재계산합니다")]
     public void SpecAppendReview(
         [Argument(Description = "스펙 ID")] string id,
         [Option("input-file", Description = "리뷰 JSON 파일 경로")] string inputFile = "",
@@ -187,6 +187,7 @@ public partial class FlowApp
                     id = updated.Id,
                     status = updated.Status,
                     reviewDisposition = GetMetadataString(updated, "reviewDisposition"),
+                    reviewReason = GetMetadataString(updated, "reviewReason"),
                     openQuestionCount = CountOpenQuestions(updated),
                     inputFile
                 },
@@ -256,35 +257,118 @@ public partial class FlowApp
 
             ApplyManualConditionReview(spec, condition, normalizedResult, comment, reviewer, reviewedAtUtc);
 
-            var evaluation = SpecReviewEvaluator.Evaluate(spec);
             spec.Metadata ??= new Dictionary<string, object>();
-
-            if (normalizedResult == "failed")
+            var reviewedAtText = reviewedAtUtc.ToString("o");
+            var previousStatus = spec.Status;
+            var hasOpenQuestions = SpecReviewEvaluator.HasOpenQuestions(spec);
+            SpecReviewEvaluator.NormalizeConditionReviewStates(spec, hasOpenQuestions);
+            var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions);
+            spec.Metadata["lastReviewAt"] = reviewedAtText;
+            spec.Metadata["lastReviewBy"] = reviewer;
+            spec.Metadata["reviewDisposition"] = decision.ReviewDisposition;
+            if (!string.IsNullOrWhiteSpace(decision.ReviewReason))
             {
-                spec.Status = "needs-review";
-                spec.Metadata["reviewDisposition"] = "manual-verification-failed";
-                spec.Metadata["verificationSource"] = "manual-review";
-                spec.Metadata.Remove("lastVerifiedAt");
-                spec.Metadata.Remove("lastVerifiedBy");
+                spec.Metadata["reviewReason"] = decision.ReviewReason;
             }
-            else if (evaluation.CanAutoVerify)
+            else
             {
-                spec.Status = string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase) ? "done" : "verified";
-                spec.Metadata["lastVerifiedAt"] = reviewedAtUtc.ToString("o");
+                spec.Metadata.Remove("reviewReason");
+            }
+
+            List<SpecConditionUpdate> conditionUpdates;
+            List<string> issues;
+            string activityOutcome;
+            string activitySummary;
+
+            if (decision.IsFinal)
+            {
+                spec.Status = decision.SpecStatus;
+                spec.Metadata["lastVerifiedAt"] = reviewedAtText;
                 spec.Metadata["lastVerifiedBy"] = reviewer;
                 spec.Metadata["verificationSource"] = "manual-review";
                 spec.Metadata.Remove("worktreePath");
                 spec.Metadata.Remove("worktreeBranch");
                 spec.Metadata.Remove("questionStatus");
-                spec.Metadata.Remove("reviewDisposition");
                 spec.Metadata.Remove("requiresUserInput");
+                conditionUpdates = new List<SpecConditionUpdate>
+                {
+                    new()
+                    {
+                        ConditionId = condition.Id,
+                        Status = "verified",
+                        Reason = "manual-tests-passed",
+                        Comment = BuildConditionReviewComment(comment, reviewer)
+                    }
+                };
+                issues = new List<string>();
+                activityOutcome = string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase) ? "done" : "verified";
+                activitySummary = string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase)
+                    ? $"수동 리뷰 결과를 반영해 task를 done으로 확정했다."
+                    : $"수동 리뷰 결과를 반영해 feature를 verified로 확정했다.";
+            }
+            else if (string.Equals(decision.SpecStatus, "needs-review", StringComparison.OrdinalIgnoreCase))
+            {
+                spec.Status = "needs-review";
+                spec.Metadata.Remove("lastVerifiedAt");
+                spec.Metadata.Remove("lastVerifiedBy");
+                spec.Metadata.Remove("verificationSource");
+                if (hasOpenQuestions)
+                {
+                    spec.Metadata["questionStatus"] = "waiting-user-input";
+                }
+                else
+                {
+                    spec.Metadata.Remove("questionStatus");
+                }
+
+                conditionUpdates = new List<SpecConditionUpdate>();
+                if (string.Equals(condition.Status, "verified", StringComparison.OrdinalIgnoreCase))
+                {
+                    conditionUpdates.Add(new SpecConditionUpdate
+                    {
+                        ConditionId = condition.Id,
+                        Status = "verified",
+                        Reason = "manual-tests-passed",
+                        Comment = BuildConditionReviewComment(comment, reviewer)
+                    });
+                }
+
+                conditionUpdates.AddRange(BuildNeedsReviewConditionUpdates(spec, hasOpenQuestions));
+                issues = hasOpenQuestions ? new List<string> { "user-input-required" } : new List<string> { "user-test-required" };
+                activityOutcome = "needs-review";
+                activitySummary = hasOpenQuestions
+                    ? "수동 리뷰 결과를 반영했고, 추가 사용자 응답이 필요해 스펙을 needs-review로 유지했다."
+                    : "수동 리뷰 결과를 반영했고, 남은 사용자 테스트가 있어 스펙을 needs-review로 유지했다.";
             }
             else
             {
-                spec.Status = "needs-review";
-                spec.Metadata["reviewDisposition"] = "manual-verification-pending";
-                spec.Metadata["verificationSource"] = "manual-review";
+                spec.Status = "queued";
+                spec.Metadata.Remove("verificationSource");
+                spec.Metadata.Remove("lastVerifiedAt");
+                spec.Metadata.Remove("lastVerifiedBy");
+                spec.Metadata.Remove("questionStatus");
+                spec.Metadata.Remove("requiresUserInput");
+                conditionUpdates = ResetConditionsForRequeue(spec);
+                issues = BuildReviewActivityIssues(decision.ReviewDisposition);
+                activityOutcome = "requeue";
+                activitySummary = "수동 리뷰 결과 테스트 실패가 확인되어 자동 재시도를 위해 스펙을 queued로 되돌렸다.";
             }
+
+            spec.Metadata["plannerState"] = hasOpenQuestions ? "waiting-user-input" : "standby";
+            AppendSpecActivity(
+                spec,
+                reviewedAtUtc,
+                role: "tester",
+                actor: reviewer,
+                model: "gpt-5-mini",
+                summary: activitySummary,
+                outcome: activityOutcome,
+                kind: "verification",
+                comment: BuildSpecReviewActivityComment(comment, decision.ReviewReason, normalizedResult, reviewer),
+                statusFrom: previousStatus,
+                statusTo: spec.Status,
+                issues: issues,
+                conditionUpdates: conditionUpdates);
 
             var updated = SpecStore.Update(spec);
 
@@ -294,6 +378,7 @@ public partial class FlowApp
                     id = updated.Id,
                     specFile = Path.Combine(SpecStore.SpecsDir, $"{updated.Id}.json"),
                     specStatus = updated.Status,
+                    reviewReason = GetMetadataString(updated, "reviewReason"),
                     conditionId = condition.Id,
                     conditionStatus = condition.Status,
                     result = normalizedResult,
@@ -392,19 +477,21 @@ public partial class FlowApp
                 sb.AppendLine($"  ✓ 이 스펙이 최신 기준 ({string.Join(", ", spec.Supersedes)}을(를) 대체)");
         }
 
-        // F-021-C1: 변경 이력 요약
-        if (spec.ChangeLog.Count > 0)
+        // activity 요약
+        if (spec.Activity.Count > 0)
         {
             sb.AppendLine();
-            sb.AppendLine($"## Change Log ({spec.ChangeLog.Count} entries)");
-            foreach (var entry in spec.ChangeLog.TakeLast(5))
+            sb.AppendLine($"## Activity ({spec.Activity.Count} entries)");
+            foreach (var entry in spec.Activity.TakeLast(5))
             {
                 var related = entry.RelatedIds.Count > 0 ? $" → {string.Join(",", entry.RelatedIds)}" : "";
-                sb.AppendLine($"  [{entry.Type}] {entry.At[..Math.Min(19, entry.At.Length)]} by {entry.Author}{related}");
+                var kind = string.IsNullOrWhiteSpace(entry.Kind) ? entry.Outcome : entry.Kind;
+                var actor = string.IsNullOrWhiteSpace(entry.Actor) ? entry.Role : entry.Actor;
+                sb.AppendLine($"  [{kind}] {entry.At[..Math.Min(19, entry.At.Length)]} by {actor}{related}");
                 sb.AppendLine($"    {entry.Summary}");
             }
-            if (spec.ChangeLog.Count > 5)
-                sb.AppendLine($"  ... 및 {spec.ChangeLog.Count - 5}개 이전 항목");
+            if (spec.Activity.Count > 5)
+                sb.AppendLine($"  ... 및 {spec.Activity.Count - 5}개 이전 항목");
         }
 
         return sb.ToString().TrimEnd();
@@ -510,21 +597,146 @@ public partial class FlowApp
             condition.Metadata.Remove("requiresManualVerification");
             condition.Metadata.Remove("manualVerificationReason");
             condition.Metadata.Remove("manualVerificationItems");
+            condition.Metadata.Remove("reviewReason");
         }
         else
         {
             condition.Status = "needs-review";
-            condition.Metadata["requiresManualVerification"] = true;
-
-            if (string.IsNullOrWhiteSpace(GetMetadataString(condition.Metadata, "manualVerificationReason")) && !string.IsNullOrWhiteSpace(comment))
-            {
-                condition.Metadata["manualVerificationReason"] = comment!;
-            }
+            condition.Metadata["reviewReason"] = "test-failed";
+            condition.Metadata.Remove("requiresManualVerification");
+            condition.Metadata.Remove("manualVerificationReason");
+            condition.Metadata.Remove("manualVerificationItems");
         }
 
         UpsertManualReviewTest(condition, reviewer, reviewedAtUtc, result, comment);
         UpsertManualReviewEvidence(spec.Evidence, spec.Id, condition.Id, reviewedAtUtc, result, comment);
         UpsertManualReviewEvidence(condition.Evidence, spec.Id, condition.Id, reviewedAtUtc, result, comment);
+    }
+
+    private static void AppendSpecActivity(
+        SpecNode spec,
+        DateTime activityAtUtc,
+        string role,
+        string actor,
+        string model,
+        string summary,
+        string outcome,
+        string kind,
+        string? comment,
+        string statusFrom,
+        string statusTo,
+        List<string> issues,
+        List<SpecConditionUpdate> conditionUpdates)
+    {
+        spec.Activity ??= new List<SpecActivityEntry>();
+        spec.Activity.Add(new SpecActivityEntry
+        {
+            At = activityAtUtc.ToString("o"),
+            Role = role,
+            Actor = actor,
+            Model = model,
+            Summary = summary,
+            Comment = comment,
+            Outcome = outcome,
+            Kind = kind,
+            Issues = issues,
+            ConditionUpdates = conditionUpdates,
+            StatusChange = new SpecActivityStatusChange
+            {
+                From = statusFrom,
+                To = statusTo
+            }
+        });
+    }
+
+    private static List<SpecConditionUpdate> BuildNeedsReviewConditionUpdates(SpecNode spec, bool hasOpenQuestions)
+    {
+        var reason = hasOpenQuestions ? "user-input-required" : "user-test-required";
+        var comment = hasOpenQuestions ? "사용자 질문 응답이 필요하다." : "사용자 수동 테스트 또는 확인이 필요하다.";
+        var updates = new List<SpecConditionUpdate>();
+
+        foreach (var condition in spec.Conditions)
+        {
+            if (!string.Equals(condition.Status, "needs-review", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            updates.Add(new SpecConditionUpdate
+            {
+                ConditionId = condition.Id,
+                Status = "needs-review",
+                Reason = reason,
+                Comment = comment
+            });
+        }
+
+        return updates;
+    }
+
+    private static List<SpecConditionUpdate> ResetConditionsForRequeue(SpecNode spec)
+    {
+        var updates = new List<SpecConditionUpdate>();
+        foreach (var condition in spec.Conditions)
+        {
+            condition.Status = "draft";
+            condition.Metadata ??= new Dictionary<string, object>();
+            condition.Metadata.Remove("reviewReason");
+            condition.Metadata.Remove("requiresManualVerification");
+            condition.Metadata.Remove("manualVerificationReason");
+            condition.Metadata.Remove("manualVerificationItems");
+            condition.Metadata.Remove("manualVerificationStatus");
+            condition.Metadata.Remove("lastVerifiedAt");
+            condition.Metadata.Remove("lastVerifiedBy");
+            condition.Metadata.Remove("verificationSource");
+            updates.Add(new SpecConditionUpdate
+            {
+                ConditionId = condition.Id,
+                Status = "draft",
+                Reason = "reset-for-requeue",
+                Comment = "자동 재시도를 위해 condition 상태를 초기화했다."
+            });
+        }
+
+        return updates;
+    }
+
+    private static List<string> BuildReviewActivityIssues(string disposition)
+        => disposition switch
+        {
+            "test-failed" => new List<string> { "test-failed" },
+            "user-test-required" => new List<string> { "user-test-required" },
+            "open-question" => new List<string> { "user-input-required" },
+            "execution-crash" => new List<string> { "execution-crash" },
+            "review-verified" => new List<string>(),
+            "review-done" => new List<string>(),
+            _ => new List<string> { "missing-evidence" }
+        };
+
+    private static string BuildConditionReviewComment(string? comment, string reviewer)
+        => string.IsNullOrWhiteSpace(comment)
+            ? $"{reviewer}가 수동 리뷰 통과를 기록했다."
+            : comment.Trim();
+
+    private static string? BuildSpecReviewActivityComment(string? comment, string? reviewReason, string result, string reviewer)
+    {
+        var parts = new List<string>
+        {
+            $"reviewer={reviewer}",
+            $"result={result}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(reviewReason))
+        {
+            parts.Add($"reason={reviewReason}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            parts.Add(comment.Trim());
+        }
+
+        return string.Join("; ", parts);
     }
 
     private static void UpsertManualReviewTest(
@@ -677,10 +889,11 @@ public partial class FlowApp
                         ?? new List<string>(oldSpec.Tags),
                 Dependencies = new List<string>(oldSpec.Dependencies),
                 Supersedes = new List<string> { oldId },
-                ChangeLog = new List<SpecChangeLogEntry>
+                Activity = new List<SpecActivityEntry>
                 {
-                    new() { Type = "supersede", At = DateTime.UtcNow.ToString("o"),
-                            Author = author, Summary = changeSummary, RelatedIds = new List<string> { oldId } }
+                    new() { Kind = "supersede", At = DateTime.UtcNow.ToString("o"),
+                            Role = "planner", Actor = author, Summary = changeSummary,
+                            RelatedIds = new List<string> { oldId }, Outcome = "done" }
                 }
             };
             var created = SpecStore.Create(newSpec);
@@ -762,10 +975,11 @@ public partial class FlowApp
                 Tags = tags?.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList()
                         ?? new List<string>(targetSpec.Tags),
                 Mutates = new List<string> { targetId },
-                ChangeLog = new List<SpecChangeLogEntry>
+                Activity = new List<SpecActivityEntry>
                 {
-                    new() { Type = "mutate", At = DateTime.UtcNow.ToString("o"),
-                            Author = author, Summary = changeSummary, RelatedIds = new List<string> { targetId } }
+                    new() { Kind = "mutate", At = DateTime.UtcNow.ToString("o"),
+                            Role = "planner", Actor = author, Summary = changeSummary,
+                            RelatedIds = new List<string> { targetId }, Outcome = "done" }
                 }
             };
             var created = SpecStore.Create(newSpec);

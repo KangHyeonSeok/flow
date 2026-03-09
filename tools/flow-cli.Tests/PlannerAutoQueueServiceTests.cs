@@ -224,11 +224,11 @@ public class PlannerAutoQueueServiceTests : IDisposable
     // ── C5: 대체/변형 스펙 자동 승격 금지 ──────────────────────────────────
 
     [Fact]
-    public void EvaluateEligibility_SupersedesWithoutChangeLog_IsNotEligible()
+    public void EvaluateEligibility_SupersedesWithoutActivity_IsNotEligible()
     {
         var spec = CreateFeatureSpec("F-007");
         spec.Supersedes.Add("F-003");
-        // changeLog에 supersede 항목 없음
+        // activity에 supersede 항목 없음
 
         var result = _svc.EvaluateEligibility(spec);
 
@@ -238,17 +238,19 @@ public class PlannerAutoQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public void EvaluateEligibility_SupersedesWithChangeLog_IsEligible()
+    public void EvaluateEligibility_SupersedesWithActivity_IsEligible()
     {
         var spec = CreateFeatureSpec("F-008");
         spec.Supersedes.Add("F-003");
-        spec.ChangeLog.Add(new SpecChangeLogEntry
+        spec.Activity.Add(new SpecActivityEntry
         {
-            Type = "supersede",
+            Kind = "supersede",
             At = DateTime.UtcNow.ToString("o"),
-            Author = "planner",
+            Role = "planner",
+            Actor = "planner",
             Summary = "F-003을 F-008로 대체",
-            RelatedIds = ["F-003"]
+            RelatedIds = ["F-003"],
+            Outcome = "done"
         });
 
         var result = _svc.EvaluateEligibility(spec);
@@ -257,11 +259,11 @@ public class PlannerAutoQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public void EvaluateEligibility_MutatesWithoutChangeLog_IsNotEligible()
+    public void EvaluateEligibility_MutatesWithoutActivity_IsNotEligible()
     {
         var spec = CreateFeatureSpec("F-009");
         spec.Mutates.Add("F-005");
-        // changeLog에 mutate 항목 없음
+        // activity에 mutate 항목 없음
 
         var result = _svc.EvaluateEligibility(spec);
 
@@ -270,17 +272,19 @@ public class PlannerAutoQueueServiceTests : IDisposable
     }
 
     [Fact]
-    public void EvaluateEligibility_MutatesWithChangeLog_IsEligible()
+    public void EvaluateEligibility_MutatesWithActivity_IsEligible()
     {
         var spec = CreateFeatureSpec("F-010");
         spec.Mutates.Add("F-005");
-        spec.ChangeLog.Add(new SpecChangeLogEntry
+        spec.Activity.Add(new SpecActivityEntry
         {
-            Type = "mutate",
+            Kind = "mutate",
             At = DateTime.UtcNow.ToString("o"),
-            Author = "planner",
+            Role = "planner",
+            Actor = "planner",
             Summary = "F-005 in-place 수정",
-            RelatedIds = ["F-005"]
+            RelatedIds = ["F-005"],
+            Outcome = "done"
         });
 
         var result = _svc.EvaluateEligibility(spec);

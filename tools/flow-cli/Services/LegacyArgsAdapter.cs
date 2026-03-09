@@ -16,7 +16,7 @@ public static class LegacyArgsAdapter
     private static readonly HashSet<string> DispatchableCommands = new(StringComparer.OrdinalIgnoreCase)
     {
         "build", "config", "db-add", "db-query", "test",
-        "runner-start", "runner-status", "runner-stop", "runner-logs",
+        "runner-start", "runner-status", "runner-stop", "runner-logs", "runner-plan",
         "human-input", "spec-init", "spec-create", "spec-get", "spec-list",
         "spec-delete", "spec-validate", "spec-graph", "spec-impact",
         "spec-propagate", "spec-check-refs", "spec-order", "spec-append-review",

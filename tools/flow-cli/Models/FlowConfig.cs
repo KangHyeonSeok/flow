@@ -33,7 +33,7 @@ public class FlowConfig
 
     /// <summary>Copilot CLI 기본 모델</summary>
     [JsonPropertyName("copilotModel")]
-    public string CopilotModel { get; set; } = "claude-sonnet-4.6";
+    public string CopilotModel { get; set; } = "gpt-5.4";
 
     /// <summary>Copilot CLI 실행 파일명 (CopilotCliPath 미설정 시 사용)</summary>
     [JsonPropertyName("copilotCommand")]

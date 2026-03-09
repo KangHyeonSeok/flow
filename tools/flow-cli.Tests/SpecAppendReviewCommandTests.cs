@@ -3,6 +3,7 @@ using FluentAssertions;
 
 namespace FlowCLI.Tests;
 
+[Collection("CommandGlobalState")]
 public class SpecAppendReviewCommandTests : IDisposable
 {
     private readonly string _tempDir;
@@ -78,9 +79,17 @@ public class SpecAppendReviewCommandTests : IDisposable
         // open 질문이 남아 있으므로 "needs-review" 유지 (사용자 입력 대기)
         updated!.Status.Should().Be("needs-review");
         updated.Metadata.Should().NotBeNull();
-        updated.Metadata!["reviewDisposition"].ToString().Should().Be("needs-user-decision");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("open-question");
+        updated.Metadata["reviewReason"].ToString().Should().Be("open-question");
         updated.Metadata.Should().NotContainKey("requiresUserInput");
         updated.Metadata["questionStatus"].ToString().Should().Be("waiting-user-input");
+        updated.Activity.Should().HaveCount(2);
+        var activity = updated.Activity.Last();
+        activity.Role.Should().Be("tester");
+        activity.Outcome.Should().Be("needs-review");
+        activity.StatusChange!.From.Should().Be("needs-review");
+        activity.StatusChange.To.Should().Be("needs-review");
+        activity.Issues.Should().ContainSingle().Which.Should().Be("user-input-required");
         ReadCapturedOutput().Should().Contain("spec-append-review");
     }
 
@@ -118,13 +127,67 @@ public class SpecAppendReviewCommandTests : IDisposable
     }
 
     [Fact]
-    public void SpecAppendReview_WhenReviewVerifiesCondition_UpdatesConditionAndSpecStatus()
+    public void SpecAppendReview_WhenReviewFindsMissingEvidence_RequeuesSpecAndResetsConditions()
     {
         var store = new SpecStore(_tempDir);
         store.Initialize();
         store.Create(new SpecNode
         {
             Id = "F-303",
+            Title = "condition review requeue test",
+            Description = "review append requeue",
+            Status = "needs-review",
+            NodeType = "feature",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-303-C1",
+                    Status = "draft"
+                }
+            ]
+        });
+
+        var inputFile = Path.Combine(_tempDir, "review-requeue.json");
+        File.WriteAllText(inputFile, """
+        {
+          "summary": "증거가 부족해 자동 재시도가 필요합니다.",
+          "failureReasons": ["최종 증거가 충분하지 않습니다."],
+          "alternatives": ["테스트를 보강합니다."],
+          "suggestedAttempts": ["추가 증거 수집 후 다시 실행"],
+          "requiresUserInput": false,
+          "questions": []
+        }
+        """);
+
+        var app = new FlowApp();
+
+        app.SpecAppendReview("F-303", inputFile: inputFile, reviewer: "runner-test");
+
+        Environment.ExitCode.Should().Be(0);
+        var updated = store.Get("F-303");
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be("queued");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("missing-evidence");
+        updated.Metadata["reviewReason"].ToString().Should().Be("missing-evidence");
+        updated.Conditions[0].Status.Should().Be("draft");
+        updated.Activity.Should().HaveCount(2);
+        var activity = updated.Activity.Last();
+        activity.Outcome.Should().Be("requeue");
+        activity.ConditionUpdates.Should().ContainSingle(update =>
+            update.ConditionId == "F-303-C1" &&
+            update.Status == "draft" &&
+            update.Reason == "reset-for-requeue");
+    }
+
+    [Fact]
+    public void SpecAppendReview_WhenReviewVerifiesCondition_UpdatesConditionAndSpecStatus()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(new SpecNode
+        {
+            Id = "F-304",
             Title = "condition review verify test",
             Description = "review append verify condition",
             Status = "needs-review",
@@ -133,7 +196,7 @@ public class SpecAppendReviewCommandTests : IDisposable
             [
                 new SpecCondition
                 {
-                    Id = "F-303-C1",
+                    Id = "F-304-C1",
                     Status = "needs-review",
                     Metadata = new Dictionary<string, object>
                     {
@@ -151,7 +214,7 @@ public class SpecAppendReviewCommandTests : IDisposable
           "failureReasons": [],
           "alternatives": [],
           "suggestedAttempts": ["추가 작업 불필요"],
-          "verifiedConditionIds": ["F-303-C1"],
+                    "verifiedConditionIds": ["F-304-C1"],
           "requiresUserInput": false,
           "questions": []
         }
@@ -159,15 +222,24 @@ public class SpecAppendReviewCommandTests : IDisposable
 
         var app = new FlowApp();
 
-        app.SpecAppendReview("F-303", inputFile: inputFile, reviewer: "runner-test");
+                app.SpecAppendReview("F-304", inputFile: inputFile, reviewer: "runner-test");
 
         Environment.ExitCode.Should().Be(0);
-        var updated = store.Get("F-303");
+                var updated = store.Get("F-304");
         updated.Should().NotBeNull();
         updated!.Status.Should().Be("verified");
         updated.Conditions[0].Status.Should().Be("verified");
         updated.Conditions[0].Metadata.Should().NotContainKey("requiresManualVerification");
         updated.Metadata!["reviewDisposition"].ToString().Should().Be("review-verified");
+        updated.Metadata.Should().NotContainKey("reviewReason");
+                updated.Activity.Should().HaveCount(2);
+                var activity = updated.Activity.Last();
+                activity.Outcome.Should().Be("verified");
+                activity.Issues.Should().BeEmpty();
+                activity.ConditionUpdates.Should().ContainSingle(update =>
+                        update.ConditionId == "F-304-C1" &&
+                        update.Status == "verified" &&
+                        update.Reason == "automated-tests-passed");
     }
 
     private string ReadCapturedOutput()

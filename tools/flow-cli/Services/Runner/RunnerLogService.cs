@@ -11,6 +11,7 @@ public class RunnerLogService
 {
     private readonly string _logDir;
     private readonly string _instanceId;
+    private readonly bool _echoToConsole;
     private static readonly object Lock = new();
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -19,10 +20,11 @@ public class RunnerLogService
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    public RunnerLogService(string flowRoot, string logSubDir, string instanceId)
+    public RunnerLogService(string flowRoot, string logSubDir, string instanceId, bool echoToConsole = true)
     {
         _logDir = Path.Combine(flowRoot, logSubDir);
         _instanceId = instanceId;
+        _echoToConsole = echoToConsole;
         Directory.CreateDirectory(_logDir);
     }
 
@@ -54,6 +56,9 @@ public class RunnerLogService
         {
             File.AppendAllText(logPath, line + Environment.NewLine);
         }
+
+        if (!_echoToConsole)
+            return;
 
         // stderr에도 출력 (인터랙티브 디버깅용)
         var color = level switch

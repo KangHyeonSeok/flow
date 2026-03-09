@@ -91,33 +91,78 @@ public class SpecCondition
 }
 
 /// <summary>
-/// SpecChangeLogEntry — 스펙 변경 이력 항목.
-/// changeLog는 스펙의 주요 변경 사항을 시계열로 기록한다.
+/// SpecActivityStatusChange — activity가 유발한 spec 상태 변경.
 /// </summary>
-public class SpecChangeLogEntry
+public class SpecActivityStatusChange
 {
-    /// <summary>변경 유형. create | mutate | supersede | deprecate | restore 중 하나.</summary>
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = "mutate";
+    [JsonPropertyName("from")]
+    public string From { get; set; } = "";
 
-    /// <summary>변경 시각 (ISO 8601). 필수.</summary>
+    [JsonPropertyName("to")]
+    public string To { get; set; } = "";
+}
+
+/// <summary>
+/// SpecConditionUpdate — activity에 기록되는 condition 상태 변경 결과.
+/// </summary>
+public class SpecConditionUpdate
+{
+    [JsonPropertyName("conditionId")]
+    public string ConditionId { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "draft";
+
+    [JsonPropertyName("reason")]
+    public string? Reason { get; set; }
+
+    [JsonPropertyName("comment")]
+    public string? Comment { get; set; }
+}
+
+/// <summary>
+/// SpecActivityEntry — 스펙의 append-only 활동 이력 항목.
+/// </summary>
+public class SpecActivityEntry
+{
     [JsonPropertyName("at")]
     public string At { get; set; } = "";
 
-    /// <summary>변경 주체 (사람 또는 runner ID). 필수.</summary>
-    [JsonPropertyName("author")]
-    public string Author { get; set; } = "";
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = "system";
 
-    /// <summary>변경 요약 (한 줄). 필수.</summary>
+    [JsonPropertyName("actor")]
+    public string? Actor { get; set; }
+
+    [JsonPropertyName("model")]
+    public string? Model { get; set; }
+
     [JsonPropertyName("summary")]
     public string Summary { get; set; } = "";
 
-    /// <summary>
-    /// 관련 스펙 ID 목록.
-    /// supersede 타입이면 대체된 스펙 ID, mutate 타입이면 대상 스펙 ID.
-    /// </summary>
+    [JsonPropertyName("comment")]
+    public string? Comment { get; set; }
+
+    [JsonPropertyName("artifacts")]
+    public List<string> Artifacts { get; set; } = new();
+
+    [JsonPropertyName("issues")]
+    public List<string> Issues { get; set; } = new();
+
+    [JsonPropertyName("conditionUpdates")]
+    public List<SpecConditionUpdate> ConditionUpdates { get; set; } = new();
+
+    [JsonPropertyName("statusChange")]
+    public SpecActivityStatusChange? StatusChange { get; set; }
+
+    [JsonPropertyName("kind")]
+    public string? Kind { get; set; }
+
     [JsonPropertyName("relatedIds")]
     public List<string> RelatedIds { get; set; } = new();
+
+    [JsonPropertyName("outcome")]
+    public string Outcome { get; set; } = "handoff";
 }
 
 /// <summary>
@@ -201,12 +246,9 @@ public class SpecNode
     [JsonPropertyName("mutatedBy")]
     public List<string> MutatedBy { get; set; } = new();
 
-    /// <summary>
-    /// 스펙 변경 이력. 최소 기록 항목: type, at, author, summary.
-    /// create(최초 생성), mutate(in-place 수정), supersede(대체), deprecate(폐기), restore(복구).
-    /// </summary>
-    [JsonPropertyName("changeLog")]
-    public List<SpecChangeLogEntry> ChangeLog { get; set; } = new();
+    /// <summary>스펙 활동 이력. append-only 로그.</summary>
+    [JsonPropertyName("activity")]
+    public List<SpecActivityEntry> Activity { get; set; } = new();
 
     // ─────────────────────────────────────────────────────────────────────
 

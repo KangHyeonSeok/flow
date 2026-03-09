@@ -111,6 +111,56 @@ public class SpecReviewEvaluatorTests
     }
 
       [Fact]
+      public void ResolveDecision_WithoutOpenQuestionsAndIncompleteConditions_RequeuesSpec()
+      {
+        var spec = CreateSpec(
+          status: "needs-review",
+          conditions:
+          [CreateCondition("F-100-C1", "needs-review")]);
+
+        var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions: false);
+
+        decision.SpecStatus.Should().Be("queued");
+        decision.ReviewDisposition.Should().Be("missing-evidence");
+        decision.ReviewReason.Should().Be("missing-evidence");
+        decision.IsFinal.Should().BeFalse();
+      }
+
+      [Fact]
+      public void ResolveDecision_WithFailedManualReview_ReturnsManualFailureDisposition()
+      {
+        var spec = CreateSpec(
+          status: "needs-review",
+          conditions:
+          [CreateCondition(
+            "F-100-C1",
+            "needs-review",
+            metadata: new Dictionary<string, object>
+            {
+              ["manualVerificationStatus"] = "failed"
+            })]);
+
+        var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions: false);
+
+        decision.SpecStatus.Should().Be("queued");
+        decision.ReviewDisposition.Should().Be("test-failed");
+        decision.ReviewReason.Should().Be("test-failed");
+      }
+
+      [Fact]
+      public void ResolveDecision_TaskWithoutBlockingSignals_CompletesAsDone()
+      {
+        var spec = CreateSpec(status: "needs-review", conditions: []);
+        spec.NodeType = "task";
+
+        var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions: false);
+
+        decision.SpecStatus.Should().Be("done");
+        decision.ReviewDisposition.Should().Be("review-done");
+        decision.ReviewReason.Should().BeNull();
+      }
+
+      [Fact]
       public void PromoteVerifiedConditionsFromArtifacts_PromotesConditionWithPassingTestsAndEvidence()
       {
         var spec = CreateSpec(

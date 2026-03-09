@@ -70,7 +70,7 @@ public class RunnerService
         RemoveIfEmptyArray(node, "supersededBy");
         RemoveIfEmptyArray(node, "mutates");
         RemoveIfEmptyArray(node, "mutatedBy");
-        RemoveIfEmptyArray(node, "changeLog");
+        RemoveIfEmptyArray(node, "activity");
         RemoveIfEmptyArray(node, "githubRefs");
         RemoveIfEmptyArray(node, "docLinks");
         RemoveIfEmptyArray(node, "evidence");
@@ -113,7 +113,7 @@ public class RunnerService
         }
     }
 
-    public RunnerService(string projectRoot, RunnerConfig config)
+    public RunnerService(string projectRoot, RunnerConfig config, bool echoLogsToConsole = true)
     {
         _projectRoot = projectRoot;
         _flowRoot = Path.Combine(projectRoot, ".flow");
@@ -122,7 +122,7 @@ public class RunnerService
         _instanceId = $"runner-{Environment.ProcessId}-{DateTime.UtcNow:HHmmss}";
         _pidFilePath = Path.Combine(_flowRoot, _config.PidFile);
 
-        _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId);
+        _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId, echoLogsToConsole);
 
         // 로컬 docs/specs/ 직접 사용
         _specStore = new SpecStore(projectRoot);
@@ -132,7 +132,7 @@ public class RunnerService
         _diagService = new BrokenSpecDiagService(_flowRoot, _log);
         _specStore.SetDiagService(_diagService);
 
-        _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _log);
+        _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _config.MainBranch, _log);
         _copilot = new CopilotService(_config, _log);
         _automatedTests = new AutomatedTestService(_config, _specStore, _log);
 
@@ -155,6 +155,21 @@ public class RunnerService
     public string InstanceId => _instanceId;
     public RunnerLogService Log => _log;
 
+    public RunnerQueuePlan GetQueuePlan()
+    {
+        var selection = EvaluateTargetSpecs(updateSelectionMetadata: false, logSelection: false);
+        return new RunnerQueuePlan
+        {
+            TargetStatuses = _config.TargetStatuses,
+            TotalCandidates = selection.ReadySpecs.Count + selection.BlockedSpecs.Count,
+            ReadyCount = selection.ReadySpecs.Count,
+            BlockedCount = selection.BlockedSpecs.Count,
+            NextSpecId = selection.ReadySpecs.FirstOrDefault()?.SpecId,
+            ReadySpecs = selection.ReadySpecs,
+            BlockedSpecs = selection.BlockedSpecs
+        };
+    }
+
     /// <summary>
     /// Runner를 단일 사이클로 실행한다 (한 번만 스캔하고 처리).
     /// </summary>
@@ -167,21 +182,17 @@ public class RunnerService
         // 1. 이전 크래시 복구
         RecoverFromCrash();
 
-        // 1.5. 검토 대기 스펙 자동 검증
-        var autoVerified = await AutoVerifyReviewedSpecsAsync();
-        results.AddRange(autoVerified);
-
-        // 1.6. F-025-C3: 손상 스펙 fresh scan → 우선 복구 시도
+        // 1.5. F-025-C3: 손상 스펙 fresh scan → 우선 복구 시도
         var brokenRepaired = await RepairBrokenSpecsAsync();
         results.AddRange(brokenRepaired);
 
-        // 1.7. F-016: 후보 선택 전 이슈 스냅샷 선반영
+        // 1.6. F-016: 후보 선택 전 이슈 스냅샷 선반영
         // - GitHub 연동 활성화 + 폴링 주기 도달: 전체 이슈 처리를 먼저 수행해 같은 사이클 후보에 신규 연결 반영
         // - GitHub 연동 활성화 + 폴링 주기 미도달: 이전 스냅샷 시각 복원으로 fallback 판단
         // - GitHub 연동 비활성화: 이전 스냅샷 시각 복원으로 fallback 판단
         await ProcessGitHubIssuesIfDueAsync();
 
-        // 1.8. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
+        // 1.7. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
         await SyncIssueConnectionsForQueueAsync();
 
         // 2. 구현 대상 스펙 탐색
@@ -254,15 +265,9 @@ public class RunnerService
     public async Task RunDaemonAsync(CancellationToken cancellationToken = default)
     {
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        Task? reviewLoopTask = null;
 
         WritePidFile();
-        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 구현 주기: {_config.PollIntervalMinutes}분, 검토 주기: {_config.ReviewPollIntervalSeconds}초, 유휴 재확인: 30초, 최대 즉시 재스케줄: {_config.MaxReschedulesPerPoll}회)");
-
-        if (_config.ReviewPollIntervalSeconds > 0)
-        {
-            reviewLoopTask = RunReviewDaemonAsync(_cts.Token);
-        }
+        _log.Info("daemon", $"데몬 시작 (PID: {Environment.ProcessId}, 구현 주기: {_config.PollIntervalMinutes}분, 유휴 재확인: 30초, 최대 즉시 재스케줄: {_config.MaxReschedulesPerPoll}회)");
 
         try
         {
@@ -351,52 +356,9 @@ public class RunnerService
                 _cts.Cancel();
             }
 
-            if (reviewLoopTask != null)
-            {
-                try
-                {
-                    await reviewLoopTask;
-                }
-                catch (OperationCanceledException)
-                {
-                }
-            }
-
             RemovePidFile();
             _log.Info("daemon", "데몬 종료");
         }
-    }
-
-    private async Task RunReviewDaemonAsync(CancellationToken cancellationToken)
-    {
-        _log.Info("review-loop", $"검토 루프 시작 (주기: {_config.ReviewPollIntervalSeconds}초, 단건 처리)");
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await ReviewNextSpecAsync(cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                _log.Error("review-loop", $"검토 루프 오류: {ex.Message}");
-            }
-
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(_config.ReviewPollIntervalSeconds), cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-
-        _log.Info("review-loop", "검토 루프 종료");
     }
 
     /// <summary>
@@ -407,10 +369,6 @@ public class RunnerService
     private async Task<List<SpecWorkResult>> RunRescheduleAsync()
     {
         var results = new List<SpecWorkResult>();
-
-        // C3: needs-review 스펙 자동 검증 (verified 전환 시 의존 스펙 unblock 가능)
-        var autoVerified = await AutoVerifyReviewedSpecsAsync();
-        results.AddRange(autoVerified);
 
         // C2: 최신 스펙 그래프 기반 후보 탐색 (stale 캐시/이전 선택 결과 재사용 금지)
         var targets = FindTargetSpecs();
@@ -526,8 +484,9 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "Worktree 생성 실패";
-                MarkSpecFailed(spec, result.ErrorMessage);
-                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, null, null, "execution-crash", "execution-crash", "developer", "implementation");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
 
@@ -540,8 +499,9 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 구현 실패";
-                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
-                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
 
@@ -556,7 +516,8 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = automatedTestResult.ErrorMessage ?? "자동 테스트 실패";
-                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "test-failed", "test-failed", "developer", "implementation");
+                result.Action = "requeue";
                 result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
@@ -567,8 +528,9 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "변경사항 커밋 실패";
-                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
-                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "missing-evidence", "missing-evidence", "developer", "implementation");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
 
@@ -603,8 +565,9 @@ public class RunnerService
                     await _git.AbortMergeAsync();
                     result.Success = false;
                     result.ErrorMessage = "머지 충돌 해결 실패";
-                    MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
-                    result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                    MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                    result.Action = "requeue";
+                    result.TriggeredReschedule = true;
                     return FinalizeResult(result);
                 }
             }
@@ -612,19 +575,33 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "머지 실패";
-                MarkSpecFailed(spec, result.ErrorMessage, worktreePath, branchName);
-                result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
                 return FinalizeResult(result);
             }
 
-            // 6. 성공 → 스펙 상태 업데이트 (worktree는 검토 완료 후 정리)
-            MarkSpecCompleted(spec, worktreePath, branchName);
+            // 6. 성공 → 한 사이클 내 sequential validation/tester 수행
+            spec = _specStore.Get(spec.Id) ?? spec;
+            await PrepareSpecForSequentialReviewAsync(spec, worktreePath, branchName);
+            var finalizedSpec = await RunSequentialValidationAsync(spec, worktreePath, branchName, result);
+            if (finalizedSpec == null)
+            {
+                return FinalizeResult(result);
+            }
 
             // 7. 프로젝트 변경사항 push
             await _git.PushAsync(_config.RemoteName, _config.MainBranch);
 
-            result.Success = true;
-            result.TriggeredReschedule = true; // F-031-C1: working → needs-review/verified 전환
+            result.Success = !string.Equals(finalizedSpec.Status, "queued", StringComparison.OrdinalIgnoreCase);
+            result.Action = finalizedSpec.Status switch
+            {
+                "verified" => "verify",
+                "done" => "done",
+                "needs-review" => "needs-review",
+                _ => "requeue"
+            };
+            result.TriggeredReschedule = true;
             return FinalizeResult(result);
         }
         catch (Exception ex)
@@ -636,10 +613,15 @@ public class RunnerService
             var exWorktreePath = _git.GetWorktreePath(spec.Id);
             var exWorktreeBranch = _git.GetBranchName(spec.Id);
             var exWorktreeExists = Directory.Exists(exWorktreePath);
-            MarkSpecFailed(spec, ex.Message,
+            MarkSpecQueuedForRetry(spec, ex.Message,
                 exWorktreeExists ? exWorktreePath : null,
-                exWorktreeExists ? exWorktreeBranch : null);
-            result.TriggeredReschedule = true; // F-031-C1: working → needs-review 전환
+                exWorktreeExists ? exWorktreeBranch : null,
+                "execution-crash",
+                "execution-crash",
+                "developer",
+                "implementation");
+            result.Action = "requeue";
+            result.TriggeredReschedule = true;
 
             return FinalizeResult(result);
         }
@@ -651,10 +633,18 @@ public class RunnerService
     /// </summary>
     private List<SpecNode> FindTargetSpecs()
     {
+        return EvaluateTargetSpecs(updateSelectionMetadata: true, logSelection: true)
+            .ReadySpecs
+            .Select(candidate => _specStore.Get(candidate.SpecId))
+            .Where(spec => spec != null)
+            .Cast<SpecNode>()
+            .ToList();
+    }
+
+    private RunnerQueuePlan EvaluateTargetSpecs(bool updateSelectionMetadata, bool logSelection)
+    {
         var allSpecs = _specStore.GetAll();
         var allSpecIds = allSpecs.Select(s => s.Id).ToHashSet();
-
-        // 의존성이 충족된 상태(verified/done)에 있는 스펙 ID 집합
         var completedIds = allSpecs
             .Where(s => s.Status is "verified" or "done")
             .Select(s => s.Id)
@@ -664,48 +654,82 @@ public class RunnerService
             .Where(s => s.Status != "working" && _config.TargetStatuses.Contains(s.Status))
             .ToList();
 
-        // F-015-C3: readiness 그룹 분리
         var ready = new List<SpecNode>();
-        var notReady = new List<SpecNode>();
+        var blocked = new List<RunnerBlockedSpec>();
 
         foreach (var spec in candidates)
         {
-            // C3: 미해결 질문이 있는 스펙은 선행 처리 대상에서 제외
-            if (HasOpenQuestions(spec))
+            var openQuestionCount = CountOpenQuestions(spec);
+            var unmetDependencies = spec.Dependencies
+                .Where(dep => allSpecIds.Contains(dep) && !completedIds.Contains(dep))
+                .ToArray();
+
+            if (openQuestionCount > 0)
             {
-                notReady.Add(spec);
+                blocked.Add(new RunnerBlockedSpec
+                {
+                    SpecId = spec.Id,
+                    Title = spec.Title,
+                    Status = spec.Status,
+                    Reason = unmetDependencies.Length > 0 ? "open-questions-and-unmet-dependencies" : "open-questions",
+                    UnmetDependencies = unmetDependencies,
+                    OpenQuestionCount = openQuestionCount
+                });
                 continue;
             }
 
-            // C3: 의존성 미충족 스펙은 선행 처리 대상에서 제외
-            // (의존 대상이 그래프에 없는 경우는 satisfied로 간주)
-            var depsReady = spec.Dependencies
-                .All(dep => !allSpecIds.Contains(dep) || completedIds.Contains(dep));
+            if (unmetDependencies.Length > 0)
+            {
+                blocked.Add(new RunnerBlockedSpec
+                {
+                    SpecId = spec.Id,
+                    Title = spec.Title,
+                    Status = spec.Status,
+                    Reason = "unmet-dependencies",
+                    UnmetDependencies = unmetDependencies,
+                    OpenQuestionCount = 0
+                });
+                continue;
+            }
 
-            if (depsReady)
-                ready.Add(spec);
-            else
-                notReady.Add(spec);
+            ready.Add(spec);
         }
 
-        // C3: ready 그룹 — issue priority score 내림차순, 동점 시 기존 fallback(의존성 수, 스펙 ID)
         var sortedReady = ready
             .OrderByDescending(s => GetIssuePriorityScore(s))
             .ThenBy(s => s.Dependencies.Count)
             .ThenBy(s => s.Id)
+            .Select((spec, index) => new RunnerQueueCandidate
+            {
+                SpecId = spec.Id,
+                Title = spec.Title,
+                Status = spec.Status,
+                Rank = index + 1,
+                IssuePriorityScore = GetIssuePriorityScore(spec),
+                IsFallback = GetIssuePriorityScore(spec) == 0.0,
+                DependencyCount = spec.Dependencies.Count,
+                Dependencies = spec.Dependencies.ToArray()
+            })
             .ToList();
 
-        // C4: not-ready 그룹(의존성 미충족 또는 사용자 입력 필요)은 처리 대상에서 제외.
-        // 포함 시 처리 불가 스펙이 자동 선택되어 잘못된 구현이 시작될 수 있음.
-        if (notReady.Count > 0)
-            _log.Info("queue-priority", $"처리 불가 스펙 {notReady.Count}개 제외 (의존성 미충족 또는 사용자 입력 필요)");
+        if (logSelection)
+        {
+            if (blocked.Count > 0)
+                _log.Info("queue-priority", $"처리 불가 스펙 {blocked.Count}개 제외 (의존성 미충족 또는 사용자 입력 필요)");
 
-        var result = sortedReady;
+            LogQueueSelection(sortedReady, updateSelectionMetadata);
+        }
 
-        // C6: 큐 정렬 결과 로깅 및 선택된 스펙 selectionReason 기록
-        LogQueueSelection(result);
-
-        return result;
+        return new RunnerQueuePlan
+        {
+            TargetStatuses = _config.TargetStatuses,
+            TotalCandidates = candidates.Count,
+            ReadyCount = sortedReady.Count,
+            BlockedCount = blocked.Count,
+            NextSpecId = sortedReady.FirstOrDefault()?.SpecId,
+            ReadySpecs = sortedReady,
+            BlockedSpecs = blocked
+        };
     }
 
     // ── F-015: 이슈 기반 큐 재정렬 헬퍼 ───────────────────────
@@ -780,50 +804,15 @@ public class RunnerService
     /// metadata.questions에서 open 상태 질문이 남아 있는지 확인한다.
     /// </summary>
     private static bool HasOpenQuestions(SpecNode spec)
-    {
-        return CountOpenQuestions(spec) > 0;
-    }
+        => SpecReviewEvaluator.HasOpenQuestions(spec);
 
     private static int CountOpenQuestions(SpecNode spec)
-    {
-        if (spec.Metadata == null || !spec.Metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
-            return 0;
-
-        if (rawQuestions is System.Text.Json.JsonElement element)
-        {
-            if (element.ValueKind != System.Text.Json.JsonValueKind.Array)
-                return 0;
-
-            return element.EnumerateArray().Count(question =>
-                question.ValueKind == System.Text.Json.JsonValueKind.Object
-                && question.TryGetProperty("status", out var status)
-                && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (rawQuestions is IEnumerable<object> questions)
-        {
-            return questions.Count(question =>
-            {
-                if (question is Dictionary<string, object> dict
-                    && dict.TryGetValue("status", out var statusValue))
-                {
-                    return string.Equals(statusValue?.ToString(), "open", StringComparison.OrdinalIgnoreCase);
-                }
-
-                return question is System.Text.Json.JsonElement questionElement
-                    && questionElement.ValueKind == System.Text.Json.JsonValueKind.Object
-                    && questionElement.TryGetProperty("status", out var status)
-                    && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase);
-            });
-        }
-
-        return 0;
-    }
+        => SpecReviewEvaluator.CountOpenQuestions(spec);
 
     /// <summary>
     /// F-015-C6: 큐 정렬 결과를 로그에 기록하고, 선택된 스펙의 metadata.selectionReason을 갱신한다.
     /// </summary>
-    private void LogQueueSelection(List<SpecNode> rankedSpecs)
+    private void LogQueueSelection(List<RunnerQueueCandidate> rankedSpecs, bool updateSelectionMetadata)
     {
         if (rankedSpecs.Count == 0) return;
 
@@ -834,23 +823,25 @@ public class RunnerService
         for (int i = 0; i < topN.Count; i++)
         {
             var spec = topN[i];
-            var score = GetIssuePriorityScore(spec);
-            var isFallback = score == 0.0;
-            var label = isFallback ? "fallback(no-issue-signal)" : $"score={score:F1}";
-            sb.Append($" [{i + 1}]{spec.Id}({label})");
+            var label = spec.IsFallback ? "fallback(no-issue-signal)" : $"score={spec.IssuePriorityScore:F1}";
+            sb.Append($" [{i + 1}]{spec.SpecId}({label})");
         }
 
         _log.Info("queue-priority", sb.ToString());
 
-        // C6: 선택 예정 스펙(1위)에만 selectionReason 기록
-        var selected = rankedSpecs[0];
-        var selScore = GetIssuePriorityScore(selected);
+        if (!updateSelectionMetadata)
+            return;
+
+        var selected = _specStore.Get(rankedSpecs[0].SpecId);
+        if (selected == null)
+            return;
+
         selected.Metadata ??= new Dictionary<string, object>();
         selected.Metadata["selectionReason"] = new Dictionary<string, object>
         {
             ["selectedAt"] = DateTime.UtcNow.ToString("o"),
-            ["issuePriorityScore"] = selScore,
-            ["isFallback"] = selScore == 0.0,
+            ["issuePriorityScore"] = rankedSpecs[0].IssuePriorityScore,
+            ["isFallback"] = rankedSpecs[0].IsFallback,
             ["rank"] = 1,
             ["totalCandidates"] = rankedSpecs.Count
         };
@@ -875,72 +866,29 @@ public class RunnerService
             approach = $"AI Runner가 '{spec.Id}: {spec.Title}' 구현을 시작합니다.",
             startedAt = DateTime.UtcNow.ToString("o"),
         };
+        AppendActivity(spec,
+            role: "developer",
+            summary: $"스펙 '{spec.Id}' 구현 사이클을 시작했다.",
+            outcome: "handoff",
+            kind: "implementation",
+            actor: _instanceId,
+            model: _config.CopilotModel,
+            statusFrom: prevStatus,
+            statusTo: "working");
         _specStore.Update(spec);
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → working", spec.Id);
     }
 
     /// <summary>
-    /// 스펙을 실패로 마킹
+    /// 구현 완료 메타데이터를 기록하고 sequential review 입력을 준비한다.
     /// </summary>
-    private void MarkSpecFailed(SpecNode spec, string error, string? worktreePath = null, string? worktreeBranch = null)
+    private async Task PrepareSpecForSequentialReviewAsync(SpecNode spec, string? worktreePath = null, string? worktreeBranch = null)
     {
-        spec.Status = "needs-review";
-        spec.Metadata ??= new Dictionary<string, object>();
-        spec.Metadata["lastError"] = error;
-        spec.Metadata["lastErrorAt"] = DateTime.UtcNow.ToString("o");
-        spec.Metadata["runnerInstanceId"] = _instanceId;
-        var attempts = GetMetadataInt(spec.Metadata, "implementationAttempts") + 1;
-        spec.Metadata["implementationAttempts"] = attempts;
-        _log.Warn("status", $"구현 실패 횟수: {attempts}", spec.Id);
-        if (worktreePath != null)
-        {
-            spec.Metadata["worktreePath"] = worktreePath;
-            spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
-        }
-        else
-        {
-            spec.Metadata.Remove("worktreePath");
-            spec.Metadata.Remove("worktreeBranch");
-        }
-        _specStore.Update(spec);
-        _log.Error("status", $"스펙 상태 변경: needs-review (오류: {error})", spec.Id);
-    }
-
-    /// <summary>
-    /// 스펙을 구현 완료로 마킹한다. worktreePath/worktreeBranch가 제공되면 메타데이터에 저장한다.
-    /// </summary>
-    private void MarkSpecCompleted(SpecNode spec, string? worktreePath = null, string? worktreeBranch = null)
-    {
-        var prevStatus = spec.Status;
-        var review = SpecReviewEvaluator.Evaluate(spec);
-
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastCompletedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastCompletedBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
-
-        if (IsTaskSpec(spec))
-        {
-            MarkSpecDone(spec, prevStatus, "구현 완료, task 종료");
-            return;
-        }
-
-        spec.Status = "needs-review";
-
-        if (review.CanAutoVerify)
-        {
-            spec.Status = "verified";
-            spec.Metadata["lastVerifiedAt"] = DateTime.UtcNow.ToString("o");
-            spec.Metadata["lastVerifiedBy"] = _instanceId;
-            spec.Metadata["verificationSource"] = "runner-completion";
-            spec.Metadata.Remove("worktreePath");
-            spec.Metadata.Remove("worktreeBranch");
-            _specStore.Update(spec);
-            _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
-            return;
-        }
-
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
@@ -951,15 +899,110 @@ public class RunnerService
             spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
         }
 
-        _specStore.Update(spec);
+        AppendActivity(spec,
+            role: "developer",
+            summary: $"구현과 자동 테스트 단계를 완료하고 검증 단계로 전달한다.",
+            outcome: "handoff",
+            kind: "implementation",
+            actor: _instanceId,
+            model: _config.CopilotModel);
 
-        if (review.RequiresManualVerification)
+        _specStore.Update(spec);
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 자동 재시도를 위해 스펙을 queued로 되돌린다.
+    /// </summary>
+    private void MarkSpecQueuedForRetry(
+        SpecNode spec,
+        string error,
+        string? worktreePath = null,
+        string? worktreeBranch = null,
+        string reviewDisposition = "test-failed",
+        string? reviewReason = "test-failed",
+        string activityRole = "system",
+        string activityKind = "recovery")
+    {
+        var prevStatus = spec.Status;
+        spec.Status = "queued";
+        spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata["lastError"] = error;
+        spec.Metadata["lastErrorAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata["runnerInstanceId"] = _instanceId;
+        spec.Metadata["reviewDisposition"] = reviewDisposition;
+        if (!string.IsNullOrWhiteSpace(reviewReason))
         {
-            _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 수동 검증 필요, worktree: {worktreePath})", spec.Id);
-            return;
+            spec.Metadata["reviewReason"] = reviewReason;
+        }
+        else
+        {
+            spec.Metadata.Remove("reviewReason");
+        }
+        spec.Metadata.Remove("lastVerifiedAt");
+        spec.Metadata.Remove("lastVerifiedBy");
+        spec.Metadata.Remove("verificationSource");
+        spec.Metadata.Remove("questionStatus");
+
+        var attempts = GetMetadataInt(spec.Metadata, "implementationAttempts") + 1;
+        spec.Metadata["implementationAttempts"] = attempts;
+
+        if (worktreePath != null)
+        {
+            spec.Metadata["worktreePath"] = worktreePath;
+            spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
         }
 
-        _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review (구현 완료, 검토 대기, worktree: {worktreePath})", spec.Id);
+        var conditionUpdates = ResetConditionsForRequeue(spec);
+        AppendActivity(spec,
+            role: activityRole,
+            summary: $"자동 재시도를 위해 스펙을 queued로 되돌린다.",
+            outcome: "requeue",
+            kind: activityKind,
+            comment: error,
+            actor: _instanceId,
+            model: activityRole == "developer" ? _config.CopilotModel : null,
+            statusFrom: prevStatus,
+            statusTo: "queued",
+            issues: BuildActivityIssues(reviewDisposition),
+            conditionUpdates: conditionUpdates);
+
+        _specStore.Update(spec);
+        _log.Warn("status", $"스펙 상태 변경: {prevStatus} → queued ({reviewDisposition}: {error})", spec.Id);
+    }
+
+    private async Task MarkSpecNeedsReviewAsync(SpecNode spec, string summary, string? worktreePath, string? worktreeBranch)
+    {
+        var prevStatus = spec.Status;
+        spec.Status = "needs-review";
+        spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata.Remove("lastVerifiedAt");
+        spec.Metadata.Remove("lastVerifiedBy");
+        spec.Metadata.Remove("verificationSource");
+
+        if (worktreePath != null)
+        {
+            spec.Metadata["worktreePath"] = worktreePath;
+            spec.Metadata["worktreeBranch"] = worktreeBranch ?? _git.GetBranchName(spec.Id);
+        }
+
+        NormalizeConditionsForUserReview(spec, HasOpenQuestions(spec));
+        AppendActivity(spec,
+            role: "tester",
+            summary: summary,
+            outcome: "needs-review",
+            kind: "verification",
+            actor: GetMetadataString(spec.Metadata, "lastReviewBy") ?? _instanceId,
+            model: "gpt-5-mini",
+            statusFrom: prevStatus,
+            statusTo: "needs-review");
+
+        _specStore.Update(spec);
+        await CleanupWorktreeFromMetadataAsync(spec);
+        spec.Metadata.Remove("worktreePath");
+        spec.Metadata.Remove("worktreeBranch");
+        _specStore.Update(spec);
+        _log.Info("status", $"스펙 상태 변경: {prevStatus} → needs-review ({summary})", spec.Id);
     }
 
     private void MarkSpecVerified(SpecNode spec, string verificationSource)
@@ -974,6 +1017,16 @@ public class RunnerService
         spec.Metadata.Remove("lastErrorAt");
         spec.Metadata.Remove("worktreePath");
         spec.Metadata.Remove("worktreeBranch");
+        spec.Metadata.Remove("reviewReason");
+        AppendActivity(spec,
+            role: "tester",
+            summary: "모든 condition이 통과해 feature를 verified로 확정했다.",
+            outcome: "verified",
+            kind: "verification",
+            actor: GetMetadataString(spec.Metadata, "lastReviewBy") ?? _instanceId,
+            model: "gpt-5-mini",
+            statusFrom: prevStatus,
+            statusTo: "verified");
         _specStore.Update(spec);
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → verified (모든 컨디션 충족, 자동 검증 완료)", spec.Id);
     }
@@ -988,12 +1041,20 @@ public class RunnerService
         spec.Metadata.Remove("lastErrorAt");
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
-        spec.Metadata.Remove("verificationSource");
         spec.Metadata.Remove("questionStatus");
-        spec.Metadata.Remove("reviewDisposition");
         spec.Metadata.Remove("requiresUserInput");
         spec.Metadata.Remove("worktreePath");
         spec.Metadata.Remove("worktreeBranch");
+        spec.Metadata.Remove("reviewReason");
+        AppendActivity(spec,
+            role: "tester",
+            summary: "질문이 없고 모든 검증이 끝나 task를 done으로 확정했다.",
+            outcome: "done",
+            kind: "verification",
+            actor: GetMetadataString(spec.Metadata, "lastReviewBy") ?? _instanceId,
+            model: "gpt-5-mini",
+            statusFrom: prevStatus,
+            statusTo: "done");
         _specStore.Update(spec);
         _log.Info("status", $"스펙 상태 변경: {prevStatus} → done ({reason})", spec.Id);
     }
@@ -1019,6 +1080,70 @@ public class RunnerService
         }
     }
 
+    private async Task<SpecNode?> RunSequentialValidationAsync(SpecNode spec, string worktreePath, string branchName, SpecWorkResult result)
+    {
+        var specJson = BuildSpecPromptJson(spec);
+        var reviewContext = BuildReviewContext(spec);
+        var reviewResult = await _copilot.ReviewSpecAsync(spec, specJson, reviewContext, _projectRoot, _instanceId);
+
+        if (!reviewResult.Success)
+        {
+            result.Success = false;
+            result.ErrorMessage = reviewResult.ErrorMessage ?? "검토 분석 실패";
+            MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "missing-evidence", "missing-evidence", "system", "validation");
+            return null;
+        }
+
+        var reviewedSpec = _specStore.Get(spec.Id);
+        if (!HasPersistedReviewResult(reviewedSpec))
+        {
+            result.Success = false;
+            result.ErrorMessage = "spec-append-review 결과가 스펙에 반영되지 않았습니다.";
+            _log.Warn("review", result.ErrorMessage, spec.Id);
+            MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "missing-evidence", "missing-evidence", "system", "validation");
+            return null;
+        }
+
+        reviewedSpec!.Metadata ??= new Dictionary<string, object>();
+        var evaluation = SpecReviewEvaluator.Evaluate(reviewedSpec);
+        var hasOpenQuestions = HasOpenQuestions(reviewedSpec);
+        var reviewDisposition = GetMetadataString(reviewedSpec.Metadata, "reviewDisposition") ?? "missing-evidence";
+        var reviewReason = GetMetadataString(reviewedSpec.Metadata, "reviewReason");
+
+        if (string.Equals(reviewedSpec.Status, "verified", StringComparison.OrdinalIgnoreCase))
+        {
+            await CleanupWorktreeFromMetadataAsync(reviewedSpec);
+            MarkSpecVerified(reviewedSpec, GetMetadataString(reviewedSpec.Metadata, "verificationSource") ?? "copilot-cli-review");
+            return reviewedSpec;
+        }
+
+        if (string.Equals(reviewedSpec.Status, "done", StringComparison.OrdinalIgnoreCase))
+        {
+            await CleanupWorktreeFromMetadataAsync(reviewedSpec);
+            MarkSpecDone(reviewedSpec, "working", "sequential tester finalization");
+            return reviewedSpec;
+        }
+
+        if (hasOpenQuestions || evaluation.RequiresManualVerification || string.Equals(reviewDisposition, "user-test-required", StringComparison.OrdinalIgnoreCase))
+        {
+            await MarkSpecNeedsReviewAsync(reviewedSpec,
+                hasOpenQuestions ? "사용자 질문 응답이 필요하다." : "사용자 수동 테스트 또는 확인이 필요하다.",
+                worktreePath,
+                branchName);
+            return reviewedSpec;
+        }
+
+        MarkSpecQueuedForRetry(reviewedSpec,
+            result.ErrorMessage ?? reviewReason ?? reviewDisposition,
+            worktreePath,
+            branchName,
+            reviewDisposition,
+            string.IsNullOrWhiteSpace(reviewReason) ? reviewDisposition : reviewReason,
+            "tester",
+            "verification");
+        return reviewedSpec;
+    }
+
     private async Task<List<SpecWorkResult>> AutoVerifyReviewedSpecsAsync()
     {
         var results = new List<SpecWorkResult>();
@@ -1034,53 +1159,75 @@ public class RunnerService
 
         foreach (var spec in reviewedSpecs)
         {
-            if (IsTaskSpec(spec))
-            {
-                var completedAt = DateTime.UtcNow.ToString("o");
-                await CleanupWorktreeFromMetadataAsync(spec);
-                MarkSpecDone(spec, "needs-review", "task 타입 최종 상태 정리");
-
-                results.Add(new SpecWorkResult
-                {
-                    SpecId = spec.Id,
-                    Success = true,
-                    Action = "auto-complete-task",
-                    StartedAt = completedAt,
-                    CompletedAt = completedAt,
-                    TriggeredReschedule = true
-                });
-                continue;
-            }
-
             var verifiedAtUtc = DateTime.UtcNow;
             var promotedConditions = SpecReviewEvaluator.PromoteVerifiedConditionsFromArtifacts(
                 spec,
                 _instanceId,
                 "runner-review-artifacts",
                 verifiedAtUtc);
-            var evaluation = SpecReviewEvaluator.Evaluate(spec);
+            var hasOpenQuestions = HasOpenQuestions(spec);
+            SpecReviewEvaluator.NormalizeConditionReviewStates(spec, hasOpenQuestions);
+            var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions);
 
-            if (promotedConditions > 0 && !evaluation.CanAutoVerify)
+            if (!decision.IsFinal)
             {
-                _specStore.Update(spec);
-                _log.Info("condition-auto-verify",
-                    $"review loop가 테스트/evidence를 확인해 condition {promotedConditions}건을 verified로 승격", spec.Id);
-            }
+                var currentDisposition = spec.Metadata != null && spec.Metadata.TryGetValue("reviewDisposition", out var rawDisposition)
+                    ? rawDisposition?.ToString()
+                    : null;
+                var currentReason = spec.Metadata != null && spec.Metadata.TryGetValue("reviewReason", out var rawReason)
+                    ? rawReason?.ToString()
+                    : null;
+                var shouldPersist = promotedConditions > 0
+                    || !string.Equals(currentDisposition, decision.ReviewDisposition, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(currentReason, decision.ReviewReason, StringComparison.OrdinalIgnoreCase);
 
-            if (!evaluation.CanAutoVerify)
-            {
+                if (shouldPersist)
+                {
+                    spec.Metadata ??= new Dictionary<string, object>();
+                    spec.Metadata["reviewDisposition"] = decision.ReviewDisposition;
+                    if (!string.IsNullOrWhiteSpace(decision.ReviewReason))
+                    {
+                        spec.Metadata["reviewReason"] = decision.ReviewReason;
+                    }
+                    else
+                    {
+                        spec.Metadata.Remove("reviewReason");
+                    }
+                    _specStore.Update(spec);
+                }
+
+                if (promotedConditions > 0)
+                {
+                    _log.Info("condition-auto-verify",
+                        $"review loop가 테스트/evidence를 확인해 condition {promotedConditions}건을 verified로 승격", spec.Id);
+                }
+
                 continue;
             }
 
             var timestamp = DateTime.UtcNow.ToString("o");
             await CleanupWorktreeFromMetadataAsync(spec);
-            MarkSpecVerified(spec, "runner-review-pass");
+            spec.Metadata ??= new Dictionary<string, object>();
+            spec.Metadata["reviewDisposition"] = decision.ReviewDisposition;
+            spec.Metadata.Remove("reviewReason");
+
+            if (string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase))
+            {
+                spec.Metadata["verificationSource"] = "runner-review-pass";
+                MarkSpecDone(spec, "needs-review", "review loop 최종 판정 완료");
+            }
+            else
+            {
+                MarkSpecVerified(spec, "runner-review-pass");
+            }
 
             results.Add(new SpecWorkResult
             {
                 SpecId = spec.Id,
                 Success = true,
-                Action = "auto-verify",
+                Action = string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase)
+                    ? "auto-complete-task"
+                    : "auto-verify",
                 StartedAt = timestamp,
                 CompletedAt = timestamp,
                 TriggeredReschedule = true // F-031-C1: needs-review → verified 전환
@@ -1339,14 +1486,162 @@ public class RunnerService
                 // worktree가 존재하면 경로를 메타데이터에 보존 (검토 에이전트가 확인 가능)
                 var crashWorktreePath = _git.GetWorktreePath(spec.Id);
                 var crashWorktreeExists = Directory.Exists(crashWorktreePath);
-                MarkSpecFailed(spec, $"Runner 인스턴스 비정상 종료 (이전 인스턴스: {prevInstanceId})",
+                MarkSpecQueuedForRetry(spec, $"Runner 인스턴스 비정상 종료 (이전 인스턴스: {prevInstanceId})",
                     crashWorktreeExists ? crashWorktreePath : null,
-                    crashWorktreeExists ? _git.GetBranchName(spec.Id) : null);
+                    crashWorktreeExists ? _git.GetBranchName(spec.Id) : null,
+                    "execution-crash",
+                    "execution-crash",
+                    "system",
+                    "recovery");
                 recovered++;
             }
         }
 
         return recovered;
+    }
+
+    private static string? GetMetadataString(Dictionary<string, object>? metadata, string key)
+    {
+        if (metadata == null || !metadata.TryGetValue(key, out var value) || value == null)
+        {
+            return null;
+        }
+
+        return value.ToString();
+    }
+
+    private static List<string> BuildActivityIssues(string disposition)
+        => disposition switch
+        {
+            "test-failed" => ["test-failed"],
+            "user-test-required" => ["user-test-required"],
+            "open-question" => ["user-input-required"],
+            "execution-crash" => ["execution-crash"],
+            "review-verified" => [],
+            "review-done" => [],
+            _ => ["missing-evidence"]
+        };
+
+    private static List<SpecConditionUpdate> ResetConditionsForRequeue(SpecNode spec)
+    {
+        var updates = new List<SpecConditionUpdate>();
+        foreach (var condition in spec.Conditions)
+        {
+            condition.Status = "draft";
+            condition.Metadata ??= new Dictionary<string, object>();
+            condition.Metadata.Remove("reviewReason");
+            condition.Metadata.Remove("requiresManualVerification");
+            condition.Metadata.Remove("manualVerificationReason");
+            condition.Metadata.Remove("manualVerificationItems");
+            condition.Metadata.Remove("manualVerificationStatus");
+            condition.Metadata.Remove("lastVerifiedAt");
+            condition.Metadata.Remove("lastVerifiedBy");
+            condition.Metadata.Remove("verificationSource");
+            updates.Add(new SpecConditionUpdate
+            {
+                ConditionId = condition.Id,
+                Status = "draft",
+                Reason = "reset-for-requeue",
+                Comment = "자동 재시도를 위해 condition 상태를 초기화했다."
+            });
+        }
+
+        return updates;
+    }
+
+    private static void NormalizeConditionsForUserReview(SpecNode spec, bool hasOpenQuestions)
+    {
+        foreach (var condition in spec.Conditions)
+        {
+            if (string.Equals(condition.Status, "verified", StringComparison.OrdinalIgnoreCase))
+            {
+                condition.Metadata?.Remove("reviewReason");
+                continue;
+            }
+
+            condition.Metadata ??= new Dictionary<string, object>();
+            if (HasConditionManualVerificationRequirement(condition))
+            {
+                condition.Status = "needs-review";
+                condition.Metadata["reviewReason"] = "user-test-required";
+                continue;
+            }
+
+            if (hasOpenQuestions)
+            {
+                condition.Status = "needs-review";
+                condition.Metadata["reviewReason"] = "open-question";
+                continue;
+            }
+
+            condition.Status = "draft";
+            condition.Metadata.Remove("reviewReason");
+        }
+    }
+
+    private static bool HasConditionManualVerificationRequirement(SpecCondition condition)
+    {
+        if (condition.Metadata == null)
+        {
+            return false;
+        }
+
+        return (TryGetMetadataBool(condition.Metadata, "requiresManualVerification") &&
+                GetMetadataBooleanValue(condition.Metadata, "requiresManualVerification"))
+               || (condition.Metadata.TryGetValue("manualVerificationItems", out var items) && items != null && items.ToString() != "[]");
+    }
+
+    private static bool TryGetMetadataBool(Dictionary<string, object> metadata, string key)
+        => metadata.ContainsKey(key);
+
+    private static bool GetMetadataBooleanValue(Dictionary<string, object> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || value == null)
+        {
+            return false;
+        }
+
+        if (value is bool b)
+        {
+            return b;
+        }
+
+        return bool.TryParse(value.ToString(), out var parsed) && parsed;
+    }
+
+    private static void AppendActivity(
+        SpecNode spec,
+        string role,
+        string summary,
+        string outcome,
+        string? kind = null,
+        string? comment = null,
+        string? actor = null,
+        string? model = null,
+        string? statusFrom = null,
+        string? statusTo = null,
+        List<string>? issues = null,
+        List<SpecConditionUpdate>? conditionUpdates = null,
+        List<string>? relatedIds = null)
+    {
+        spec.Activity ??= new List<SpecActivityEntry>();
+        spec.Activity.Add(new SpecActivityEntry
+        {
+            At = DateTime.UtcNow.ToString("o"),
+            Role = role,
+            Actor = actor,
+            Model = model,
+            Summary = summary,
+            Comment = comment,
+            Outcome = outcome,
+            Kind = kind,
+            Issues = issues ?? new List<string>(),
+            ConditionUpdates = conditionUpdates ?? new List<SpecConditionUpdate>(),
+            RelatedIds = relatedIds ?? new List<string>(),
+            StatusChange = !string.IsNullOrWhiteSpace(statusFrom) && !string.IsNullOrWhiteSpace(statusTo)
+                ? new SpecActivityStatusChange { From = statusFrom!, To = statusTo! }
+                : null
+        });
     }
 
     /// <summary>PID 파일 기록</summary>
@@ -1438,16 +1733,16 @@ public class RunnerService
             return FinalizeResult(result);
         }
 
-        // 검토 완료 후 queued/verified/done 전환된 경우 worktree 정리 (needs-review+미해결 질문은 보존)
-        if (string.Equals(reviewedSpec!.Status, "queued", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(reviewedSpec.Status, "verified", StringComparison.OrdinalIgnoreCase)
+        // 검토 완료 후 verified/done 전환된 경우 worktree 정리 (needs-review handoff는 보존)
+        if (string.Equals(reviewedSpec!.Status, "verified", StringComparison.OrdinalIgnoreCase)
             || string.Equals(reviewedSpec.Status, "done", StringComparison.OrdinalIgnoreCase))
         {
             await CleanupWorktreeFromMetadataAsync(reviewedSpec);
         }
 
         result.Success = true;
-        result.TriggeredReschedule = !HasOpenQuestions(reviewedSpec!);
+        result.TriggeredReschedule = !HasOpenQuestions(reviewedSpec!)
+            && !string.Equals(reviewedSpec.Status, "needs-review", StringComparison.OrdinalIgnoreCase);
         return FinalizeResult(result);
     }
 
@@ -1455,10 +1750,29 @@ public class RunnerService
         => _specStore.GetAll()
             .Where(spec => string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase)
                 && !IsTaskSpec(spec)
-                && !HasOpenQuestions(spec)) // 사용자 질문 대기 중인 스펙은 이미 검토 완료 — 재검토 불필요
+                && !HasOpenQuestions(spec)
+                && HasPendingReviewWork(spec))
             .OrderBy(spec => ParseIsoDate(spec.UpdatedAt) ?? DateTime.MaxValue)
             .ThenBy(spec => spec.Id)
             .FirstOrDefault();
+
+    private static bool HasPendingReviewWork(SpecNode spec)
+    {
+        if (spec.Metadata == null)
+        {
+            return true;
+        }
+
+        var lastCompletedAt = GetMetadataIsoDate(spec.Metadata, "lastCompletedAt");
+        var lastReviewAt = GetMetadataIsoDate(spec.Metadata, "lastReviewAt");
+
+        if (!lastReviewAt.HasValue)
+        {
+            return true;
+        }
+
+        return !lastCompletedAt.HasValue || lastCompletedAt > lastReviewAt;
+    }
 
     private static bool IsTaskSpec(SpecNode spec)
         => string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase);
@@ -1492,13 +1806,13 @@ public class RunnerService
         return new SpecReviewAnalysis
         {
             Summary = string.IsNullOrWhiteSpace(lastError)
-                ? "자동 검토 결과를 구조화하지 못해 재시도 대기열로 되돌립니다."
+                ? "자동 검토 결과를 구조화하지 못해 review handoff 상태를 유지합니다."
                 : $"자동 검토 파싱 실패. 마지막 오류: {lastError}",
             FailureReasons = string.IsNullOrWhiteSpace(lastError)
                 ? ["Copilot 검토 결과를 JSON으로 해석하지 못했습니다."]
                 : [$"마지막 오류: {lastError}"],
             Alternatives = ["구현 로그와 변경 파일을 확인한 뒤 재시도합니다."],
-            SuggestedAttempts = ["Copilot 검토 프롬프트를 다시 실행합니다.", "원인 로그를 확인한 뒤 queued 상태에서 재작업합니다."],
+            SuggestedAttempts = ["Copilot 검토 프롬프트를 다시 실행합니다.", "원인 로그를 확인한 뒤 spec을 다시 queued로 올리기 전에 review 사유를 정리합니다."],
             RequiresUserInput = false,
             AdditionalInformationRequests = []
         };
@@ -1551,6 +1865,7 @@ public class RunnerService
     {
         const string RetryLimitQuestionId = "retry-limit-reached";
         spec.Metadata ??= new Dictionary<string, object>();
+        var previousStatus = spec.Status;
 
         var reviewedAt = reviewedAtUtc.ToString("o");
         ApplyReviewVerifiedConditions(spec, analysis.VerifiedConditionIds, reviewerId, reviewedAtUtc, "copilot-cli-review");
@@ -1592,7 +1907,12 @@ public class RunnerService
             spec.Metadata["implementationAttempts"] = 0;
         }
 
-        var evaluation = SpecReviewEvaluator.Evaluate(spec);
+        var decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions);
+        SpecReviewEvaluator.NormalizeConditionReviewStates(spec, hasOpenQuestions);
+        decision = SpecReviewEvaluator.ResolveDecision(spec, hasOpenQuestions);
+        List<SpecConditionUpdate>? conditionUpdates = null;
+        string activityOutcome;
+        string activitySummary;
 
         if (hasOpenQuestions)
         {
@@ -1600,15 +1920,35 @@ public class RunnerService
             spec.Metadata.Remove("lastVerifiedAt");
             spec.Metadata.Remove("lastVerifiedBy");
             spec.Metadata.Remove("verificationSource");
+            activityOutcome = "needs-review";
+            activitySummary = "리뷰 결과 사용자 질문 응답이 필요해 스펙을 needs-review로 유지했다.";
+            conditionUpdates = BuildConditionUpdatesForNeedsReview(spec, "user-input-required", "사용자 질문 응답이 필요하다.");
         }
-        else if (evaluation.CanAutoVerify)
+        else if (decision.IsFinal)
         {
-            spec.Status = string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase) ? "done" : "verified";
+            spec.Status = decision.SpecStatus;
             spec.Metadata["lastVerifiedAt"] = reviewedAt;
             spec.Metadata["lastVerifiedBy"] = reviewerId;
             spec.Metadata["verificationSource"] = "copilot-cli-review";
             spec.Metadata.Remove("worktreePath");
             spec.Metadata.Remove("worktreeBranch");
+            activityOutcome = string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase)
+                ? "done"
+                : "verified";
+            activitySummary = string.Equals(decision.SpecStatus, "done", StringComparison.OrdinalIgnoreCase)
+                ? "리뷰 결과 모든 condition이 충족되어 task를 done으로 확정했다."
+                : "리뷰 결과 모든 condition이 충족되어 feature를 verified로 확정했다.";
+            conditionUpdates = BuildConditionUpdatesForVerified(spec, "automated-tests-passed", "리뷰 증거와 테스트 결과가 condition 충족을 뒷받침한다.");
+        }
+        else if (string.Equals(decision.SpecStatus, "needs-review", StringComparison.OrdinalIgnoreCase))
+        {
+            spec.Status = "needs-review";
+            spec.Metadata.Remove("lastVerifiedAt");
+            spec.Metadata.Remove("lastVerifiedBy");
+            spec.Metadata.Remove("verificationSource");
+            activityOutcome = "needs-review";
+            activitySummary = "리뷰 결과 사용자 수동 테스트가 필요해 스펙을 needs-review로 유지했다.";
+            conditionUpdates = BuildConditionUpdatesForNeedsReview(spec, "user-test-required", "사용자 수동 테스트 또는 확인이 필요하다.");
         }
         else
         {
@@ -1616,6 +1956,9 @@ public class RunnerService
             spec.Metadata.Remove("lastVerifiedAt");
             spec.Metadata.Remove("lastVerifiedBy");
             spec.Metadata.Remove("verificationSource");
+            conditionUpdates = ResetConditionsForRequeue(spec);
+            activityOutcome = "requeue";
+            activitySummary = "리뷰 결과 자동 재시도를 위해 스펙을 queued로 되돌렸다.";
         }
 
         spec.Metadata["review"] = new Dictionary<string, object>
@@ -1642,11 +1985,15 @@ public class RunnerService
                 ["requestedBy"] = question.RequestedBy ?? reviewerId
             })
             .ToList();
-        spec.Metadata["reviewDisposition"] = hasOpenQuestions
-            ? "needs-user-decision"
-            : evaluation.CanAutoVerify
-                ? "review-verified"
-                : "retry-queued";
+        spec.Metadata["reviewDisposition"] = decision.ReviewDisposition;
+        if (!string.IsNullOrWhiteSpace(decision.ReviewReason))
+        {
+            spec.Metadata["reviewReason"] = decision.ReviewReason;
+        }
+        else
+        {
+            spec.Metadata.Remove("reviewReason");
+        }
         spec.Metadata["plannerState"] = hasOpenQuestions ? "waiting-user-input" : "standby";
         spec.Metadata["lastReviewAt"] = reviewedAt;
         spec.Metadata["lastReviewBy"] = reviewerId;
@@ -1660,6 +2007,79 @@ public class RunnerService
         {
             spec.Metadata.Remove("questionStatus");
         }
+
+        AppendActivity(spec,
+            role: "tester",
+            summary: activitySummary,
+            outcome: activityOutcome,
+            kind: "verification",
+            comment: BuildReviewActivityComment(analysis),
+            actor: reviewerId,
+            model: "gpt-5-mini",
+            statusFrom: previousStatus,
+            statusTo: spec.Status,
+            issues: BuildActivityIssues(decision.ReviewDisposition),
+            conditionUpdates: conditionUpdates);
+    }
+
+    private static List<SpecConditionUpdate> BuildConditionUpdatesForNeedsReview(SpecNode spec, string reason, string comment)
+    {
+        var updates = new List<SpecConditionUpdate>();
+        foreach (var condition in spec.Conditions)
+        {
+            if (!string.Equals(condition.Status, "needs-review", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            updates.Add(new SpecConditionUpdate
+            {
+                ConditionId = condition.Id,
+                Status = "needs-review",
+                Reason = reason,
+                Comment = comment
+            });
+        }
+
+        return updates;
+    }
+
+    private static List<SpecConditionUpdate> BuildConditionUpdatesForVerified(SpecNode spec, string reason, string comment)
+    {
+        var updates = new List<SpecConditionUpdate>();
+        foreach (var condition in spec.Conditions)
+        {
+            if (!string.Equals(condition.Status, "verified", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            updates.Add(new SpecConditionUpdate
+            {
+                ConditionId = condition.Id,
+                Status = "verified",
+                Reason = reason,
+                Comment = comment
+            });
+        }
+
+        return updates;
+    }
+
+    private static string? BuildReviewActivityComment(SpecReviewAnalysis analysis)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(analysis.Summary))
+        {
+            lines.Add(analysis.Summary.Trim());
+        }
+
+        foreach (var reason in analysis.FailureReasons.Where(reason => !string.IsNullOrWhiteSpace(reason)))
+        {
+            lines.Add(reason.Trim());
+        }
+
+        return lines.Count == 0 ? null : string.Join(" ", lines);
     }
 
     private static bool HasPersistedReviewResult(SpecNode? spec)
@@ -1667,17 +2087,16 @@ public class RunnerService
         if (spec == null || spec.Metadata == null)
             return false;
 
-        // "queued"(자동 재시도), "verified/done"(검토 완료), 또는 "needs-review" + open 질문 존재(사용자 입력 대기) 모두 유효한 반영 결과
-        var hasValidStatus = string.Equals(spec.Status, "queued", StringComparison.OrdinalIgnoreCase)
+        // needs-review handoff, verified/done final 상태 모두 review 결과 반영으로 간주한다.
+        var hasValidStatus = string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase)
             || string.Equals(spec.Status, "verified", StringComparison.OrdinalIgnoreCase)
             || string.Equals(spec.Status, "done", StringComparison.OrdinalIgnoreCase)
-            || (string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase) && HasOpenQuestions(spec));
+            || HasOpenQuestions(spec);
 
         if (!hasValidStatus)
             return false;
 
-        return spec.Metadata.ContainsKey("review")
-            && spec.Metadata.ContainsKey("lastReviewAt")
+        return spec.Metadata.ContainsKey("lastReviewAt")
             && spec.Metadata.ContainsKey("lastReviewBy");
     }
 
@@ -1765,6 +2184,7 @@ public class RunnerService
             condition.Metadata.Remove("requiresManualVerification");
             condition.Metadata.Remove("manualVerificationReason");
             condition.Metadata.Remove("manualVerificationItems");
+            condition.Metadata.Remove("reviewReason");
         }
     }
 
@@ -2082,6 +2502,21 @@ public class RunnerService
             long l => (int)l,
             JsonElement je when je.ValueKind == JsonValueKind.Number => je.TryGetInt32(out var n) ? n : 0,
             _ => int.TryParse(val?.ToString(), out var parsed) ? parsed : 0
+        };
+    }
+
+    private static DateTime? GetMetadataIsoDate(Dictionary<string, object> metadata, string key)
+    {
+        if (!metadata.TryGetValue(key, out var value) || value == null)
+        {
+            return null;
+        }
+
+        return value switch
+        {
+            DateTime timestamp => timestamp,
+            JsonElement { ValueKind: JsonValueKind.String } element => ParseIsoDate(element.GetString()),
+            _ => ParseIsoDate(value.ToString())
         };
     }
 

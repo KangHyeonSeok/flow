@@ -85,15 +85,17 @@ public class SpecStore
         spec.UpdatedAt = spec.CreatedAt;
         spec.SchemaVersion = 2;
 
-        // F-021-C1: 초기 생성 changeLog 자동 기록
-        if (!spec.ChangeLog.Any(e => string.Equals(e.Type, "create", StringComparison.OrdinalIgnoreCase)))
+        // 초기 생성 activity 자동 기록
+        if (!spec.Activity.Any(e => string.Equals(e.Kind, "create", StringComparison.OrdinalIgnoreCase)))
         {
-            spec.ChangeLog.Insert(0, new SpecChangeLogEntry
+            spec.Activity.Insert(0, new SpecActivityEntry
             {
-                Type = "create",
+                Kind = "create",
                 At = spec.CreatedAt,
-                Author = "planner",
-                Summary = $"스펙 '{spec.Id}' 생성"
+                Role = "planner",
+                Actor = "planner",
+                Summary = $"스펙 '{spec.Id}' 생성",
+                Outcome = "done"
             });
         }
 
@@ -183,7 +185,7 @@ public class SpecStore
             }
 
             // runner가 명시적으로 설정하지 않은 경우에만 디스크 값 보존
-            var onlyIfMissing = new[] { "questionStatus", "reviewDisposition", "plannerState" };
+            var onlyIfMissing = new[] { "questionStatus", "reviewDisposition", "reviewReason", "plannerState" };
             foreach (var key in onlyIfMissing)
             {
                 if (!spec.Metadata.ContainsKey(key) && diskMeta.TryGetProperty(key, out var diskVal))
@@ -197,7 +199,7 @@ public class SpecStore
     }
 
     /// <summary>
-    /// F-021-C1: 제자리 수정(in-place update). changeLog에 변경 이력을 자동으로 기록한다.
+    /// F-021-C1: 제자리 수정(in-place update). activity에 변경 이력을 자동으로 기록한다.
     /// 스펙의 핵심 목적과 범위가 유지될 때 사용. 대체/변형은 spec-supersede/spec-mutate 커맨드 사용.
     /// </summary>
     /// <param name="spec">수정된 스펙 (ID 유지)</param>
@@ -205,16 +207,19 @@ public class SpecStore
     /// <param name="author">변경 주체 (사람 또는 runner ID)</param>
     /// <param name="changeType">변경 유형. 기본 "mutate". supersede/deprecate/restore도 가능.</param>
     /// <param name="relatedIds">관련 스펙 ID 목록 (선택)</param>
+    /// <param name="role">activity 역할. 기본 planner.</param>
     public SpecNode UpdateInPlace(SpecNode spec, string changeSummary, string author,
-        string changeType = "mutate", IEnumerable<string>? relatedIds = null)
+        string changeType = "mutate", IEnumerable<string>? relatedIds = null, string role = "planner")
     {
-        spec.ChangeLog.Add(new SpecChangeLogEntry
+        spec.Activity.Add(new SpecActivityEntry
         {
-            Type = changeType,
             At = DateTime.UtcNow.ToString("o"),
-            Author = author,
+            Role = role,
+            Actor = author,
             Summary = changeSummary,
-            RelatedIds = relatedIds?.ToList() ?? new List<string>()
+            Kind = changeType,
+            RelatedIds = relatedIds?.ToList() ?? new List<string>(),
+            Outcome = "done"
         });
         return Update(spec);
     }

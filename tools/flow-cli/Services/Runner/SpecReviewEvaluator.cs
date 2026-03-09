@@ -25,6 +25,18 @@ internal sealed class SpecReviewEvaluation
     public bool CanAutoVerify => AllConditionsVerified && !RequiresManualVerification;
 }
 
+internal sealed class SpecReviewDecision
+{
+    public string SpecStatus { get; init; } = "needs-review";
+    public string ReviewDisposition { get; init; } = "missing-evidence";
+    public string? ReviewReason { get; init; }
+    public bool HasOpenQuestions { get; init; }
+    public bool HasFailedChecks { get; init; }
+    public bool RequiresManualVerification { get; init; }
+    public bool IsFinal => string.Equals(SpecStatus, "verified", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(SpecStatus, "done", StringComparison.OrdinalIgnoreCase);
+}
+
 internal static class SpecReviewEvaluator
 {
     public static SpecReviewEvaluation Evaluate(SpecNode spec)
@@ -55,6 +67,167 @@ internal static class SpecReviewEvaluator
         };
     }
 
+    public static SpecReviewDecision ResolveDecision(SpecNode spec, bool hasOpenQuestions)
+    {
+        var evaluation = Evaluate(spec);
+
+        if (hasOpenQuestions)
+        {
+            return new SpecReviewDecision
+            {
+                SpecStatus = "needs-review",
+                ReviewDisposition = "open-question",
+                ReviewReason = "open-question",
+                HasOpenQuestions = true,
+                HasFailedChecks = HasFailedChecks(spec),
+                RequiresManualVerification = evaluation.RequiresManualVerification
+            };
+        }
+
+        var hasFailedManualVerification = HasFailedManualVerification(spec);
+        var hasFailedChecks = hasFailedManualVerification || HasFailedChecks(spec);
+        if (hasFailedChecks)
+        {
+            return new SpecReviewDecision
+            {
+                SpecStatus = "queued",
+                ReviewDisposition = "test-failed",
+                ReviewReason = "test-failed",
+                HasFailedChecks = true,
+                RequiresManualVerification = evaluation.RequiresManualVerification
+            };
+        }
+
+        if (evaluation.RequiresManualVerification)
+        {
+            return new SpecReviewDecision
+            {
+                SpecStatus = "needs-review",
+                ReviewDisposition = "user-test-required",
+                ReviewReason = "user-test-required",
+                RequiresManualVerification = true
+            };
+        }
+
+        if (string.Equals(spec.NodeType, "task", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!evaluation.HasConditions || evaluation.AllConditionsVerified)
+            {
+                return new SpecReviewDecision
+                {
+                    SpecStatus = "done",
+                    ReviewDisposition = "review-done"
+                };
+            }
+
+            return new SpecReviewDecision
+            {
+                SpecStatus = "queued",
+                ReviewDisposition = "missing-evidence",
+                ReviewReason = "missing-evidence"
+            };
+        }
+
+        if (evaluation.AllConditionsVerified)
+        {
+            return new SpecReviewDecision
+            {
+                SpecStatus = "verified",
+                ReviewDisposition = "review-verified"
+            };
+        }
+
+        return new SpecReviewDecision
+        {
+            SpecStatus = "queued",
+            ReviewDisposition = "missing-evidence",
+            ReviewReason = "missing-evidence"
+        };
+    }
+
+    public static void NormalizeConditionReviewStates(SpecNode spec, bool hasOpenQuestions)
+    {
+        foreach (var condition in spec.Conditions)
+        {
+            if (string.Equals(condition.Status, "verified", StringComparison.OrdinalIgnoreCase))
+            {
+                condition.Metadata?.Remove("reviewReason");
+                continue;
+            }
+
+            condition.Metadata ??= new Dictionary<string, object>();
+
+            var hasFailedManualVerification = TryGetValue(condition.Metadata, "manualVerificationStatus", out var manualStatus)
+                && string.Equals(manualStatus?.ToString(), "failed", StringComparison.OrdinalIgnoreCase);
+
+            if (hasFailedManualVerification || ConditionHasFailedChecks(condition))
+            {
+                condition.Status = "needs-review";
+                condition.Metadata["reviewReason"] = "test-failed";
+                if (hasFailedManualVerification)
+                {
+                    condition.Metadata.Remove("requiresManualVerification");
+                    condition.Metadata.Remove("manualVerificationReason");
+                    condition.Metadata.Remove("manualVerificationItems");
+                }
+                continue;
+            }
+
+            if (HasManualVerificationRequirement(condition.Metadata))
+            {
+                condition.Status = "needs-review";
+                condition.Metadata["reviewReason"] = "user-test-required";
+                continue;
+            }
+
+            condition.Status = "needs-review";
+            condition.Metadata["reviewReason"] = hasOpenQuestions ? "open-question" : "missing-evidence";
+        }
+    }
+
+    public static bool HasOpenQuestions(SpecNode spec)
+        => CountOpenQuestions(spec) > 0;
+
+    public static int CountOpenQuestions(SpecNode spec)
+    {
+        if (spec.Metadata == null || !TryGetValue(spec.Metadata, "questions", out var rawQuestions) || rawQuestions == null)
+        {
+            return 0;
+        }
+
+        if (rawQuestions is JsonElement element)
+        {
+            if (element.ValueKind != JsonValueKind.Array)
+            {
+                return 0;
+            }
+
+            return element.EnumerateArray().Count(question =>
+                question.ValueKind == JsonValueKind.Object
+                && question.TryGetProperty("status", out var status)
+                && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (rawQuestions is IEnumerable<object> questions)
+        {
+            return questions.Count(question =>
+            {
+                if (question is Dictionary<string, object> dict
+                    && TryGetValue(dict, "status", out var statusValue))
+                {
+                    return string.Equals(statusValue?.ToString(), "open", StringComparison.OrdinalIgnoreCase);
+                }
+
+                return question is JsonElement questionElement
+                    && questionElement.ValueKind == JsonValueKind.Object
+                    && questionElement.TryGetProperty("status", out var status)
+                    && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        return 0;
+    }
+
     public static int PromoteVerifiedConditionsFromArtifacts(
         SpecNode spec,
         string verifier,
@@ -75,6 +248,7 @@ internal static class SpecReviewEvaluator
             condition.Metadata["lastVerifiedAt"] = verifiedAtUtc.ToString("o");
             condition.Metadata["lastVerifiedBy"] = verifier;
             condition.Metadata["verificationSource"] = verificationSource;
+            condition.Metadata.Remove("reviewReason");
             promoted++;
         }
 
@@ -144,6 +318,28 @@ internal static class SpecReviewEvaluator
         }
 
         return statuses.Any(status => status == "passed");
+    }
+
+    private static bool HasFailedChecks(SpecNode spec)
+        => spec.Conditions.Any(ConditionHasFailedChecks);
+
+    private static bool HasFailedManualVerification(SpecNode spec)
+        => spec.Conditions.Any(condition => condition.Metadata != null
+            && TryGetValue(condition.Metadata, "manualVerificationStatus", out var manualStatus)
+            && string.Equals(manualStatus?.ToString(), "failed", StringComparison.OrdinalIgnoreCase));
+
+    private static bool ConditionHasFailedChecks(SpecCondition condition)
+    {
+        if (condition.Tests.Any(test =>
+                string.Equals(test.Status, "failed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(test.Status, "flaky", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(test.Status, "quarantined", StringComparison.OrdinalIgnoreCase)
+                || test.Quarantined))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static void AppendManualVerificationItems(

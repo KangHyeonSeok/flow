@@ -28,11 +28,11 @@ public class PlannerAutoQueueService
         if (!string.Equals(spec.Status, "draft", StringComparison.OrdinalIgnoreCase))
             return Ineligible("스펙 상태가 draft가 아닙니다.", 0, "standby");
 
-        // C5: supersedes 또는 mutates 관계가 changeLog로 확정되지 않았으면 차단
+        // C5: supersedes 또는 mutates 관계가 activity로 확정되지 않았으면 차단
         if (HasUnconfirmedRelationReview(spec))
             return Ineligible(
                 "기존 스펙 대체(supersedes) 또는 변형(mutates) 관계가 확정되지 않았습니다. " +
-                "변경 관리 규칙에 따라 관계를 먼저 changeLog에 기록하세요.",
+            "변경 관리 규칙에 따라 관계를 먼저 activity에 기록하세요.",
                 0, "waiting-user-input");
 
         // C2: plannerState='waiting-user-input' 이면 차단
@@ -128,23 +128,23 @@ public class PlannerAutoQueueService
     // ── Private helpers ──────────────────────────────────────────────────
 
     /// <summary>
-    /// C5: supersedes 또는 mutates에 대한 changeLog 확정 여부를 검사한다.
-    /// supersedes가 있으면 changeLog에 "supersede" 타입 항목이, mutates가 있으면 "mutate" 항목이 있어야 한다.
+    /// C5: supersedes 또는 mutates에 대한 activity 확정 여부를 검사한다.
+    /// supersedes가 있으면 activity.kind="supersede" 항목이, mutates가 있으면 activity.kind="mutate" 항목이 있어야 한다.
     /// </summary>
     private static bool HasUnconfirmedRelationReview(SpecNode spec)
     {
         if (spec.Supersedes.Count > 0)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "supersede", StringComparison.OrdinalIgnoreCase));
-            if (!hasLog) return true;
+            bool hasActivity = spec.Activity.Any(e =>
+                string.Equals(e.Kind, "supersede", StringComparison.OrdinalIgnoreCase));
+            if (!hasActivity) return true;
         }
 
         if (spec.Mutates.Count > 0)
         {
-            bool hasLog = spec.ChangeLog.Any(e =>
-                string.Equals(e.Type, "mutate", StringComparison.OrdinalIgnoreCase));
-            if (!hasLog) return true;
+            bool hasActivity = spec.Activity.Any(e =>
+                string.Equals(e.Kind, "mutate", StringComparison.OrdinalIgnoreCase));
+            if (!hasActivity) return true;
         }
 
         return false;

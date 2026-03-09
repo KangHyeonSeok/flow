@@ -223,6 +223,7 @@ public class FlowRequestTests
     [InlineData("runner", "status", "runner-status")]
     [InlineData("runner", "stop", "runner-stop")]
     [InlineData("runner", "logs", "runner-logs")]
+    [InlineData("runner", "plan", "runner-plan")]
     public void C2_NormalizeCommand_CompoundCommands_ResolvesCorrectly(string command, string subcommand, string expected)
     {
         var result = FlowApp.NormalizeCommand(command, subcommand);

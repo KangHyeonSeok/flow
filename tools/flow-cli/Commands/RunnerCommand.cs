@@ -239,6 +239,53 @@ public partial class FlowApp
         }
     }
 
+    [Command("runner-plan", Description = "현재 스펙 상태 기준으로 Runner가 집을 후보 순서를 미리 보여준다.")]
+    public void RunnerPlan(
+        [Option("pretty", Description = "Pretty print JSON")] bool pretty = false)
+    {
+        try
+        {
+            var runner = new RunnerService(PathResolver.ProjectRoot, RunnerConfig, echoLogsToConsole: false);
+            var plan = runner.GetQueuePlan();
+
+            JsonOutput.Write(JsonOutput.Success("runner-plan", new
+            {
+                targetStatuses = plan.TargetStatuses,
+                totalCandidates = plan.TotalCandidates,
+                readyCount = plan.ReadyCount,
+                blockedCount = plan.BlockedCount,
+                nextSpecId = plan.NextSpecId,
+                readySpecs = plan.ReadySpecs.Select(spec => new
+                {
+                    specId = spec.SpecId,
+                    title = spec.Title,
+                    status = spec.Status,
+                    rank = spec.Rank,
+                    issuePriorityScore = spec.IssuePriorityScore,
+                    isFallback = spec.IsFallback,
+                    dependencyCount = spec.DependencyCount,
+                    dependencies = spec.Dependencies
+                }),
+                blockedSpecs = plan.BlockedSpecs.Select(spec => new
+                {
+                    specId = spec.SpecId,
+                    title = spec.Title,
+                    status = spec.Status,
+                    reason = spec.Reason,
+                    unmetDependencies = spec.UnmetDependencies,
+                    openQuestionCount = spec.OpenQuestionCount
+                })
+            }, plan.NextSpecId == null
+                ? "Runner 후보 없음"
+                : $"다음 후보: {plan.NextSpecId}"), pretty);
+        }
+        catch (Exception ex)
+        {
+            JsonOutput.Write(JsonOutput.Error("runner-plan", ex.Message), pretty);
+            Environment.ExitCode = 1;
+        }
+    }
+
     /// <summary>
     /// Runner 설정 로드. .flow/config.json 단일 파일에서 모든 설정을 읽는다.
     /// (runner-config.json은 config.json으로 통합됨)

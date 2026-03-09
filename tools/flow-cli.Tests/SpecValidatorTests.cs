@@ -81,6 +81,200 @@ public class SpecValidatorTests
             result.Errors.Should().Contain(e => e.Field == "status");
     }
 
+    [Fact]
+    public void ValidateSpec_ConditionWorkingStatus_ReturnsError()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Conditions =
+            [
+                new SpecCondition { Id = "F-001-C1", Description = "condition", Status = "working" }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().Contain(e => e.Field == "conditions[F-001-C1].status");
+    }
+
+    [Fact]
+    public void ValidateSpec_InvalidActivityRole_ReturnsError()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Activity =
+            [
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "runner",
+                    Summary = "invalid role",
+                    Outcome = "handoff"
+                }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().Contain(e => e.Field == "activity[0].role");
+    }
+
+    [Fact]
+    public void ValidateSpec_InvalidActivityIssue_ReturnsError()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Activity =
+            [
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "tester",
+                    Summary = "invalid issue",
+                    Outcome = "requeue",
+                    Issues = ["unknown-issue"]
+                }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().Contain(e => e.Field == "activity[0].issues[0]");
+    }
+
+    [Fact]
+    public void ValidateSpec_InvalidActivityOutcome_ReturnsError()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Activity =
+            [
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "tester",
+                    Summary = "invalid outcome",
+                    Outcome = "queued"
+                }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().Contain(e => e.Field == "activity[0].outcome");
+    }
+
+    [Fact]
+    public void ValidateSpec_InvalidConditionUpdateReason_ReturnsError()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Activity =
+            [
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "tester",
+                    Summary = "invalid condition update reason",
+                    Outcome = "requeue",
+                    ConditionUpdates =
+                    [
+                        new SpecConditionUpdate
+                        {
+                            ConditionId = "F-001-C1",
+                            Status = "draft",
+                            Reason = "unknown-reason"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().Contain(e => e.Field == "activity[0].conditionUpdates[0].reason");
+    }
+
+    [Fact]
+    public void ValidateSpec_NewReviewActivityVocabulary_IsAccepted()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-001",
+            Title = "test",
+            Description = "desc",
+            Status = "queued",
+            Activity =
+            [
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "tester",
+                    Summary = "자동 재시도를 위해 queued로 복귀",
+                    Outcome = "requeue",
+                    Kind = "verification",
+                    Issues = ["missing-evidence"],
+                    StatusChange = new SpecActivityStatusChange
+                    {
+                        From = "working",
+                        To = "queued"
+                    },
+                    ConditionUpdates =
+                    [
+                        new SpecConditionUpdate
+                        {
+                            ConditionId = "F-001-C1",
+                            Status = "draft",
+                            Reason = "reset-for-requeue"
+                        }
+                    ]
+                },
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
+                    Role = "tester",
+                    Summary = "사용자 수동 테스트 필요",
+                    Outcome = "needs-review",
+                    Kind = "verification",
+                    Issues = ["user-test-required"],
+                    StatusChange = new SpecActivityStatusChange
+                    {
+                        From = "working",
+                        To = "needs-review"
+                    },
+                    ConditionUpdates =
+                    [
+                        new SpecConditionUpdate
+                        {
+                            ConditionId = "F-001-C2",
+                            Status = "needs-review",
+                            Reason = "user-test-required"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        var result = _validator.ValidateSpec(spec);
+
+        result.Errors.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData("feature", true)]
     [InlineData("condition", true)]

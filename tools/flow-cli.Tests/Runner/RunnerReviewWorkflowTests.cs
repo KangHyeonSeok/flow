@@ -138,11 +138,15 @@ public class RunnerReviewWorkflowTests
         spec.Metadata.Should().NotContainKey("requiresUserInput");
         ((Dictionary<string, object>)spec.Metadata!["review"]).Should().NotContainKey("requiresUserInput");
         spec.Metadata["questionStatus"].Should().Be("waiting-user-input");
-        spec.Metadata["reviewDisposition"].Should().Be("needs-user-decision");
+        spec.Metadata["reviewDisposition"].Should().Be("open-question");
+        spec.Metadata["reviewReason"].Should().Be("open-question");
+        spec.Activity.Should().ContainSingle();
+        spec.Activity[0].Outcome.Should().Be("needs-review");
+        spec.Activity[0].Issues.Should().ContainSingle().Which.Should().Be("user-input-required");
     }
 
     [Fact]
-    public void ApplyReviewAnalysis_WithoutQuestions_RequeuesForRetry()
+    public void ApplyReviewAnalysis_WithoutQuestions_RequeuesSpec()
     {
         var spec = new SpecNode
         {
@@ -159,7 +163,7 @@ public class RunnerReviewWorkflowTests
             Summary = "사용자 입력 없이 재시도 가능",
             FailureReasons = ["구현 범위 조정 필요"],
             Alternatives = ["더 작은 변경으로 분리"],
-            SuggestedAttempts = ["queued 상태에서 재시도"],
+            SuggestedAttempts = ["review 사유를 정리한 뒤 다시 작업"],
             RequiresUserInput = false
         };
 
@@ -168,7 +172,10 @@ public class RunnerReviewWorkflowTests
         spec.Status.Should().Be("queued");
         spec.Metadata.Should().NotContainKey("requiresUserInput");
         spec.Metadata.Should().NotContainKey("questionStatus");
-        spec.Metadata["reviewDisposition"].Should().Be("retry-queued");
+        spec.Metadata["reviewDisposition"].Should().Be("missing-evidence");
+        spec.Metadata["reviewReason"].Should().Be("missing-evidence");
+        spec.Activity.Should().ContainSingle();
+        spec.Activity[0].Outcome.Should().Be("requeue");
     }
 
     [Fact]
@@ -209,6 +216,9 @@ public class RunnerReviewWorkflowTests
         spec.Conditions[0].Metadata.Should().NotContainKey("requiresManualVerification");
         ((Dictionary<string, object>)spec.Metadata!["review"])["verifiedConditionIds"].Should().NotBeNull();
         spec.Metadata["reviewDisposition"].Should().Be("review-verified");
+        spec.Metadata.Should().NotContainKey("reviewReason");
         spec.Metadata["verificationSource"].Should().Be("copilot-cli-review");
+        spec.Activity.Should().ContainSingle();
+        spec.Activity[0].Outcome.Should().Be("verified");
     }
 }

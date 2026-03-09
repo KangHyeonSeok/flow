@@ -3,6 +3,7 @@ using FluentAssertions;
 
 namespace FlowCLI.Tests;
 
+[Collection("CommandGlobalState")]
 public class SpecRecordConditionReviewCommandTests : IDisposable
 {
     private readonly string _tempDir;
@@ -55,7 +56,7 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
                 {
                     Id = "F-401-C1",
                     Description = "사용자 확인 필요",
-                    Status = "working",
+                    Status = "needs-review",
                     Metadata = new Dictionary<string, object>
                     {
                         ["requiresManualVerification"] = true,
@@ -75,6 +76,7 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
         updated.Should().NotBeNull();
         updated!.Status.Should().Be("verified");
         updated.Metadata!["verificationSource"].ToString().Should().Be("manual-review");
+        updated.Metadata.Should().NotContainKey("reviewReason");
 
         var condition = updated.Conditions.Single();
         condition.Status.Should().Be("verified");
@@ -86,11 +88,19 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
         condition.Tests.Should().ContainSingle(test => test.TestId == "manual-review:F-401-C1" && test.Status == "passed");
         condition.Evidence.Should().ContainSingle(ev => ev.Path == "manual-review://F-401/F-401-C1");
         updated.Evidence.Should().ContainSingle(ev => ev.Path == "manual-review://F-401/F-401-C1");
+        updated.Activity.Should().HaveCount(2);
+        var activity = updated.Activity.Last();
+        activity.Outcome.Should().Be("verified");
+        activity.Issues.Should().BeEmpty();
+        activity.ConditionUpdates.Should().ContainSingle(update =>
+            update.ConditionId == "F-401-C1" &&
+            update.Status == "verified" &&
+            update.Reason == "manual-tests-passed");
         ReadCapturedOutput().Should().Contain("spec-record-condition-review");
     }
 
     [Fact]
-    public void SpecRecordConditionReview_Failed_KeepsManualFlagAndNeedsReview()
+    public void SpecRecordConditionReview_Failed_RequeuesSpecAndResetsConditions()
     {
         var store = new SpecStore(_tempDir);
         store.Initialize();
@@ -107,7 +117,7 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
                 {
                     Id = "F-402-C1",
                     Description = "사용자 확인 필요",
-                    Status = "working",
+                    Status = "needs-review",
                     Metadata = new Dictionary<string, object>
                     {
                         ["requiresManualVerification"] = true,
@@ -124,15 +134,24 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
         Environment.ExitCode.Should().Be(0);
         var updated = store.Get("F-402");
         updated.Should().NotBeNull();
-        updated!.Status.Should().Be("needs-review");
-        updated.Metadata!["reviewDisposition"].ToString().Should().Be("manual-verification-failed");
+        updated!.Status.Should().Be("queued");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("test-failed");
+        updated.Metadata["reviewReason"].ToString().Should().Be("test-failed");
 
         var condition = updated.Conditions.Single();
-        condition.Status.Should().Be("needs-review");
+        condition.Status.Should().Be("draft");
         condition.Metadata.Should().NotBeNull();
-        condition.Metadata!["requiresManualVerification"].Should().Be(true);
-        condition.Metadata["manualVerificationStatus"].ToString().Should().Be("failed");
+        condition.Metadata.Should().NotContainKey("requiresManualVerification");
+        condition.Metadata.Should().NotContainKey("manualVerificationStatus");
         condition.Tests.Should().ContainSingle(test => test.TestId == "manual-review:F-402-C1" && test.Status == "failed" && test.ErrorMessage == "저장 후 오류 토스트 발생");
+        updated.Activity.Should().HaveCount(2);
+        var activity = updated.Activity.Last();
+        activity.Outcome.Should().Be("requeue");
+        activity.Issues.Should().ContainSingle().Which.Should().Be("test-failed");
+        activity.ConditionUpdates.Should().ContainSingle(update =>
+            update.ConditionId == "F-402-C1" &&
+            update.Status == "draft" &&
+            update.Reason == "reset-for-requeue");
     }
 
     private string ReadCapturedOutput()

@@ -228,6 +228,10 @@ public partial class FlowApp
                     pretty: pretty);
                 break;
 
+            case "runner-plan":
+                RunnerPlan(pretty: pretty);
+                break;
+
             case "human-input":
                 HumanInput(
                     type: GetOption(opts, "type", "text"),
@@ -363,7 +367,7 @@ public partial class FlowApp
                                 "spec-list", "spec-delete", "spec-validate", "spec-graph",
                                 "spec-impact", "spec-propagate", "spec-check-refs", "spec-order",
                                 "spec-append-review", "spec-record-condition-review",
-                                "runner", "runner-start", "runner-status", "runner-stop", "runner-logs",
+                                "runner", "runner-start", "runner-status", "runner-stop", "runner-logs", "runner-plan",
                                 "human-input"
                             }
                         }
