@@ -85,20 +85,6 @@ public class SpecStore
         spec.UpdatedAt = spec.CreatedAt;
         spec.SchemaVersion = 2;
 
-        // 초기 생성 activity 자동 기록
-        if (!spec.Activity.Any(e => string.Equals(e.Kind, "create", StringComparison.OrdinalIgnoreCase)))
-        {
-            spec.Activity.Insert(0, new SpecActivityEntry
-            {
-                Kind = "create",
-                At = spec.CreatedAt,
-                Role = "planner",
-                Actor = "planner",
-                Summary = $"스펙 '{spec.Id}' 생성",
-                Outcome = "done"
-            });
-        }
-
         SaveSpec(spec);
         return spec;
     }
