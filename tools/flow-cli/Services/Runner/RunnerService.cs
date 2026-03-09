@@ -696,7 +696,8 @@ public class RunnerService
         }
 
         var sortedReady = ready
-            .OrderByDescending(s => GetIssuePriorityScore(s))
+            .OrderBy(s => GetMetadataInt(s.Metadata ?? new Dictionary<string, object>(), "implementationAttempts"))
+            .ThenByDescending(s => GetIssuePriorityScore(s))
             .ThenBy(s => s.Dependencies.Count)
             .ThenBy(s => s.Id)
             .Select((spec, index) => new RunnerQueueCandidate
