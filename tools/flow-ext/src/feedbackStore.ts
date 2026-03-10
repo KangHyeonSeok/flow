@@ -23,9 +23,6 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
     const metadataQuestions = ensureArray(metadata, 'questions');
     const reviewMetadata = getOptionalRecord(metadata.review);
     const reviewQuestions = reviewMetadata ? ensureArray(reviewMetadata, 'questions') : null;
-    const additionalInformationRequests = reviewMetadata && Array.isArray(reviewMetadata.additionalInformationRequests)
-        ? reviewMetadata.additionalInformationRequests
-        : null;
 
     let matchedAny = false;
 
@@ -33,21 +30,6 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
 
     if (reviewQuestions) {
         matchedAny = updateQuestionEntries(reviewQuestions, question, trimmedAnswer, answeredAt) || matchedAny;
-    }
-
-    if (additionalInformationRequests) {
-        const remaining = additionalInformationRequests.filter((entry) => {
-            if (typeof entry !== 'string') {
-                return true;
-            }
-
-            return !matchesQuestion(entry, question);
-        });
-
-        if (remaining.length !== additionalInformationRequests.length) {
-            reviewMetadata!.additionalInformationRequests = remaining;
-            matchedAny = true;
-        }
     }
 
     upsertAnsweredQuestion(metadataQuestions, question, trimmedAnswer, answeredAt);

@@ -21,6 +21,7 @@ export interface UserFeedbackState {
     questions: UserQuestion[];
     openQuestions: UserQuestion[];
     openQuestionCount: number;
+    additionalInformationRequests: string[];
     lastAnsweredAt: string | null;
 }
 
@@ -218,7 +219,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function getUserFeedbackState(holder: { metadata?: Record<string, unknown> | null }): UserFeedbackState {
     const metadata = holder.metadata;
     if (!metadata) {
-        return { requiresUserInput: false, questionStatus: null, reviewDisposition: null, questions: [], openQuestions: [], openQuestionCount: 0, lastAnsweredAt: null };
+        return {
+            requiresUserInput: false,
+            questionStatus: null,
+            reviewDisposition: null,
+            questions: [],
+            openQuestions: [],
+            openQuestionCount: 0,
+            additionalInformationRequests: [],
+            lastAnsweredAt: null,
+        };
     }
 
     const reviewMetadata = isRecord(metadata.review) ? metadata.review : undefined;
@@ -229,8 +239,8 @@ export function getUserFeedbackState(holder: { metadata?: Record<string, unknown
     const questions = mergeQuestions([
         ...readUserQuestions(metadata.questions),
         ...readUserQuestions(reviewMetadata?.questions),
-        ...readAdditionalInformationRequests(reviewMetadata?.additionalInformationRequests),
     ]);
+    const additionalInformationRequests = readAdditionalInformationRequests(reviewMetadata?.additionalInformationRequests);
     const openQuestions = questions.filter(q => q.status === 'open');
     const lastAnsweredAt = readString(metadata.lastAnsweredAt) ?? getLatestAnsweredAt(questions) ?? null;
     const requiresUserInput = openQuestions.length > 0;
@@ -242,6 +252,7 @@ export function getUserFeedbackState(holder: { metadata?: Record<string, unknown
         questions,
         openQuestions,
         openQuestionCount: openQuestions.length,
+        additionalInformationRequests,
         lastAnsweredAt,
     };
 }
@@ -269,23 +280,14 @@ function readUserQuestions(raw: unknown): UserQuestion[] {
     });
 }
 
-function readAdditionalInformationRequests(raw: unknown): UserQuestion[] {
+function readAdditionalInformationRequests(raw: unknown): string[] {
     if (!Array.isArray(raw)) {
         return [];
     }
 
-    return raw.flatMap((entry, idx) => {
+    return raw.flatMap((entry) => {
         const question = readString(entry);
-        if (!question) {
-            return [];
-        }
-
-        return [{
-            id: `review-request-${idx + 1}`,
-            type: 'missing-info',
-            question,
-            status: 'open',
-        }];
+        return question ? [question] : [];
     });
 }
 

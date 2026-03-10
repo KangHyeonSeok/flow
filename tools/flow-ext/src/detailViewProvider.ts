@@ -163,6 +163,14 @@ body {
             </div>`;
         }
 
+        if (feedback && feedback.additionalInformationRequests.length > 0) {
+            feedbackHtml += `<div class="feedback-panel readonly">
+                <div class="feedback-title">ℹ 추가 정보 요청</div>
+                <ul class="feedback-readonly-list">${feedback.additionalInformationRequests.map((item) => `<li>${this.escapeHtml(item)}</li>`).join('')}</ul>
+                <div class="feedback-readonly-note">이 항목은 리뷰 참고 요청이며, 직접 답변을 입력하는 질문으로 집계되지 않습니다.</div>
+            </div>`;
+        }
+
         let conditionsHtml = '';
 
         // C3: 자동 승격 이력 패널 - promotion.source, reason, confidence, promotedAt, plannerState
@@ -430,6 +438,10 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     border: 1px solid rgba(233, 30, 99, 0.5);
     background: rgba(233, 30, 99, 0.08);
 }
+.feedback-panel.readonly {
+    border-color: var(--vscode-panel-border, #3c3c3c);
+    background: rgba(255, 255, 255, 0.03);
+}
 .feedback-title {
     font-size: 11px;
     font-weight: 700;
@@ -529,6 +541,21 @@ h3 { font-size: 11px; margin: 10px 0 4px 0; color: var(--vscode-descriptionForeg
     margin-top: 6px;
 }
 .feedback-no-questions {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+}
+.feedback-readonly-list {
+    list-style: disc;
+    margin: 8px 0 0 18px;
+    padding: 0;
+}
+.feedback-readonly-list li {
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.feedback-readonly-note {
+    margin-top: 8px;
     font-size: 11px;
     color: var(--vscode-descriptionForeground);
 }

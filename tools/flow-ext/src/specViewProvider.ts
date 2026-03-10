@@ -693,6 +693,22 @@ export class SpecViewProvider {
             font-size: 12px;
             color: var(--fg-secondary);
         }
+        .feedback-readonly-list {
+            list-style: disc;
+            margin: 8px 0 0 18px;
+            padding: 0;
+            color: var(--fg-primary);
+        }
+        .feedback-readonly-list li {
+            margin-bottom: 6px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .feedback-readonly-note {
+            font-size: 11px;
+            color: var(--fg-secondary);
+            margin-top: 8px;
+        }
 
         /* 코드 참조 */
         .code-refs-details {
@@ -1125,6 +1141,18 @@ export class SpecViewProvider {
             </div>`;
         }
 
+        let additionalInfoHtml = '';
+        if (feedback.additionalInformationRequests.length > 0) {
+            additionalInfoHtml = `
+            <div class="feedback-callout">
+                <div class="feedback-callout-title">ℹ 추가 정보 요청</div>
+                <ul class="feedback-readonly-list">
+                    ${feedback.additionalInformationRequests.map((item) => `<li>${esc(item)}</li>`).join('')}
+                </ul>
+                <div class="feedback-readonly-note">이 항목은 리뷰 참고 요청이며, 직접 답변을 입력하는 질문으로 집계되지 않습니다.</div>
+            </div>`;
+        }
+
         // 코드 참조
         let codeRefsHtml = '';
         if (spec.codeRefs.length > 0) {
@@ -1191,6 +1219,7 @@ export class SpecViewProvider {
             </div>
             <div class="spec-description">${esc(spec.description)}</div>
             ${feedbackHtml}
+            ${additionalInfoHtml}
             ${reviewHtml}
             ${activityHtml}
             ${conditionsHtml}
