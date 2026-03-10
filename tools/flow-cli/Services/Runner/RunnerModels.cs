@@ -44,12 +44,6 @@ public class RunnerConfig
     /// <summary>메인 브랜치 이름</summary>
     public string MainBranch { get; set; } = "main";
 
-    /// <summary>구현 완료 후 자동 테스트 실행 여부</summary>
-    public bool AutomatedTestsEnabled { get; set; } = true;
-
-    /// <summary>자동 테스트 타임아웃 (분)</summary>
-    public int AutomatedTestTimeoutMinutes { get; set; } = 10;
-
     /// <summary>한 poll 주기 내 최대 즉시 재스케줄 사이클 수 (F-031-C5). busy-wait 방지 상한.</summary>
     public int MaxReschedulesPerPoll { get; set; } = 10;
 
@@ -131,27 +125,6 @@ public class SpecWorkResult
     /// working → needs-review/verified/done/queued 전환 또는 needs-review → verified 전환 시 true.
     /// </summary>
     public bool TriggeredReschedule { get; set; }
-}
-
-internal sealed class AutomatedTestPlan
-{
-    public string Platform { get; init; } = "";
-    public string FileName { get; init; } = "";
-    public string Arguments { get; init; } = "";
-    public string WorkingDirectory { get; init; } = "";
-    public string ResultDirectory { get; init; } = "";
-    public string ResultFilePath { get; init; } = "";
-}
-
-internal sealed class AutomatedTestRunResult
-{
-    public bool Executed { get; init; }
-    public bool Success { get; init; }
-    public bool TimedOut { get; init; }
-    public string? ErrorMessage { get; init; }
-    public string? ResultFilePath { get; init; }
-    public string? Platform { get; init; }
-    public FlowCLI.Services.TestSync.TestSyncResult? SyncResult { get; init; }
 }
 
 /// <summary>

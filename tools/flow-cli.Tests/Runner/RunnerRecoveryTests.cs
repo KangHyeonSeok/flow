@@ -60,10 +60,7 @@ public class RunnerRecoveryTests : IDisposable
             }
         });
 
-        var runner = new RunnerService(_tempDir, new RunnerConfig
-        {
-            AutomatedTestsEnabled = false
-        }, echoLogsToConsole: false);
+        var runner = new RunnerService(_tempDir, new RunnerConfig(), echoLogsToConsole: false);
 
         var results = await runner.RunOnceAsync();
 

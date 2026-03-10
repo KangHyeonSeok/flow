@@ -63,14 +63,6 @@ public class FlowConfig
     [JsonPropertyName("mainBranch")]
     public string MainBranch { get; set; } = "main";
 
-    /// <summary>Runner가 구현 후 자동 테스트를 실행할지 여부</summary>
-    [JsonPropertyName("automatedTestsEnabled")]
-    public bool AutomatedTestsEnabled { get; set; } = true;
-
-    /// <summary>Runner 자동 테스트 타임아웃 (분)</summary>
-    [JsonPropertyName("automatedTestTimeoutMinutes")]
-    public int AutomatedTestTimeoutMinutes { get; set; } = 10;
-
     /// <summary>Copilot rate limit 발생 시 재시도 전 대기 시간(초)</summary>
     [JsonPropertyName("rateLimitCooldownSeconds")]
     public int RateLimitCooldownSeconds { get; set; } = 300;

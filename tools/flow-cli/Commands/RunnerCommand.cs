@@ -309,8 +309,6 @@ public partial class FlowApp
             CopilotTimeoutMinutes = flowConfig.CopilotTimeoutMinutes,
             RemoteName            = flowConfig.RemoteName,
             MainBranch            = flowConfig.MainBranch,
-            AutomatedTestsEnabled = flowConfig.AutomatedTestsEnabled,
-            AutomatedTestTimeoutMinutes = flowConfig.AutomatedTestTimeoutMinutes,
             RateLimitCooldownSeconds = flowConfig.RateLimitCooldownSeconds,
             TransportErrorCooldownSeconds = flowConfig.TransportErrorCooldownSeconds,
             ExecutionCrashCooldownSeconds = flowConfig.ExecutionCrashCooldownSeconds,

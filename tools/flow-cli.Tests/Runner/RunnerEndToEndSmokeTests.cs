@@ -197,7 +197,6 @@ public class RunnerEndToEndSmokeTests : IDisposable
             PollIntervalMinutes = 1,
             ReviewPollIntervalSeconds = 1,
             MaxConcurrentSpecs = 1,
-            AutomatedTestsEnabled = false,
             CopilotCliPath = Path.Combine(_tempDir, "fake-copilot.ps1"),
             MainBranch = "main",
             RemoteName = "origin"

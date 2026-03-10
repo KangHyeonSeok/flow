@@ -40,9 +40,9 @@ public class CopilotService
     /// Copilot CLI를 호출하여 스펙을 구현한다.
     /// worktreePath에서 실행하여 해당 작업 디렉토리에서 코드를 생성/수정.
     /// </summary>
-    public async Task<CopilotResult> ImplementSpecAsync(string specId, string specJson, string specFilePath, string worktreePath, string? previousReview = null)
+    public async Task<CopilotResult> ImplementSpecAsync(string specId, string specJson, string worktreePath, string? previousReview = null)
     {
-        var prompt = BuildImplementPrompt(specId, specJson, specFilePath, previousReview);
+        var prompt = BuildImplementPrompt(specId, specJson, previousReview);
         return await RunCopilotAsync(prompt, worktreePath, specId, "implement");
     }
 
@@ -226,94 +226,33 @@ public class CopilotService
         }
     }
 
-    internal static string BuildImplementPrompt(string specId, string specJson, string specFilePath, string? previousReview)
+    internal static string BuildImplementPrompt(string specId, string specJson, string? previousReview)
     {
-        var accessInstructions = BuildSpecAccessInstructions(specId, worktreeContext: true);
         var reviewSection = string.IsNullOrWhiteSpace(previousReview)
             ? ""
             : $"""
 
-
-                이전 구현 검토 결과 (참고하여 다른 접근 방식을 사용하세요):
+                이전 리뷰 결과 (다른 접근 방식을 사용하세요):
                 {previousReview}
                 """;
 
         return $"""
-            다음 스펙을 TDD 방식으로 구현하세요. 반드시 아래 Phase 순서를 따르세요.
-            기존 프로젝트 구조와 코딩 패턴을 따르세요.
-
-                        {accessInstructions}
-
-            ## Phase 1: 테스트 작성 (코드 구현 전)
-            스펙의 각 condition을 읽고, 자동 테스트가 가능한 condition부터 테스트를 먼저 작성하세요.
-            - 테스트는 condition의 수락 조건을 직접 검증해야 합니다.
-            - 아직 구현이 없으므로 테스트는 컴파일은 되지만 실패(Red)하는 상태여야 합니다.
-            - 자동 테스트를 만들거나 안정적으로 실행하기 어려운 condition은 수동 검증 대상으로 남기세요.
-                        - 수동 검증으로 남길 때는 먼저 위 규칙대로 `flow.ps1 spec-get {specId}`로 최신 스펙을 다시 읽고, 필요하면 스펙 파일 `{specFilePath}`의 해당 condition.metadata에 아래 필드를 기록하세요.
-              - `requiresManualVerification`: true
-              - `manualVerificationReason`: 자동화가 어려운 이유
-              - `manualVerificationItems`: 사용자가 review 단계에서 확인할 수 있는 짧은 체크 항목 배열
-            테스트를 작성한 뒤 빌드가 통과하는지 확인하세요. (테스트 실행은 아직 하지 않습니다.)
-
-            ## Phase 2: 구현
-            Phase 1에서 작성한 테스트를 통과시키면서 스펙의 모든 condition을 만족하는 코드를 작성하세요.
-            - 테스트를 통과시키기 위한 최소한의 올바른 구현을 하세요.
-            - 구현 중 테스트를 수정해야 한다면, 테스트의 검증 의도는 유지하면서 수정하세요.
-
-            ## Phase 3: 검증
-            모든 테스트를 실행하고 결과를 확인하세요.
-            - 빌드와 테스트가 모두 통과하는지 확인하세요.
-            - condition별 성공/실패 여부와 수집한 결과 파일/로그 위치를 분명히 남겨서 runner가 tests/evidence를 동기화할 수 있게 하세요.
-            - 사람이 직접 확인해야 하는 condition은 review 단계에서 아래 명령으로 결과를 기록할 수 있게 condition ID와 확인 항목을 남기세요.
-              - `./flow.ps1 spec-record-condition-review {specId} --condition-id <condition-id> --result passed|failed --comment ""<review comment>"" --reviewer ""human-review""`
-            - condition.status는 직접 `verified`나 `done`으로 바꾸지 마세요. 상태 변경은 runner/review 단계에서 처리합니다.
-
-            ## 최종 응답
-            다음을 짧게 요약하세요.
-            - 자동 테스트로 다룬 condition ID 목록
-            - 수동 검증으로 남긴 condition ID 목록과 이유
-            - 추가하거나 실행한 테스트/검증 명령
-            - 수집한 테스트 결과 파일, 로그, 스크린샷 등 evidence 경로
+            TDD로 다음 스펙을 구현하세요. 기존 프로젝트 구조와 코딩 패턴을 따르세요.
+            스펙 상세는 `./flow.ps1 spec-get {specId}`로 조회하세요.
+            condition.status를 직접 변경하지 마세요. 상태 변경은 runner가 처리합니다.
             {reviewSection}
             스펙 ID: {specId}
-            직접 편집이 필요할 때 참고할 스펙 파일 경로: {specFilePath}
-            스펙 내용(참고용 요약, 최신본은 반드시 flow.ps1으로 재조회):
+            스펙 내용:
             {specJson}
             """;
     }
 
-    internal static string BuildSpecAccessInstructions(string specId, bool worktreeContext)
-    {
-        var locationHint = worktreeContext
-            ? "현재 작업 디렉터리는 runner worktree일 수 있으므로, 상위 경로를 올라가 `flow.ps1`를 찾으세요."
-            : "현재 작업 디렉터리에서 `flow.ps1`를 찾을 수 없으면 상위 경로를 올라가 찾으세요.";
-
-        return string.Join(Environment.NewLine,
-        [
-            "스펙 조회 규칙:",
-            "- 스펙의 source of truth는 직접 파일 경로나 프롬프트에 포함된 JSON이 아니라 `flow.ps1 spec-get` 결과입니다.",
-            $"- {locationHint}",
-            "- PowerShell 예시:",
-            "  $flowRoot = (Get-Location).Path",
-            "  while ($true)",
-            "  {",
-            "      $candidate = Join-Path $flowRoot 'flow.ps1'",
-            "      if (Test-Path $candidate) { $flow = $candidate; break }",
-            "      $parent = Split-Path $flowRoot -Parent",
-            "      if ($parent -eq $flowRoot) { throw 'flow.ps1 not found in parent chain' }",
-            "      $flowRoot = $parent",
-            "  }",
-            $"  & $flow spec-get {specId}",
-            $"- 구조화된 JSON이 필요하면 `& $flow spec-get {specId} --json --pretty`를 사용하세요.",
-            "- 스펙을 다시 확인해야 할 때는 파일을 직접 열지 말고 항상 위 명령으로 최신 내용을 다시 읽으세요."
-        ]);
-    }
 
     private static string BuildMergeResolvePrompt(string specId)
     {
         return $"""
             현재 git 머지 충돌이 발생했습니다. 충돌을 해결해주세요.
-            필요하면 상위 경로에서 `flow.ps1`를 찾아 `flow.ps1 spec-get {specId}`로 최신 스펙을 다시 확인하세요.
+            스펙 확인: `./flow.ps1 spec-get {specId}`
             충돌 마커(<<<<<<, ======, >>>>>>)를 모두 제거하고 올바른 코드로 통합하세요.
             두 브랜치의 의도를 모두 보존하되, 스펙 {specId}의 구현이 반영되도록 해주세요.
             해결 후 빌드가 통과하는지 확인하세요.
@@ -322,14 +261,12 @@ public class CopilotService
 
     private static string BuildErrorFixPrompt(string specId, string specJson, string errorInfo)
     {
-        var accessInstructions = BuildSpecAccessInstructions(specId, worktreeContext: true);
         return $"""
             다음 스펙의 구현에서 오류가 발생했습니다. 오류를 수정하세요.
-
-            {accessInstructions}
+            스펙 상세는 `./flow.ps1 spec-get {specId}`로 조회하세요.
 
             스펙 ID: {specId}
-            스펙 내용(참고용 요약, 최신본은 반드시 flow.ps1으로 재조회):
+            스펙 내용:
             {specJson}
 
             오류 정보:
@@ -342,42 +279,28 @@ public class CopilotService
     internal static string BuildReviewPrompt(string specId, string specJson, string reviewContext, string reviewerId)
     {
         var reviewFile = $".flow/review/{specId}-review.json";
-        var accessInstructions = BuildSpecAccessInstructions(specId, worktreeContext: true);
         return $@"다음 스펙은 현재 needs-review 상태입니다. 코드 파일을 수정하지 말고, 검토 결과를 flow CLI로 저장하세요.
+스펙 상세는 `./flow.ps1 spec-get {specId}`로 조회하세요. 스펙 JSON 파일을 직접 수정하지 마세요.
 
-반드시 아래 절차를 그대로 수행하세요.
+절차:
 1. `.flow/review` 디렉토리가 없으면 생성합니다.
-2. 검토를 시작하기 전에 아래 조회 규칙대로 `flow.ps1 spec-get {specId}`를 실행해 최신 스펙을 다시 읽습니다.
-3. 조회 결과를 기준으로 검토하되, 스펙 JSON 파일을 직접 수정하지 않습니다.
-4. 아래 스키마와 정확히 일치하는 JSON 객체 하나만 `{reviewFile}` 파일에 저장합니다.
-5. 다음 명령으로 review를 반영합니다.
-   ./flow.ps1 spec-append-review {specId} --input-file ""{reviewFile}"" --reviewer ""{reviewerId}""
-6. 명령이 JSON 형식 또는 스키마 오류로 실패하면, 오류 메시지를 보고 `{reviewFile}`을 수정한 뒤 같은 명령을 다시 실행합니다.
-7. `spec-append-review` 명령이 exit 0으로 성공할 때까지 반복합니다.
-8. 스펙 JSON 파일을 직접 수정하지 않습니다.
-9. 최종 응답은 짧은 완료 메시지 한 줄만 출력합니다.
-
-{accessInstructions}
+2. 아래 스키마의 JSON을 `{reviewFile}`에 저장합니다.
+3. `./flow.ps1 spec-append-review {specId} --input-file ""{reviewFile}"" --reviewer ""{reviewerId}""`로 반영합니다.
+4. 실패하면 `{reviewFile}`을 수정 후 재실행합니다. exit 0까지 반복합니다.
+5. 최종 응답은 완료 메시지 한 줄만 출력합니다.
 
 검토 목적:
-- verified가 아닌 condition의 code/tests/evidence/metadata를 검토해 조건이 이미 충족되었는지 판단
-- 왜 실패했는지 또는 왜 재작업이 필요한지 요약
-- 어떤 대안이 있는지 제안
-- 다음 시도에서 무엇을 해야 하는지 제안
+- verified가 아닌 condition이 이미 충족되었는지 판단
+- 실패/재작업 이유 요약, 대안 제안, 다음 시도 제안
 - 사용자 판단이 필요한지 식별
-- 추가 정보 요청이 필요한지 식별
 
-condition 판정 규칙:
-- 스펙 JSON 안의 condition, tests, evidence, metadata, codeRefs와 실제 워크스페이스 파일을 함께 검토할 수 있습니다.
-- 조건이 이미 만족되었다고 근거를 갖고 판단되면 그 condition ID를 `verifiedConditionIds`에 추가하세요.
-- 확신할 수 없는 condition은 `verifiedConditionIds`에 넣지 마세요.
-- `verifiedConditionIds`에 넣는 condition은 코드 수정 없이 review 단계에서 verified 처리됩니다.
-- 스펙 JSON 파일을 직접 수정하지 않습니다.
+condition 판정:
+- 충족이 확인된 condition ID를 `verifiedConditionIds`에 추가 (확신 없으면 넣지 마세요)
+- `verifiedConditionIds`의 condition은 코드 수정 없이 verified 처리됩니다
 
-질문 생성 규칙:
-- 사용자 질문은 제품 요구사항, 정책 결정, 도메인 지식, 누락된 스펙 설명처럼 사용자만 답할 수 있는 정보에 한정합니다.
-- runner 로그, stdout/stderr, git diff, 변경 파일 목록, 실행 아티팩트 같은 내부 디버깅 정보는 사용자에게 요청하지 않습니다.
-- 내부 실행 정보가 더 필요하면 질문 대신 failureReasons, alternatives, suggestedAttempts에 검토자가 내부 로그/변경 사항을 확인해야 한다고만 남기고 requiresUserInput은 false로 유지합니다.
+질문 생성:
+- 사용자만 답할 수 있는 정보(제품 요구사항, 정책, 도메인 지식)에 한정합니다
+- 내부 디버깅 정보는 요청하지 말고 failureReasons/suggestedAttempts에 남기세요
 
 review JSON 스키마:
 {{
@@ -385,7 +308,7 @@ review JSON 스키마:
     ""failureReasons"": [""실패/보류 원인""],
     ""alternatives"": [""가능한 대안""],
     ""suggestedAttempts"": [""다음 시도 액션""],
-    ""verifiedConditionIds"": [""충족이 확인된 condition ID""],
+    ""verifiedConditionIds"": [""충족 확인된 condition ID""],
     ""requiresUserInput"": true,
     ""additionalInformationRequests"": [""추가로 필요한 정보""],
     ""questions"": [

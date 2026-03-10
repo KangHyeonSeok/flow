@@ -48,11 +48,9 @@ public class DatabaseService : IDisposable
     {
         try
         {
-            var ragBinDir = Path.GetDirectoryName(_paths.EmbedExePath);
-            var vec0Base = ragBinDir != null ? Path.Combine(ragBinDir, "vec0") : _paths.EmbedExePath.Replace("embed.exe", "vec0");
-
-            if (File.Exists(vec0Base + ".dll") || File.Exists(vec0Base + ".so") ||
-                File.Exists(vec0Base + ".dylib") || File.Exists(vec0Base))
+            var ragBinDir = Path.GetDirectoryName(_paths.EmbedExePath) ?? "";
+            var vec0Base = ResolveVec0Path(ragBinDir);
+            if (vec0Base != null)
             {
                 _connection!.EnableExtensions(true);
                 _connection.LoadExtension(vec0Base);
@@ -63,6 +61,31 @@ public class DatabaseService : IDisposable
             // sqlite-vec not available — vector search will be disabled
             // Text-based LIKE search remains functional
         }
+    }
+
+    /// <summary>
+    /// Resolves the vec0 extension path for the current platform.
+    /// Windows: vec0.dll, Linux: vec0.so, macOS: osx-arm64/vec0.dylib or osx-x64/vec0.dylib.
+    /// Returns the base path (without extension) for LoadExtension, or null if not found.
+    /// </summary>
+    private static string? ResolveVec0Path(string ragBinDir)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            var subDir = System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                         System.Runtime.InteropServices.Architecture.Arm64
+                ? "osx-arm64" : "osx-x64";
+            var macPath = Path.Combine(ragBinDir, subDir, "vec0");
+            if (File.Exists(macPath + ".dylib"))
+                return macPath;
+        }
+
+        var basePath = Path.Combine(ragBinDir, "vec0");
+        if (File.Exists(basePath + ".dll") || File.Exists(basePath + ".so") ||
+            File.Exists(basePath + ".dylib") || File.Exists(basePath))
+            return basePath;
+
+        return null;
     }
 
     private void EnsureSchema()

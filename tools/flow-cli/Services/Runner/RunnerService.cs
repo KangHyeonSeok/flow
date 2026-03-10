@@ -5,7 +5,6 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using FlowCLI.Services.TestSync;
 using FlowCLI.Services.SpecGraph;
 
 namespace FlowCLI.Services.Runner;
@@ -22,7 +21,6 @@ public class RunnerService
     private readonly SpecStore _specStore;
     private readonly GitWorktreeService _git;
     private readonly CopilotService _copilot;
-    private readonly AutomatedTestService _automatedTests;
     private readonly RunnerLogService _log;
     private readonly BrokenSpecDiagService _diagService;
     private readonly string _instanceId;
@@ -131,7 +129,6 @@ public class RunnerService
 
         _git = new GitWorktreeService(projectRoot, _flowRoot, _config.WorktreeDir, _config.MainBranch, _log);
         _copilot = new CopilotService(_config, _log);
-        _automatedTests = new AutomatedTestService(_config, _specStore, _log);
 
     }
 
@@ -429,8 +426,7 @@ public class RunnerService
             // 3. Copilot으로 구현 시도
             var specJson = BuildSpecPromptJson(spec);
             var previousReview = BuildPreviousReviewSection(spec);
-            var specFilePath = Path.Combine(_specStore.SpecsDir, $"{spec.Id}.json");
-            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, specFilePath, worktreePath, previousReview);
+            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, worktreePath, previousReview);
 
             if (!copilotResult.Success)
             {
@@ -440,23 +436,6 @@ public class RunnerService
                 var disposition = copilotFailureType ?? "execution-crash";
                 MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, disposition, disposition, "developer", "implementation",
                     GetRetryNotBefore(disposition), disposition);
-                result.Action = "requeue";
-                result.TriggeredReschedule = true;
-                return FinalizeResult(result);
-            }
-
-            // 3.5. 구현 후 자동 테스트 실행 및 condition/tests/evidence 동기화
-            var automatedTestResult = await _automatedTests.RunAndSyncAsync(spec.Id, worktreePath);
-            if (automatedTestResult.Executed)
-            {
-                spec = _specStore.Get(spec.Id) ?? spec;
-            }
-
-            if (automatedTestResult.Executed && !automatedTestResult.Success)
-            {
-                result.Success = false;
-                result.ErrorMessage = automatedTestResult.ErrorMessage ?? "자동 테스트 실패";
-                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "test-failed", "test-failed", "developer", "implementation");
                 result.Action = "requeue";
                 result.TriggeredReschedule = true;
                 return FinalizeResult(result);
@@ -815,7 +794,7 @@ public class RunnerService
 
         AppendActivity(spec,
             role: "developer",
-            summary: $"구현과 자동 테스트 단계를 완료하고 검증 단계로 전달한다.",
+            summary: $"구현 단계를 완료하고 검증 단계로 전달한다.",
             outcome: "handoff",
             kind: "implementation",
             actor: _instanceId,
