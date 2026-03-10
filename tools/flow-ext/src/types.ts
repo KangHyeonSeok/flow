@@ -70,6 +70,27 @@ export interface ChangeLogEntry {
     relatedIds?: string[];
 }
 
+/** 스펙 Activity 상태 전이 */
+export interface SpecActivityStatusChange {
+    from: string;
+    to: string;
+}
+
+/** 스펙 Activity 항목 */
+export interface SpecActivityEntry {
+    type?: string;
+    kind?: string;
+    at?: string;
+    author?: string;
+    actor?: string;
+    role?: string;
+    summary?: string;
+    relatedIds?: string[];
+    statusChange?: SpecActivityStatusChange;
+    outcome?: string;
+    model?: string;
+}
+
 /** 스펙 (Feature/Task) - 그래프의 주 노드 */
 export interface Spec {
     schemaVersion: number;
@@ -97,6 +118,8 @@ export interface Spec {
     mutatedBy?: string[];
     /** F-021: 스펙 변경 이력 */
     changeLog?: ChangeLogEntry[];
+    /** 스펙 활동 이력 */
+    activity?: SpecActivityEntry[];
     /** v4: GitHub 이슈/PR/Discussion 연결 */
     githubRefs?: GitHubRef[];
     /** v4: 관련 문서·참고자료 링크 */

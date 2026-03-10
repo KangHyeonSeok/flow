@@ -9,6 +9,7 @@ import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_COLORS, GitHubRef, DocLink } from './types';
 import { describeReviewDisposition, getConditionManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
 import { saveQuestionAnswer } from './feedbackStore';
+import { renderSpecActivitySection, resolveSpecViewSelection } from './specViewActivity';
 
 export class SpecViewProvider {
     public static currentPanel: SpecViewProvider | undefined;
@@ -88,19 +89,10 @@ export class SpecViewProvider {
         try {
             const graph = await this.loader.getGraph();
             const specs = graph.specs;
-
-            if (this.currentSpecId) {
-                const focusedSpec = specs.find(s => s.id === this.currentSpecId);
-                if (focusedSpec) {
-                    const relatedSpecs = this.getRelatedSpecs(focusedSpec, specs);
-                    this.panel.title = `Spec View: ${focusedSpec.id}`;
-                    this.panel.webview.html = this.getHtml(relatedSpecs, focusedSpec.id);
-                    return;
-                }
-            }
-
-            this.panel.title = 'Spec View: All';
-            this.panel.webview.html = this.getHtml(specs, null);
+            const selection = resolveSpecViewSelection(specs, this.currentSpecId);
+            const focusedId = selection.focusedSpec?.id ?? null;
+            this.panel.title = focusedId ? `Spec View: ${focusedId}` : 'Spec View: All';
+            this.panel.webview.html = this.getHtml(selection.specs, focusedId);
         } catch (e) {
             this.panel.webview.html = this.getErrorHtml(`스펙 로드 실패: ${String(e)}`);
         }
@@ -489,6 +481,53 @@ export class SpecViewProvider {
         }
         .condition-refs a:hover {
             text-decoration: underline;
+        }
+        .activity-list {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .activity-item {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+        }
+        .activity-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .activity-kind {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .activity-time {
+            font-size: 11px;
+            color: var(--fg-secondary);
+        }
+        .activity-summary {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .activity-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .activity-meta-item {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--fg-secondary);
         }
         .review-callout {
             margin: 14px 0 16px;
@@ -1020,6 +1059,8 @@ export class SpecViewProvider {
             </div>`;
         }
 
+        const activityHtml = renderSpecActivitySection(spec);
+
         let feedbackHtml = '';
         if (feedback.openQuestionCount > 0) {
             const lastAnsweredRow = feedback.lastAnsweredAt
@@ -1119,6 +1160,7 @@ export class SpecViewProvider {
             <div class="spec-description">${esc(spec.description)}</div>
             ${feedbackHtml}
             ${reviewHtml}
+            ${activityHtml}
             ${conditionsHtml}
             ${codeRefsHtml}
             ${githubRefsHtml}

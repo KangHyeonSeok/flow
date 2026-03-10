@@ -217,6 +217,9 @@
     "compile": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap && node -e \"require('fs').copyFileSync('node_modules/cytoscape/dist/cytoscape.min.js', 'dist/cytoscape.min.js')\"",
     "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "build": "npm run compile",
+    "compile:test": "tsc -p tsconfig.test.json",
+    "test:typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "npm run compile:test && node --test .test-dist/test/**/*.test.js",
     "package": "vsce package --no-dependencies --allow-missing-repository",
     "lint": "eslint src --ext ts"
   },
