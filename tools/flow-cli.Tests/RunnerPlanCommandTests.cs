@@ -105,5 +105,42 @@ public class RunnerPlanCommandTests : IDisposable
         store.Get("F-005")!.Metadata.Should().BeNullOrEmpty();
     }
 
+    [Fact]
+    public void RunnerPlan_BlocksCooldownSpecsUntilRetryWindowExpires()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+
+        store.Create(new SpecNode
+        {
+            Id = "F-010",
+            Title = "Cooling down",
+            Description = "temporarily blocked by retry window",
+            Status = "queued",
+            NodeType = "feature",
+            Metadata = new Dictionary<string, object>
+            {
+                ["retryNotBefore"] = DateTime.UtcNow.AddMinutes(5).ToString("o"),
+                ["reviewDisposition"] = "rate-limited"
+            }
+        });
+
+        var app = new FlowApp();
+        app.RunnerPlan(pretty: true);
+
+        Environment.ExitCode.Should().Be(0);
+
+        using var json = JsonDocument.Parse(ReadCapturedOutput());
+        var data = json.RootElement.GetProperty("data");
+        data.GetProperty("next_spec_id").ValueKind.Should().Be(JsonValueKind.Null);
+        data.GetProperty("ready_count").GetInt32().Should().Be(0);
+        data.GetProperty("blocked_count").GetInt32().Should().Be(1);
+
+        var blockedSpec = data.GetProperty("blocked_specs")[0];
+        blockedSpec.GetProperty("spec_id").GetString().Should().Be("F-010");
+        blockedSpec.GetProperty("reason").GetString().Should().Be("retry-cooldown");
+        blockedSpec.GetProperty("retry_not_before").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
     private string ReadCapturedOutput() => _capturedOut.ToString().Trim();
 }

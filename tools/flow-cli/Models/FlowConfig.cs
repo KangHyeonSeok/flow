@@ -71,35 +71,17 @@ public class FlowConfig
     [JsonPropertyName("automatedTestTimeoutMinutes")]
     public int AutomatedTestTimeoutMinutes { get; set; } = 10;
 
-    // ── GitHub 이슈 연동 설정 (F-070-C11~C15) ─────────────────────
+    /// <summary>Copilot rate limit 발생 시 재시도 전 대기 시간(초)</summary>
+    [JsonPropertyName("rateLimitCooldownSeconds")]
+    public int RateLimitCooldownSeconds { get; set; } = 300;
 
-    /// <summary>GitHub 이슈 폴링 주기 (분)</summary>
-    [JsonPropertyName("issuePollIntervalMinutes")]
-    public int IssuePollIntervalMinutes { get; set; } = 10;
+    /// <summary>Copilot transport 오류 발생 시 재시도 전 대기 시간(초)</summary>
+    [JsonPropertyName("transportErrorCooldownSeconds")]
+    public int TransportErrorCooldownSeconds { get; set; } = 120;
 
-    /// <summary>GitHub 저장소 (owner/repo 형식).</summary>
-    [JsonPropertyName("githubRepo")]
-    public string? GitHubRepo { get; set; }
-
-    /// <summary>GitHub Personal Access Token (PAT). 환경변수 GITHUB_TOKEN 우선.</summary>
-    [JsonPropertyName("githubToken")]
-    public string? GitHubToken { get; set; }
-
-    /// <summary>스펙 연결 시 이슈에 추가하는 댓글 템플릿</summary>
-    [JsonPropertyName("specLinkCommentTemplate")]
-    public string SpecLinkCommentTemplate { get; set; } = "Linked spec: {specId}";
-
-    /// <summary>스펙 연결 시 이슈에 추가하는 라벨</summary>
-    [JsonPropertyName("specLinkLabel")]
-    public string SpecLinkLabel { get; set; } = "spec-linked";
-
-    /// <summary>자동 생성된 스펙에 추가하는 라벨</summary>
-    [JsonPropertyName("autoCreateSpecLabel")]
-    public string AutoCreateSpecLabel { get; set; } = "spec-auto-created";
-
-    /// <summary>GitHub 이슈 연동 활성화 여부</summary>
-    [JsonPropertyName("githubIssuesEnabled")]
-    public bool GitHubIssuesEnabled { get; set; } = false;
+    /// <summary>비정상 종료/실행 충돌 복구 시 재시도 전 대기 시간(초)</summary>
+    [JsonPropertyName("executionCrashCooldownSeconds")]
+    public int ExecutionCrashCooldownSeconds { get; set; } = 60;
 
     // ── 로깅 설정 ────────────────────────────────────────────────
 

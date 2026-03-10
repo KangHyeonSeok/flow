@@ -247,6 +247,29 @@ public class SpecValidatorTests
                 new SpecActivityEntry
                 {
                     At = DateTime.UtcNow.ToString("o"),
+                    Role = "system",
+                    Summary = "429 감지 후 쿨다운 큐로 이동",
+                    Outcome = "requeue",
+                    Kind = "recovery",
+                    Issues = ["rate-limited"],
+                    StatusChange = new SpecActivityStatusChange
+                    {
+                        From = "working",
+                        To = "queued"
+                    },
+                    ConditionUpdates =
+                    [
+                        new SpecConditionUpdate
+                        {
+                            ConditionId = "F-001-C3",
+                            Status = "draft",
+                            Reason = "rate-limited"
+                        }
+                    ]
+                },
+                new SpecActivityEntry
+                {
+                    At = DateTime.UtcNow.ToString("o"),
                     Role = "tester",
                     Summary = "사용자 수동 테스트 필요",
                     Outcome = "needs-review",

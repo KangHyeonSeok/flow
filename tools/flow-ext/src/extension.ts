@@ -386,21 +386,20 @@ export function activate(context: vscode.ExtensionContext): void {
     // 스펙 push
     context.subscriptions.push(
         vscode.commands.registerCommand('specGraph.pushSpecs', async () => {
-            if (!specLoader) {
-                await requireWorkspace('스펙 push');
+            const root = await requireWorkspace('스펙 push');
+            if (!root || !specLoader) {
                 return;
             }
             output.appendLine('[command] specGraph.pushSpecs');
 
-            const specsDir = specLoader.specsDirectory;
-            const gitRoot = findGitRoot(specsDir);
-            if (!gitRoot) {
-                vscode.window.showErrorMessage(`git 저장소를 찾을 수 없습니다: ${specsDir}`);
+            const flowExe = resolveFlowExecutable(root);
+            if (!flowExe) {
+                vscode.window.showErrorMessage('flow CLI를 찾을 수 없습니다. PATH 또는 flow.executablePath 설정을 확인하세요.');
                 return;
             }
 
-            // 미push 커밋 및 미커밋 변경 확인
-            const pending = await checkPendingPush(gitRoot);
+            const specsGitRoot = findGitRoot(specLoader.specsDirectory);
+            const pending = specsGitRoot ? await checkPendingPush(specsGitRoot) : { unpushed: 0, uncommitted: false };
             const commitMsg = `feat: spec update [${new Date().toISOString().slice(0, 16)} UTC]`;
 
             // 변경 없음 + 미push 커밋 없음
@@ -422,24 +421,14 @@ export function activate(context: vscode.ExtensionContext): void {
             if (confirmed !== 'Push') { return; }
 
             try {
-                if (pending.uncommitted) {
-                    await execGitAsync(['add', '-A'], gitRoot);
-                    // staged diff 확인
-                    const diff = await execGitAsync(['diff', '--cached', '--quiet'], gitRoot).catch(() => null);
-                    if (diff === null) {
-                        // staged 변경 있음 (exit code 1)
-                        await execGitAsyncOrThrow(['commit', '-m', commitMsg], gitRoot);
-                    }
-                }
-
-                await execGitAsyncOrThrow(['push'], gitRoot);
-
-                const hash = await execGitAsync(['rev-parse', '--short', 'HEAD'], gitRoot);
-                output.appendLine(`[push] 완료: ${hash?.trim()} "${commitMsg}"`);
+                const stdout = await execCommandAsync(flowExe, ['spec-push', '-m', commitMsg, '--pretty'], root);
+                output.appendLine(`[push] flow spec-push completed: ${stdout}`);
 
                 await specLoader.reload();
-                await updatePendingPushContext(gitRoot);
-                vscode.window.showInformationMessage(`Spec Graph: push 완료 (${hash?.trim() ?? 'unknown'})`);
+                if (specsGitRoot) {
+                    await updatePendingPushContext(specsGitRoot);
+                }
+                vscode.window.showInformationMessage('Spec Graph: push 완료');
 
             } catch (err) {
                 const msg = String(err);

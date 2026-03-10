@@ -7,7 +7,9 @@ namespace FlowCLI.Services;
 public class PathResolver
 {
     public string ProjectRoot { get; }
+    public string ProjectFolderName { get; }
     public string FlowRoot { get; }
+    public string SharedFlowRoot { get; }
     public string DocsDir { get; }
     public string SettingsPath { get; }
 
@@ -26,7 +28,9 @@ public class PathResolver
             ?? throw new InvalidOperationException(
                 ".flow directory not found. Are you in a Flow project?");
 
+        ProjectFolderName = ResolveProjectFolderName(ProjectRoot);
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
+        SharedFlowRoot = GetSharedProjectFlowRoot(ProjectRoot);
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
         ConfigPath = Path.Combine(FlowRoot, "config.json");
@@ -42,7 +46,9 @@ public class PathResolver
     protected PathResolver(string projectRoot)
     {
         ProjectRoot = projectRoot;
+        ProjectFolderName = ResolveProjectFolderName(ProjectRoot);
         FlowRoot = Path.Combine(ProjectRoot, ".flow");
+        SharedFlowRoot = GetSharedProjectFlowRoot(ProjectRoot);
         DocsDir = Path.Combine(ProjectRoot, "docs", "flow");
         SettingsPath = Path.Combine(FlowRoot, "settings.json");
         ConfigPath = Path.Combine(FlowRoot, "config.json");
@@ -68,6 +74,36 @@ public class PathResolver
     /// </summary>
     public string GetBuildManifestPath(string platform)
         => Path.Combine(GetBuildModulePath(platform), "manifest.json");
+
+    public static string GetSharedProjectFlowRoot(string projectRoot)
+        => Path.Combine(GetUserHomeDirectory(), ".flow", ResolveProjectFolderName(projectRoot));
+
+    private static string ResolveProjectFolderName(string projectRoot)
+    {
+        var current = projectRoot;
+        while (current != null)
+        {
+            if (File.Exists(Path.Combine(current, "flow.ps1")) || File.Exists(Path.Combine(current, "flow.sh")))
+                return Path.GetFileName(current);
+
+            current = Directory.GetParent(current)?.FullName;
+        }
+
+        return Path.GetFileName(Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+    }
+
+    private static string GetUserHomeDirectory()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        throw new InvalidOperationException("Unable to resolve the current user's home directory.");
+    }
 
     private static string? FindProjectRoot()
     {

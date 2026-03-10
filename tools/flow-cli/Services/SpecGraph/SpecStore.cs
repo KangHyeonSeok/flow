@@ -6,7 +6,7 @@ using FlowCLI.Services.Runner;
 namespace FlowCLI.Services.SpecGraph;
 
 /// <summary>
-/// 파일 기반 Spec 저장소. docs/specs/ 하위에 {id}.json 형태로 저장.
+/// 파일 기반 Spec 저장소. ~/.flow/{project}/specs/ 하위에 {id}.json 형태로 저장.
 /// </summary>
 public class SpecStore
 {
@@ -43,7 +43,8 @@ public class SpecStore
 
     public SpecStore(string projectRoot)
     {
-        _specsDir = Path.Combine(projectRoot, "docs", "specs");
+        var sharedFlowRoot = PathResolver.GetSharedProjectFlowRoot(projectRoot);
+        _specsDir = Path.Combine(sharedFlowRoot, "specs");
         _backupDir = Path.Combine(_specsDir, ".backup");
         _evidenceDir = Path.Combine(projectRoot, "docs", "evidence");
         _schemaVersionPath = Path.Combine(_specsDir, ".schema-version");
@@ -51,7 +52,7 @@ public class SpecStore
 
     /// <summary>
     /// 외부 스펙 저장소 경로를 직접 지정하는 생성자.
-    /// ~/.flow/specs/{repo}/ 등 별도 체크아웃 경로 사용 시.
+    /// ~/.flow/{project}/specs/ 등 별도 경로 사용 시.
     /// </summary>
     public SpecStore(string specsDir, bool externalRepo)
     {

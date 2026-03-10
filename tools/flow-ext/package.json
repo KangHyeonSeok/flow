@@ -2,7 +2,7 @@
   "name": "flow-ext",
   "displayName": "Flow",
   "description": "Flow 통합 확장 - 스펙 그래프 시각화, 칸반 보드, Flow Runner 데몬 관리",
-  "version": "0.1.74",
+  "version": "0.1.77",
   "publisher": "flow-team",
   "repository": {
     "type": "git",
@@ -16,9 +16,9 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "workspaceContains:docs/specs/*.json",
-    "workspaceContains:**/docs/specs/*.json",
-    "workspaceContains:.flow/config.json"
+    "workspaceContains:.flow/config.json",
+    "workspaceContains:flow.ps1",
+    "workspaceContains:flow.sh"
   ],
   "main": "./dist/extension.js",
   "contributes": {

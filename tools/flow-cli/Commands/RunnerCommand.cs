@@ -311,15 +311,10 @@ public partial class FlowApp
             MainBranch            = flowConfig.MainBranch,
             AutomatedTestsEnabled = flowConfig.AutomatedTestsEnabled,
             AutomatedTestTimeoutMinutes = flowConfig.AutomatedTestTimeoutMinutes,
+            RateLimitCooldownSeconds = flowConfig.RateLimitCooldownSeconds,
+            TransportErrorCooldownSeconds = flowConfig.TransportErrorCooldownSeconds,
+            ExecutionCrashCooldownSeconds = flowConfig.ExecutionCrashCooldownSeconds,
 
-            // GitHub 이슈 연동 (F-070-C11~C15)
-            IssuePollIntervalMinutes = flowConfig.IssuePollIntervalMinutes,
-            GitHubRepo               = flowConfig.GitHubRepo,
-            GitHubToken              = flowConfig.GitHubToken,
-            SpecLinkCommentTemplate  = flowConfig.SpecLinkCommentTemplate,
-            SpecLinkLabel            = flowConfig.SpecLinkLabel,
-            AutoCreateSpecLabel      = flowConfig.AutoCreateSpecLabel,
-            GitHubIssuesEnabled      = flowConfig.GitHubIssuesEnabled,
         };
     }
 }

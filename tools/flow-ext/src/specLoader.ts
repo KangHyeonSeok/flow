@@ -1,9 +1,10 @@
 /**
- * SpecLoader - docs/specs/*.json 파일을 읽어 그래프 데이터를 구성
+ * SpecLoader - ~/.flow/<project>/specs/*.json 파일을 읽어 그래프 데이터를 구성
  */
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { Spec, Condition, GraphNode, GraphEdge, SpecGraph, SpecStatus, isValidStatus } from './types';
 import { recordBrokenSpec, markSpecResolved, getUnresolvedRecords, BrokenSpecDiagRecord } from './brokenSpecDiag';
 
@@ -38,11 +39,31 @@ export class SpecLoader {
     }
 
     /**
-     * 확장은 항상 워크스페이스의 docs/specs/를 기준으로 스펙을 로드한다.
+     * 확장은 항상 ~/.flow/<project>/specs/를 기준으로 스펙을 로드한다.
      */
     private resolveSpecsDir(workspaceRoot: string): string {
-        const localSpecsDir = path.join(workspaceRoot, 'docs', 'specs');
-        return localSpecsDir;
+        const projectRoot = this.resolveProjectRoot(workspaceRoot);
+        return path.join(os.homedir(), '.flow', path.basename(projectRoot), 'specs');
+    }
+
+    private resolveProjectRoot(workspaceRoot: string): string {
+        let current = workspaceRoot;
+        while (true) {
+            if (fs.existsSync(path.join(current, 'flow.ps1')) || fs.existsSync(path.join(current, 'flow.sh'))) {
+                return current;
+            }
+
+            if (fs.existsSync(path.join(current, '.flow'))) {
+                return current;
+            }
+
+            const parent = path.dirname(current);
+            if (parent === current) {
+                return workspaceRoot;
+            }
+
+            current = parent;
+        }
     }
 
     /** 현재 사용 중인 스펙 디렉토리 경로 */
@@ -167,7 +188,7 @@ export class SpecLoader {
         }
     }
 
-    /** docs/specs/ 하위 JSON 파일 목록 */
+    /** ~/.flow/<project>/specs/ 하위 JSON 파일 목록 */
     private async findSpecFiles(): Promise<string[]> {
         if (!fs.existsSync(this.specsDir)) {
             return [];

@@ -50,34 +50,20 @@ public class RunnerConfig
     /// <summary>자동 테스트 타임아웃 (분)</summary>
     public int AutomatedTestTimeoutMinutes { get; set; } = 10;
 
-    // ── GitHub 이슈 연동 (F-070-C11~C15) ─────────────────
-
-    /// <summary>GitHub 이슈 폴링 주기 (분)</summary>
-    public int IssuePollIntervalMinutes { get; set; } = 10;
-
-    /// <summary>GitHub 저장소 (owner/repo 형식)</summary>
-    public string? GitHubRepo { get; set; }
-
-    /// <summary>GitHub PAT. 환경변수 GITHUB_TOKEN 우선.</summary>
-    public string? GitHubToken { get; set; }
-
-    /// <summary>스펙 연결 댓글 템플릿</summary>
-    public string SpecLinkCommentTemplate { get; set; } = "Linked spec: {specId}";
-
-    /// <summary>스펙 연결 라벨</summary>
-    public string SpecLinkLabel { get; set; } = "spec-linked";
-
-    /// <summary>자동 생성 스펙 라벨</summary>
-    public string AutoCreateSpecLabel { get; set; } = "spec-auto-created";
-
-    /// <summary>GitHub 이슈 연동 활성화</summary>
-    public bool GitHubIssuesEnabled { get; set; } = false;
-
     /// <summary>한 poll 주기 내 최대 즉시 재스케줄 사이클 수 (F-031-C5). busy-wait 방지 상한.</summary>
     public int MaxReschedulesPerPoll { get; set; } = 10;
 
     /// <summary>스펙 자동 구현 최대 연속 실패 횟수. 초과 시 사용자 개입이 필요한 질문을 자동 생성한다. 0이면 비활성화.</summary>
     public int MaxImplementationAttempts { get; set; } = 3;
+
+    /// <summary>Copilot rate limit 발생 시 재시도 전 대기 시간(초)</summary>
+    public int RateLimitCooldownSeconds { get; set; } = 300;
+
+    /// <summary>Copilot transport 오류 발생 시 재시도 전 대기 시간(초)</summary>
+    public int TransportErrorCooldownSeconds { get; set; } = 120;
+
+    /// <summary>비정상 종료/실행 충돌 복구 시 재시도 전 대기 시간(초)</summary>
+    public int ExecutionCrashCooldownSeconds { get; set; } = 60;
 }
 
 public sealed class RunnerQueuePlan
@@ -111,6 +97,7 @@ public sealed class RunnerBlockedSpec
     public string Reason { get; init; } = "";
     public string[] UnmetDependencies { get; init; } = [];
     public int OpenQuestionCount { get; init; }
+    public string? RetryNotBefore { get; init; }
 }
 
 /// <summary>
@@ -254,32 +241,3 @@ public class IssueProcessResult
     public string? ErrorMessage { get; set; }
 }
 
-/// <summary>
-/// GitHub 이슈 간소화 모델
-/// </summary>
-public class GitHubIssueInfo
-{
-    public int Number { get; set; }
-    public string Title { get; set; } = "";
-    public string Body { get; set; } = "";
-    public List<string> Labels { get; set; } = new();
-    public string State { get; set; } = "open";
-    public string CreatedAt { get; set; } = "";
-    public string UpdatedAt { get; set; } = "";
-}
-
-/// <summary>
-/// 이슈 연관도 기반 큐 우선순위 정보 (F-015-C2).
-/// metadata.queuePriority에 저장된다.
-/// </summary>
-public class QueuePriorityInfo
-{
-    /// <summary>정규화된 우선순위 점수 (높을수록 우선 처리)</summary>
-    public double Score { get; set; }
-
-    /// <summary>점수 산출 근거 목록 (각 신호별 기여도 설명)</summary>
-    public List<string> Reasons { get; set; } = new();
-
-    /// <summary>마지막 점수 갱신 시각 (ISO 8601)</summary>
-    public string LastRefreshedAt { get; set; } = "";
-}

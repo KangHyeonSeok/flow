@@ -1,3 +1,4 @@
+using FlowCLI.Services;
 using FlowCLI.Services.SpecGraph;
 using FluentAssertions;
 using System.Text.Json;
@@ -10,12 +11,14 @@ namespace FlowCLI.Tests;
 public class SpecStoreTests : IDisposable
 {
     private readonly string _tempDir;
+    private readonly string _sharedFlowRoot;
     private readonly SpecStore _store;
 
     public SpecStoreTests()
     {
         _tempDir = Path.Combine(Path.GetTempPath(), $"flow-spec-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
+        _sharedFlowRoot = PathResolver.GetSharedProjectFlowRoot(_tempDir);
         _store = new SpecStore(_tempDir);
         _store.Initialize();
     }
@@ -24,12 +27,15 @@ public class SpecStoreTests : IDisposable
     {
         if (Directory.Exists(_tempDir))
             Directory.Delete(_tempDir, true);
+
+        if (Directory.Exists(_sharedFlowRoot))
+            Directory.Delete(_sharedFlowRoot, true);
     }
 
     [Fact]
     public void Initialize_CreatesDirectories()
     {
-        var specsDir = Path.Combine(_tempDir, "docs", "specs");
+        var specsDir = Path.Combine(_sharedFlowRoot, "specs");
         var evidenceDir = Path.Combine(_tempDir, "docs", "evidence");
 
         Directory.Exists(specsDir).Should().BeTrue();
@@ -80,7 +86,7 @@ public class SpecStoreTests : IDisposable
         [Fact]
         public void Get_ObjectStyleCodeRefs_LoadsPathValues()
         {
-                var specPath = Path.Combine(_tempDir, "docs", "specs", "F-080.json");
+            var specPath = Path.Combine(_sharedFlowRoot, "specs", "F-080.json");
                 var json = """
                 {
                     "schemaVersion": 2,

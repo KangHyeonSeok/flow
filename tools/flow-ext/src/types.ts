@@ -1,6 +1,6 @@
 /**
  * Spec Graph 타입 정의
- * docs/specs/ JSON 스키마 v2에 대응
+ * ~/.flow/<project>/specs/ JSON 스키마 v2에 대응
  */
 
 /** 스펙 상태 */

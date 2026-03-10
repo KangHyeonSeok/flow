@@ -24,14 +24,10 @@ public class RunnerService
     private readonly CopilotService _copilot;
     private readonly AutomatedTestService _automatedTests;
     private readonly RunnerLogService _log;
-    private readonly GitHubIssueService? _githubIssue;
     private readonly BrokenSpecDiagService _diagService;
     private readonly string _instanceId;
     private readonly string _pidFilePath;
-    private DateTime _lastIssuePollAt = DateTime.MinValue;
-
     private CancellationTokenSource? _cts;
-    private DateTime _lastIssueSyncAt = DateTime.MinValue;
 
     private static readonly JsonSerializerOptions SpecJsonOpts = new()
     {
@@ -44,6 +40,7 @@ public class RunnerService
     private static readonly HashSet<string> PromptMetaExcludeKeys =
     [
         "runnerInstanceId", "runnerStartedAt", "implementationPlan",
+        "runnerProcessId", "retryNotBefore", "lastErrorType",
         "selectionReason", "lastCompletedAt", "lastCompletedBy",
         "lastReviewAt", "lastReviewBy", "worktreePath", "worktreeBranch",
         "review", "reviewDisposition", "plannerState", "questionStatus",
@@ -124,7 +121,7 @@ public class RunnerService
 
         _log = new RunnerLogService(_flowRoot, _config.LogDir, _instanceId, echoLogsToConsole);
 
-        // 로컬 docs/specs/ 직접 사용
+        // 사용자 홈의 프로젝트별 스펙 디렉터리를 직접 사용
         _specStore = new SpecStore(projectRoot);
         _log.Info("init", $"로컬 스펙 모드: {_specStore.SpecsDir}");
 
@@ -136,20 +133,6 @@ public class RunnerService
         _copilot = new CopilotService(_config, _log);
         _automatedTests = new AutomatedTestService(_config, _specStore, _log);
 
-        // GitHub 이슈 연동 (F-070-C11~C15)
-        if (_config.GitHubIssuesEnabled)
-        {
-            try
-            {
-                _githubIssue = new GitHubIssueService(_config, _specStore, _copilot, _log, _flowRoot);
-                _log.Info("init", "GitHub 이슈 연동 활성화");
-            }
-            catch (Exception ex)
-            {
-                _log.Warn("init", $"GitHub 이슈 연동 초기화 실패: {ex.Message}");
-                _githubIssue = null;
-            }
-        }
     }
 
     public string InstanceId => _instanceId;
@@ -186,15 +169,6 @@ public class RunnerService
         var brokenRepaired = await RepairBrokenSpecsAsync();
         results.AddRange(brokenRepaired);
 
-        // 1.6. F-016: 후보 선택 전 이슈 스냅샷 선반영
-        // - GitHub 연동 활성화 + 폴링 주기 도달: 전체 이슈 처리를 먼저 수행해 같은 사이클 후보에 신규 연결 반영
-        // - GitHub 연동 활성화 + 폴링 주기 미도달: 이전 스냅샷 시각 복원으로 fallback 판단
-        // - GitHub 연동 비활성화: 이전 스냅샷 시각 복원으로 fallback 판단
-        await ProcessGitHubIssuesIfDueAsync();
-
-        // 1.7. F-015-C1: queued 스펙 이슈 연결 동기화 (구현 대상 탐색 전 최신 이슈 정보 반영)
-        await SyncIssueConnectionsForQueueAsync();
-
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
         if (targets.Count == 0)
@@ -216,45 +190,6 @@ public class RunnerService
         _log.Info("cycle", $"=== Runner 사이클 완료: {results.Count(r => r.Success)} 성공 / {results.Count(r => !r.Success)} 실패 ===");
 
         return results;
-    }
-
-    /// <summary>
-    /// GitHub 이슈 폴링 주기가 도래하면 이슈를 처리한다.
-    /// </summary>
-    private async Task ProcessGitHubIssuesIfDueAsync()
-    {
-        if (_githubIssue == null) return;
-
-        var now = DateTime.UtcNow;
-        var elapsed = now - _lastIssuePollAt;
-        if (elapsed.TotalMinutes < _config.IssuePollIntervalMinutes)
-        {
-            // F-016: 폴링 주기 미도달 — 이전 스냅샷의 신뢰 가능 시각 복원으로 fallback 판단
-            var snapshotAt = ReadIssueSnapshotTimestamp();
-            if (snapshotAt.HasValue)
-                _log.Info("github-issues", $"이슈 폴링 주기 미도달 (경과: {elapsed.TotalMinutes:F1}분 / 주기: {_config.IssuePollIntervalMinutes}분), 이전 스냅샷 복원: {snapshotAt.Value:o}");
-            return;
-        }
-
-        try
-        {
-            _log.Info("github-issues", "GitHub 이슈 폴링 시작");
-            var issueResults = await _githubIssue.ProcessIssuesAsync();
-            _lastIssuePollAt = now;
-
-            if (issueResults.Count > 0)
-            {
-                _log.Info("github-issues",
-                    $"GitHub 이슈 처리: {issueResults.Count(r => r.Action == "linked")} 연결, " +
-                    $"{issueResults.Count(r => r.Action == "created")} 생성, " +
-                    $"{issueResults.Count(r => r.Action == "error")} 오류");
-
-            }
-        }
-        catch (Exception ex)
-        {
-            _log.Error("github-issues", $"GitHub 이슈 폴링 오류: {ex.Message}");
-        }
     }
 
     /// <summary>
@@ -484,7 +419,8 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "Worktree 생성 실패";
-                MarkSpecQueuedForRetry(spec, result.ErrorMessage, null, null, "execution-crash", "execution-crash", "developer", "implementation");
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, null, null, "execution-crash", "execution-crash", "developer", "implementation",
+                    GetRetryNotBefore("execution-crash"), "execution-crash");
                 result.Action = "requeue";
                 result.TriggeredReschedule = true;
                 return FinalizeResult(result);
@@ -493,13 +429,17 @@ public class RunnerService
             // 3. Copilot으로 구현 시도
             var specJson = BuildSpecPromptJson(spec);
             var previousReview = BuildPreviousReviewSection(spec);
-            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, worktreePath, previousReview);
+            var specFilePath = Path.Combine(_specStore.SpecsDir, $"{spec.Id}.json");
+            var copilotResult = await _copilot.ImplementSpecAsync(spec.Id, specJson, specFilePath, worktreePath, previousReview);
 
             if (!copilotResult.Success)
             {
                 result.Success = false;
                 result.ErrorMessage = copilotResult.ErrorMessage ?? "Copilot 구현 실패";
-                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                var copilotFailureType = ResolveCopilotFailureType(copilotResult);
+                var disposition = copilotFailureType ?? "execution-crash";
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, disposition, disposition, "developer", "implementation",
+                    GetRetryNotBefore(disposition), disposition);
                 result.Action = "requeue";
                 result.TriggeredReschedule = true;
                 return FinalizeResult(result);
@@ -565,7 +505,8 @@ public class RunnerService
                     await _git.AbortMergeAsync();
                     result.Success = false;
                     result.ErrorMessage = "머지 충돌 해결 실패";
-                    MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                    MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation",
+                        GetRetryNotBefore("execution-crash"), "execution-crash");
                     result.Action = "requeue";
                     result.TriggeredReschedule = true;
                     return FinalizeResult(result);
@@ -575,7 +516,8 @@ public class RunnerService
             {
                 result.Success = false;
                 result.ErrorMessage = "머지 실패";
-                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation");
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "execution-crash", "execution-crash", "developer", "implementation",
+                    GetRetryNotBefore("execution-crash"), "execution-crash");
                 result.Action = "requeue";
                 result.TriggeredReschedule = true;
                 return FinalizeResult(result);
@@ -619,7 +561,9 @@ public class RunnerService
                 "execution-crash",
                 "execution-crash",
                 "developer",
-                "implementation");
+                "implementation",
+                GetRetryNotBefore("execution-crash"),
+                "execution-crash");
             result.Action = "requeue";
             result.TriggeredReschedule = true;
 
@@ -663,6 +607,22 @@ public class RunnerService
             var unmetDependencies = spec.Dependencies
                 .Where(dep => allSpecIds.Contains(dep) && !completedIds.Contains(dep))
                 .ToArray();
+            var retryNotBefore = spec.Metadata == null ? null : GetMetadataIsoDate(spec.Metadata, "retryNotBefore");
+
+            if (retryNotBefore.HasValue && retryNotBefore.Value > DateTime.UtcNow)
+            {
+                blocked.Add(new RunnerBlockedSpec
+                {
+                    SpecId = spec.Id,
+                    Title = spec.Title,
+                    Status = spec.Status,
+                    Reason = "retry-cooldown",
+                    UnmetDependencies = unmetDependencies,
+                    OpenQuestionCount = openQuestionCount,
+                    RetryNotBefore = retryNotBefore.Value.ToString("o")
+                });
+                continue;
+            }
 
             if (openQuestionCount > 0)
             {
@@ -673,7 +633,8 @@ public class RunnerService
                     Status = spec.Status,
                     Reason = unmetDependencies.Length > 0 ? "open-questions-and-unmet-dependencies" : "open-questions",
                     UnmetDependencies = unmetDependencies,
-                    OpenQuestionCount = openQuestionCount
+                    OpenQuestionCount = openQuestionCount,
+                    RetryNotBefore = retryNotBefore?.ToString("o")
                 });
                 continue;
             }
@@ -687,7 +648,8 @@ public class RunnerService
                     Status = spec.Status,
                     Reason = "unmet-dependencies",
                     UnmetDependencies = unmetDependencies,
-                    OpenQuestionCount = 0
+                    OpenQuestionCount = 0,
+                    RetryNotBefore = retryNotBefore?.ToString("o")
                 });
                 continue;
             }
@@ -731,60 +693,6 @@ public class RunnerService
             ReadySpecs = sortedReady,
             BlockedSpecs = blocked
         };
-    }
-
-    // ── F-015: 이슈 기반 큐 재정렬 헬퍼 ───────────────────────
-
-    /// <summary>
-    /// F-015-C1: queued 스펙에 대한 이슈 연결 상태를 동기화한다.
-    /// F-016: GitHub 연동 비활성화 시 이전 스냅샷 시각을 복원해 fallback 판단 근거를 제공한다.
-    /// </summary>
-    private async Task SyncIssueConnectionsForQueueAsync()
-    {
-        if (_githubIssue == null)
-        {
-            // F-016: GitHub 연동 비활성 — 이전 스냅샷의 신뢰 가능 시각 복원으로 fallback 판단
-            var snapshotAt = ReadIssueSnapshotTimestamp();
-            if (snapshotAt.HasValue)
-                _log.Info("queue-priority", $"GitHub 연동 비활성, 이전 이슈 스냅샷 복원: {snapshotAt.Value:o} (fallback)");
-            return;
-        }
-
-        var queuedSpecs = _specStore.GetAll()
-            .Where(s => _config.TargetStatuses.Contains(s.Status))
-            .ToList();
-
-        if (queuedSpecs.Count == 0) return;
-
-        try
-        {
-            await _githubIssue.SyncQueuedSpecIssueConnectionsAsync(queuedSpecs);
-            _lastIssueSyncAt = DateTime.UtcNow;
-        }
-        catch (Exception ex)
-        {
-            _log.Warn("queue-priority", $"이슈 연결 동기화 실패 (큐 정렬은 기존 fallback으로 진행): {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// F-016: 이슈 체크 상태 파일에서 마지막 스냅샷 시각을 읽는다.
-    /// GitHub 연동 비활성화 또는 폴링 주기 미도달 시 fallback 판단에 사용.
-    /// </summary>
-    private DateTime? ReadIssueSnapshotTimestamp()
-    {
-        var stateFilePath = Path.Combine(_flowRoot, "issue-check-state.json");
-        try
-        {
-            if (!File.Exists(stateFilePath)) return null;
-            var json = File.ReadAllText(stateFilePath);
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("lastCheckedAt", out var prop) &&
-                DateTime.TryParse(prop.GetString(), out var dt))
-                return dt;
-        }
-        catch { }
-        return null;
     }
 
     /// <summary>
@@ -860,7 +768,10 @@ public class RunnerService
         spec.Status = "working";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["runnerInstanceId"] = _instanceId;
+        spec.Metadata["runnerProcessId"] = Environment.ProcessId;
         spec.Metadata["runnerStartedAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata.Remove("retryNotBefore");
+        spec.Metadata.Remove("lastErrorType");
         spec.Metadata["implementationPlan"] = new
         {
             triggeredFrom = prevStatus,
@@ -890,6 +801,8 @@ public class RunnerService
         spec.Metadata["lastCompletedBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+        spec.Metadata.Remove("lastErrorType");
+        spec.Metadata.Remove("retryNotBefore");
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
@@ -923,14 +836,18 @@ public class RunnerService
         string reviewDisposition = "test-failed",
         string? reviewReason = "test-failed",
         string activityRole = "system",
-        string activityKind = "recovery")
+        string activityKind = "recovery",
+        DateTime? retryNotBefore = null,
+        string? errorType = null)
     {
         var prevStatus = spec.Status;
         spec.Status = "queued";
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastError"] = error;
         spec.Metadata["lastErrorAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata["lastErrorType"] = string.IsNullOrWhiteSpace(errorType) ? reviewDisposition : errorType;
         spec.Metadata["runnerInstanceId"] = _instanceId;
+        spec.Metadata.Remove("runnerProcessId");
         spec.Metadata["reviewDisposition"] = reviewDisposition;
         if (!string.IsNullOrWhiteSpace(reviewReason))
         {
@@ -944,6 +861,16 @@ public class RunnerService
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
         spec.Metadata.Remove("questionStatus");
+        spec.Metadata.Remove("implementationPlan");
+
+        if (retryNotBefore.HasValue)
+        {
+            spec.Metadata["retryNotBefore"] = retryNotBefore.Value.ToString("o");
+        }
+        else
+        {
+            spec.Metadata.Remove("retryNotBefore");
+        }
 
         var attempts = GetMetadataInt(spec.Metadata, "implementationAttempts") + 1;
         spec.Metadata["implementationAttempts"] = attempts;
@@ -969,7 +896,10 @@ public class RunnerService
             conditionUpdates: conditionUpdates);
 
         _specStore.Update(spec);
-        _log.Warn("status", $"스펙 상태 변경: {prevStatus} → queued ({reviewDisposition}: {error})", spec.Id);
+        var cooldownSuffix = retryNotBefore.HasValue
+            ? $", retryNotBefore={retryNotBefore.Value:o}"
+            : string.Empty;
+        _log.Warn("status", $"스펙 상태 변경: {prevStatus} → queued ({reviewDisposition}: {error}{cooldownSuffix})", spec.Id);
     }
 
     private async Task MarkSpecNeedsReviewAsync(SpecNode spec, string summary, string? worktreePath, string? worktreeBranch)
@@ -980,6 +910,8 @@ public class RunnerService
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
+        spec.Metadata.Remove("lastErrorType");
+        spec.Metadata.Remove("retryNotBefore");
 
         if (worktreePath != null)
         {
@@ -1016,6 +948,8 @@ public class RunnerService
         spec.Metadata["verificationSource"] = verificationSource;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+        spec.Metadata.Remove("lastErrorType");
+        spec.Metadata.Remove("retryNotBefore");
         spec.Metadata.Remove("worktreePath");
         spec.Metadata.Remove("worktreeBranch");
         spec.Metadata.Remove("reviewReason");
@@ -1040,8 +974,10 @@ public class RunnerService
         spec.Metadata["lastDoneBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
+        spec.Metadata.Remove("lastErrorType");
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
+        spec.Metadata.Remove("retryNotBefore");
         spec.Metadata.Remove("questionStatus");
         spec.Metadata.Remove("requiresUserInput");
         spec.Metadata.Remove("worktreePath");
@@ -1091,7 +1027,10 @@ public class RunnerService
         {
             result.Success = false;
             result.ErrorMessage = reviewResult.ErrorMessage ?? "검토 분석 실패";
-            MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, "missing-evidence", "missing-evidence", "system", "validation");
+            var reviewFailureType = ResolveCopilotFailureType(reviewResult);
+            var disposition = reviewFailureType ?? "missing-evidence";
+            MarkSpecQueuedForRetry(spec, result.ErrorMessage, worktreePath, branchName, disposition, disposition, "system", "validation",
+                GetRetryNotBefore(disposition), disposition);
             return null;
         }
 
@@ -1441,6 +1380,7 @@ public class RunnerService
         sb.AppendLine("- JSON 구문 오류만 수정 (콘텐츠 변경 금지)");
         sb.AppendLine("- 최근 백업이 있으면 백업을 기준으로 복구");
         sb.AppendLine("- 복구 불가한 경우 유효한 최소 스펙 JSON 구조로 대체");
+        sb.AppendLine($"- 추가 컨텍스트가 필요하면 상위 경로에서 flow.ps1를 찾아 `flow.ps1 spec-get {record.SpecId}`로 최신 스펙을 다시 조회하되, 현재 파일이 손상되어 명령이 실패할 수 있음을 감안할 것");
         sb.AppendLine();
 
         if (damagedContent != null)
@@ -1480,9 +1420,21 @@ public class RunnerService
             var prevInstanceId = spec.Metadata?.ContainsKey("runnerInstanceId") == true
                 ? spec.Metadata["runnerInstanceId"]?.ToString()
                 : "unknown";
+            var prevProcessId = spec.Metadata == null ? 0 : GetMetadataInt(spec.Metadata, "runnerProcessId");
+
+            if (prevProcessId == Environment.ProcessId && prevInstanceId == _instanceId)
+            {
+                continue;
+            }
+
+            if (prevProcessId > 0 && IsProcessRunning(prevProcessId))
+            {
+                _log.Info("recovery", $"working 스펙 유지: {spec.Id} (이전 runner PID {prevProcessId}가 아직 실행 중)", spec.Id);
+                continue;
+            }
 
             // 현재 인스턴스가 아닌 이전 인스턴스의 작업만 복구
-            if (prevInstanceId != _instanceId)
+            if (prevInstanceId != _instanceId || prevProcessId != Environment.ProcessId)
             {
                 // worktree가 존재하면 경로를 메타데이터에 보존 (검토 에이전트가 확인 가능)
                 var crashWorktreePath = _git.GetWorktreePath(spec.Id);
@@ -1493,7 +1445,9 @@ public class RunnerService
                     "execution-crash",
                     "execution-crash",
                     "system",
-                    "recovery");
+                    "recovery",
+                    GetRetryNotBefore("execution-crash"),
+                    "execution-crash");
                 recovered++;
             }
         }
@@ -1518,10 +1472,50 @@ public class RunnerService
             "user-test-required" => ["user-test-required"],
             "open-question" => ["user-input-required"],
             "execution-crash" => ["execution-crash"],
+            "rate-limited" => ["rate-limited"],
+            "transport-error" => ["transport-error"],
             "review-verified" => [],
             "review-done" => [],
             _ => ["missing-evidence"]
         };
+
+    private DateTime? GetRetryNotBefore(string disposition)
+    {
+        var cooldownSeconds = disposition switch
+        {
+            "rate-limited" => _config.RateLimitCooldownSeconds,
+            "transport-error" => _config.TransportErrorCooldownSeconds,
+            "execution-crash" => _config.ExecutionCrashCooldownSeconds,
+            _ => 0
+        };
+
+        return cooldownSeconds > 0
+            ? DateTime.UtcNow.AddSeconds(cooldownSeconds)
+            : null;
+    }
+
+    private static string? ResolveCopilotFailureType(CopilotResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.FailureCategory))
+        {
+            return result.FailureCategory;
+        }
+
+        return result.TimedOut ? "transport-error" : null;
+    }
+
+    private static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private static List<SpecConditionUpdate> ResetConditionsForRequeue(SpecNode spec)
     {

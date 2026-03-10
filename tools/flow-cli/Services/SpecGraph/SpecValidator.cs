@@ -37,12 +37,14 @@ public class SpecValidator
     private static readonly HashSet<string> ValidActivityIssues = new()
     {
         "spec-misaligned-test", "trivial-test", "non-deterministic-test", "incorrect-result-interpretation",
-        "missing-evidence", "execution-crash", "test-failed", "user-input-required", "user-test-required"
+        "missing-evidence", "execution-crash", "test-failed", "user-input-required", "user-test-required",
+        "rate-limited", "transport-error"
     };
     private static readonly HashSet<string> ValidConditionUpdateReasons = new()
     {
         "automated-tests-passed", "manual-tests-passed", "test-failed", "user-input-required",
-        "user-test-required", "missing-evidence", "execution-crash", "reset-for-requeue"
+        "user-test-required", "missing-evidence", "execution-crash", "reset-for-requeue",
+        "rate-limited", "transport-error"
     };
 
     /// <summary>

@@ -118,6 +118,52 @@ public class RunnerEndToEndSmokeTests : IDisposable
         result.ObservedStatuses.Should().NotContain("verified");
     }
 
+    [Fact]
+    public async Task RunDaemon_WithFakeCopilot_ClassifiesRateLimitAndSchedulesCooldown()
+    {
+        const string specId = "F-903";
+        var startedAt = DateTime.UtcNow;
+        var result = await RunScenarioAsync(
+            specId,
+            "rate-limited",
+            spec => string.Equals(spec?.Status, "queued", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(GetMetadataString(spec, "reviewDisposition"), "rate-limited", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(GetMetadataString(spec, "retryNotBefore")));
+
+        var spec = result.Spec;
+        spec.Status.Should().Be("queued");
+        spec.Metadata!["reviewDisposition"].ToString().Should().Be("rate-limited");
+        spec.Metadata["reviewReason"].ToString().Should().Be("rate-limited");
+        spec.Metadata["lastErrorType"].ToString().Should().Be("rate-limited");
+        DateTime.Parse(spec.Metadata["retryNotBefore"].ToString()!).Should().BeAfter(startedAt);
+
+        result.ObservedStatuses.Should().Contain("working");
+        result.ObservedStatuses.Should().Contain("queued");
+    }
+
+    [Fact]
+    public async Task RunDaemon_WithFakeCopilot_ClassifiesTransportErrorAndSchedulesCooldown()
+    {
+        const string specId = "F-904";
+        var startedAt = DateTime.UtcNow;
+        var result = await RunScenarioAsync(
+            specId,
+            "transport-error",
+            spec => string.Equals(spec?.Status, "queued", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(GetMetadataString(spec, "reviewDisposition"), "transport-error", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(GetMetadataString(spec, "retryNotBefore")));
+
+        var spec = result.Spec;
+        spec.Status.Should().Be("queued");
+        spec.Metadata!["reviewDisposition"].ToString().Should().Be("transport-error");
+        spec.Metadata["reviewReason"].ToString().Should().Be("transport-error");
+        spec.Metadata["lastErrorType"].ToString().Should().Be("transport-error");
+        DateTime.Parse(spec.Metadata["retryNotBefore"].ToString()!).Should().BeAfter(startedAt);
+
+        result.ObservedStatuses.Should().Contain("working");
+        result.ObservedStatuses.Should().Contain("queued");
+    }
+
     private async Task<ScenarioResult> RunScenarioAsync(string specId, string scenario, Func<SpecNode?, bool> completionPredicate)
     {
         await InitializeGitRepoAsync(_tempDir);
@@ -282,7 +328,40 @@ param(
 
 $cwd = (Get-Location).Path
 
+function Find-ScenarioPath([string]$startDir) {
+    $cursor = $startDir
+    while (-not [string]::IsNullOrWhiteSpace($cursor)) {
+        $candidate = Join-Path $cursor 'runner-scenario.txt'
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+
+        $parent = Split-Path $cursor -Parent
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent -eq $cursor) {
+            break
+        }
+
+        $cursor = $parent
+    }
+
+    return $null
+}
+
+$scenarioPath = Find-ScenarioPath $cwd
+$scenario = if ($scenarioPath) { (Get-Content $scenarioPath -Raw).Trim() } else { 'verified' }
+
 if ($cwd -like '*.flow\worktrees\*') {
+    switch ($scenario) {
+        'rate-limited' {
+            Write-Error '429 Too Many Requests: retry after 60 seconds'
+            exit 1
+        }
+        'transport-error' {
+            Write-Error 'ECONNRESET: connection reset by peer'
+            exit 1
+        }
+    }
+
     Start-Sleep -Milliseconds 1200
     Add-Content -Path (Join-Path $cwd 'README.md') -Value 'implemented by fake copilot'
     Write-Output 'implemented'
@@ -290,9 +369,6 @@ if ($cwd -like '*.flow\worktrees\*') {
 }
 
 Start-Sleep -Milliseconds 400
-
-$scenarioPath = Join-Path $cwd 'runner-scenario.txt'
-$scenario = if (Test-Path $scenarioPath) { (Get-Content $scenarioPath -Raw).Trim() } else { 'verified' }
 
 $specPath = Get-ChildItem -Path (Join-Path $cwd 'docs\\specs') -Filter '*.json' |
     Sort-Object Name |
