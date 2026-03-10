@@ -2128,11 +2128,25 @@ public class RunnerService
             .ToList();
 
         analysis.AdditionalInformationRequests = analysis.AdditionalInformationRequests
+            .Where(request => !string.IsNullOrWhiteSpace(request))
+            .Select(request => request.Trim())
             .Where(request => !LooksLikeInternalExecutionArtifactRequest(request))
+            .ToList();
+
+        var developerFollowUps = analysis.Questions
+            .Where(question => !LooksLikeInternalExecutionArtifactRequest(question.Question, question.Why))
+            .Where(question => !IsUserDecisionQuestion(question))
+            .Select(FormatDeveloperFollowUp)
+            .Where(request => !string.IsNullOrWhiteSpace(request));
+
+        analysis.AdditionalInformationRequests = analysis.AdditionalInformationRequests
+            .Concat(developerFollowUps)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         analysis.Questions = analysis.Questions
             .Where(question => !LooksLikeInternalExecutionArtifactRequest(question.Question, question.Why))
+            .Where(IsUserDecisionQuestion)
             .ToList();
 
         if (analysis.RequiresUserInput
@@ -2219,6 +2233,24 @@ public class RunnerService
             || combined.Contains("커밋 해시", StringComparison.Ordinal);
     }
 
+    private static bool IsUserDecisionQuestion(SpecReviewQuestion question)
+        => string.Equals(question.Type?.Trim(), "user-decision", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatDeveloperFollowUp(SpecReviewQuestion question)
+    {
+        var prompt = question.Question?.Trim();
+        var why = question.Why?.Trim();
+
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return string.Empty;
+        }
+
+        return string.IsNullOrWhiteSpace(why)
+            ? prompt
+            : $"{prompt} (reason: {why})";
+    }
+
     private static List<SpecReviewQuestion> BuildReviewQuestions(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, string reviewedAt)
     {
         var merged = ReadExistingQuestions(spec);
@@ -2245,25 +2277,6 @@ public class RunnerService
             };
 
             UpsertReviewQuestion(merged, candidate);
-        }
-
-        foreach (var request in analysis.AdditionalInformationRequests)
-        {
-            if (string.IsNullOrWhiteSpace(request))
-            {
-                continue;
-            }
-
-            UpsertReviewQuestion(merged, new SpecReviewQuestion
-            {
-                Id = $"{spec.Id}-Q{nextIndex++}",
-                Type = "missing-info",
-                Question = request,
-                Why = "추가 정보 없이는 다음 구현 시도를 확정하기 어렵습니다.",
-                Status = "open",
-                RequestedAt = reviewedAt,
-                RequestedBy = reviewerId
-            });
         }
 
         return merged;
@@ -2484,6 +2497,30 @@ public class RunnerService
         {
             sb.AppendLine("권장 접근 방법:");
             foreach (var a in suggestedAttempts) sb.AppendLine($"  - {a}");
+        }
+
+        if (reviewObj is JsonElement reviewElement && reviewElement.ValueKind == JsonValueKind.Object)
+        {
+            var developerFollowUps = GetStringArray(reviewElement, "additionalInformationRequests");
+            if (developerFollowUps.Count > 0)
+            {
+                sb.AppendLine("개발자 선행 확인 항목:");
+                foreach (var item in developerFollowUps) sb.AppendLine($"  - {item}");
+            }
+        }
+        else if (reviewObj is System.Text.Json.Nodes.JsonObject reviewNodeWithRequests)
+        {
+            var developerFollowUps = reviewNodeWithRequests["additionalInformationRequests"]?.AsArray()
+                .Select(node => node?.GetValue<string>())
+                .OfType<string>()
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToList();
+
+            if (developerFollowUps is { Count: > 0 })
+            {
+                sb.AppendLine("개발자 선행 확인 항목:");
+                foreach (var item in developerFollowUps) sb.AppendLine($"  - {item}");
+            }
         }
 
         // 답변된 질문 포함

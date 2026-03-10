@@ -35,6 +35,8 @@ public class CopilotServiceTests
         prompt.Should().Contain("spec-append-review F-304");
         prompt.Should().Contain("스펙 JSON 파일을 직접 수정하지 마세요");
         prompt.Should().Contain("verifiedConditionIds");
+        prompt.Should().Contain("사용자 결정이 필요한 항목만 `questions`에 넣으세요");
+        prompt.Should().Contain("구현 전에 개발자가 확인하거나 재현할 수 있는 항목은 `additionalInformationRequests`에 넣으세요");
     }
 
     [Fact]

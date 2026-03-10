@@ -299,8 +299,9 @@ condition 판정:
 - `verifiedConditionIds`의 condition은 코드 수정 없이 verified 처리됩니다
 
 질문 생성:
-- 사용자만 답할 수 있는 정보(제품 요구사항, 정책, 도메인 지식)에 한정합니다
-- 내부 디버깅 정보는 요청하지 말고 failureReasons/suggestedAttempts에 남기세요
+- 사용자 결정이 필요한 항목만 `questions`에 넣으세요
+- 구현 전에 개발자가 확인하거나 재현할 수 있는 항목은 `additionalInformationRequests`에 넣으세요
+- 내부 디버깅 정보는 사용자 질문으로 만들지 말고 failureReasons/suggestedAttempts 또는 additionalInformationRequests에 남기세요
 
 review JSON 스키마:
 {{
@@ -310,10 +311,10 @@ review JSON 스키마:
     ""suggestedAttempts"": [""다음 시도 액션""],
     ""verifiedConditionIds"": [""충족 확인된 condition ID""],
     ""requiresUserInput"": true,
-    ""additionalInformationRequests"": [""추가로 필요한 정보""],
+    ""additionalInformationRequests"": [""구현 전에 개발자가 확인할 항목""],
     ""questions"": [
         {{
-            ""type"": ""user-decision|missing-info|clarification"",
+            ""type"": ""user-decision"",
             ""question"": ""사용자에게 물을 질문"",
             ""why"": ""왜 필요한지""
         }}

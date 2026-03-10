@@ -104,6 +104,42 @@ public class RunnerReviewWorkflowTests
                 analysis.Questions.Should().BeEmpty();
         }
 
+        [Fact]
+        public void ParseReviewAnalysis_ConvertsNonUserQuestionsToDeveloperFollowUps()
+        {
+                const string output = """
+                {
+                    "summary": "구현 전에 재현 정보 확인이 필요합니다.",
+                    "failureReasons": ["추가 확인 없이는 수정 범위를 줄이기 어렵습니다."],
+                    "alternatives": [],
+                    "suggestedAttempts": ["재현 조건을 먼저 확인합니다."],
+                    "requiresUserInput": true,
+                    "additionalInformationRequests": ["최근 실패 재현 경로를 확인합니다."],
+                    "questions": [
+                        {
+                            "type": "missing-info",
+                            "question": "어떤 입력 조합에서 실패가 재현되는지 확인해 주세요.",
+                            "why": "구현 전에 재현 경로를 확인해야 합니다."
+                        },
+                        {
+                            "type": "user-decision",
+                            "question": "기본 동작을 유지할까요, 새 정책으로 바꿀까요?",
+                            "why": "정책 결정이 필요합니다."
+                        }
+                    ]
+                }
+                """;
+
+                var parsed = RunnerService.TryParseReviewAnalysis(output, out var analysis);
+
+                parsed.Should().BeTrue();
+                analysis.RequiresUserInput.Should().BeTrue();
+                analysis.Questions.Should().ContainSingle();
+                analysis.Questions[0].Type.Should().Be("user-decision");
+                analysis.AdditionalInformationRequests.Should().Contain("최근 실패 재현 경로를 확인합니다.");
+                analysis.AdditionalInformationRequests.Should().Contain("어떤 입력 조합에서 실패가 재현되는지 확인해 주세요. (reason: 구현 전에 재현 경로를 확인해야 합니다.)");
+        }
+
     [Fact]
     public void ApplyReviewAnalysis_WhenQuestionsExist_RequeuesAndTracksOpenQuestions()
     {
@@ -176,6 +212,35 @@ public class RunnerReviewWorkflowTests
         spec.Metadata["reviewReason"].Should().Be("missing-evidence");
         spec.Activity.Should().ContainSingle();
         spec.Activity[0].Outcome.Should().Be("requeue");
+    }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WithDeveloperFollowUps_DoesNotWaitForUserInput()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-209",
+            NodeType = "feature",
+            Status = "needs-review",
+            Metadata = new Dictionary<string, object>()
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "구현 전에 재현 경로 확인이 필요합니다.",
+            FailureReasons = ["재현 조건을 보면 원인 축소가 가능합니다."],
+            SuggestedAttempts = ["실패 경로 확인 후 구현합니다."],
+            RequiresUserInput = false,
+            AdditionalInformationRequests = ["최근 실패 재현 경로를 확인합니다."]
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-08T00:00:00Z"));
+
+        spec.Status.Should().Be("queued");
+        spec.Metadata.Should().NotContainKey("questionStatus");
+        spec.Metadata["plannerState"].Should().Be("standby");
+        var review = (Dictionary<string, object>)spec.Metadata["review"];
+        ((List<string>)review["additionalInformationRequests"]).Should().ContainSingle()
+            .Which.Should().Be("최근 실패 재현 경로를 확인합니다.");
     }
 
     [Fact]

@@ -91,7 +91,6 @@ public class PathResolver
 
         return Path.GetFileName(Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
     }
-
     private static string GetUserHomeDirectory()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
