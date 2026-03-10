@@ -1955,6 +1955,8 @@ public class RunnerService
                 ["question"] = question.Question,
                 ["why"] = question.Why,
                 ["status"] = question.Status,
+                ["answer"] = question.Answer ?? string.Empty,
+                ["answeredAt"] = question.AnsweredAt ?? string.Empty,
                 ["requestedAt"] = question.RequestedAt ?? reviewedAt,
                 ["requestedBy"] = question.RequestedBy ?? reviewerId
             })
@@ -1987,7 +1989,7 @@ public class RunnerService
             summary: activitySummary,
             outcome: activityOutcome,
             kind: "verification",
-            comment: BuildReviewActivityComment(analysis),
+            comment: BuildReviewActivityComment(analysis, questions, GetMetadataString(spec.Metadata, "lastAnsweredAt")),
             actor: reviewerId,
             model: "gpt-5-mini",
             statusFrom: previousStatus,
@@ -2040,7 +2042,10 @@ public class RunnerService
         return updates;
     }
 
-    private static string? BuildReviewActivityComment(SpecReviewAnalysis analysis)
+    private static string? BuildReviewActivityComment(
+        SpecReviewAnalysis analysis,
+        IReadOnlyCollection<SpecReviewQuestion> questions,
+        string? lastAnsweredAt)
     {
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(analysis.Summary))
@@ -2053,6 +2058,23 @@ public class RunnerService
             lines.Add(reason.Trim());
         }
 
+        var answeredQuestions = questions
+            .Where(question =>
+                !string.Equals(question.Status, "open", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(question.Answer))
+            .Select(question => $"{question.Question.Trim()} => {question.Answer!.Trim()}")
+            .ToList();
+
+        if (answeredQuestions.Count > 0)
+        {
+            lines.Add($"answered: {string.Join(" | ", answeredQuestions)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(lastAnsweredAt))
+        {
+            lines.Add($"lastAnsweredAt={lastAnsweredAt}");
+        }
+
         return lines.Count == 0 ? null : string.Join(" ", lines);
     }
 
@@ -2063,6 +2085,7 @@ public class RunnerService
 
         // needs-review handoff, verified/done final 상태 모두 review 결과 반영으로 간주한다.
         var hasValidStatus = string.Equals(spec.Status, "needs-review", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(spec.Status, "queued", StringComparison.OrdinalIgnoreCase)
             || string.Equals(spec.Status, "verified", StringComparison.OrdinalIgnoreCase)
             || string.Equals(spec.Status, "done", StringComparison.OrdinalIgnoreCase)
             || HasOpenQuestions(spec);
@@ -2198,9 +2221,7 @@ public class RunnerService
 
     private static List<SpecReviewQuestion> BuildReviewQuestions(SpecNode spec, SpecReviewAnalysis analysis, string reviewerId, string reviewedAt)
     {
-        var merged = ReadExistingQuestions(spec)
-            .Where(question => !string.Equals(question.Status, "open", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var merged = ReadExistingQuestions(spec);
 
         var nextIndex = merged.Count + 1;
         foreach (var question in analysis.Questions)
@@ -2210,16 +2231,20 @@ public class RunnerService
                 continue;
             }
 
-            merged.Add(new SpecReviewQuestion
+            var candidate = new SpecReviewQuestion
             {
                 Id = string.IsNullOrWhiteSpace(question.Id) ? $"{spec.Id}-Q{nextIndex++}" : question.Id,
                 Type = string.IsNullOrWhiteSpace(question.Type) ? "clarification" : question.Type,
                 Question = question.Question,
                 Why = question.Why,
                 Status = string.IsNullOrWhiteSpace(question.Status) ? "open" : question.Status,
+                Answer = question.Answer,
+                AnsweredAt = question.AnsweredAt,
                 RequestedAt = question.RequestedAt ?? reviewedAt,
                 RequestedBy = question.RequestedBy ?? reviewerId
-            });
+            };
+
+            UpsertReviewQuestion(merged, candidate);
         }
 
         foreach (var request in analysis.AdditionalInformationRequests)
@@ -2229,7 +2254,7 @@ public class RunnerService
                 continue;
             }
 
-            merged.Add(new SpecReviewQuestion
+            UpsertReviewQuestion(merged, new SpecReviewQuestion
             {
                 Id = $"{spec.Id}-Q{nextIndex++}",
                 Type = "missing-info",
@@ -2243,6 +2268,52 @@ public class RunnerService
 
         return merged;
     }
+
+    private static void UpsertReviewQuestion(List<SpecReviewQuestion> questions, SpecReviewQuestion incoming)
+    {
+        var index = questions.FindIndex(existing => QuestionMatches(existing, incoming));
+        if (index < 0)
+        {
+            questions.Add(incoming);
+            return;
+        }
+
+        var existing = questions[index];
+        questions[index] = string.Equals(existing.Status, "open", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(incoming.Status, "open", StringComparison.OrdinalIgnoreCase)
+            ? existing
+            : MergeReviewQuestion(existing, incoming);
+    }
+
+    private static SpecReviewQuestion MergeReviewQuestion(SpecReviewQuestion existing, SpecReviewQuestion incoming)
+        => new()
+        {
+            Id = string.IsNullOrWhiteSpace(existing.Id) ? incoming.Id : existing.Id,
+            Type = string.IsNullOrWhiteSpace(incoming.Type) ? existing.Type : incoming.Type,
+            Question = string.IsNullOrWhiteSpace(existing.Question) ? incoming.Question : existing.Question,
+            Why = string.IsNullOrWhiteSpace(incoming.Why) ? existing.Why : incoming.Why,
+            Status = string.IsNullOrWhiteSpace(incoming.Status) ? existing.Status : incoming.Status,
+            Answer = string.IsNullOrWhiteSpace(existing.Answer) ? incoming.Answer : existing.Answer,
+            AnsweredAt = string.IsNullOrWhiteSpace(existing.AnsweredAt) ? incoming.AnsweredAt : existing.AnsweredAt,
+            RequestedAt = string.IsNullOrWhiteSpace(existing.RequestedAt) ? incoming.RequestedAt : existing.RequestedAt,
+            RequestedBy = string.IsNullOrWhiteSpace(existing.RequestedBy) ? incoming.RequestedBy : existing.RequestedBy
+        };
+
+    private static bool QuestionMatches(SpecReviewQuestion left, SpecReviewQuestion right)
+    {
+        if (!string.IsNullOrWhiteSpace(left.Id) && !string.IsNullOrWhiteSpace(right.Id)
+            && string.Equals(left.Id, right.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return NormalizeQuestionText(left.Question) == NormalizeQuestionText(right.Question);
+    }
+
+    private static string NormalizeQuestionText(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).Trim().ToLowerInvariant();
 
     private static List<SpecReviewQuestion> ReadExistingQuestions(SpecNode spec)
     {
@@ -2289,6 +2360,8 @@ public class RunnerService
                 Question = GetString(element, "question") ?? "",
                 Why = GetString(element, "why") ?? "",
                 Status = GetString(element, "status") ?? "open",
+                Answer = GetString(element, "answer"),
+                AnsweredAt = GetString(element, "answeredAt"),
                 RequestedAt = GetString(element, "requestedAt"),
                 RequestedBy = GetString(element, "requestedBy")
             };
@@ -2303,6 +2376,8 @@ public class RunnerService
                 Question = dictionary.GetValueOrDefault("question")?.ToString() ?? "",
                 Why = dictionary.GetValueOrDefault("why")?.ToString() ?? "",
                 Status = dictionary.GetValueOrDefault("status")?.ToString() ?? "open",
+                Answer = dictionary.GetValueOrDefault("answer")?.ToString(),
+                AnsweredAt = dictionary.GetValueOrDefault("answeredAt")?.ToString(),
                 RequestedAt = dictionary.GetValueOrDefault("requestedAt")?.ToString(),
                 RequestedBy = dictionary.GetValueOrDefault("requestedBy")?.ToString()
             };

@@ -88,7 +88,7 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
         condition.Tests.Should().ContainSingle(test => test.TestId == "manual-review:F-401-C1" && test.Status == "passed");
         condition.Evidence.Should().ContainSingle(ev => ev.Path == "manual-review://F-401/F-401-C1");
         updated.Evidence.Should().ContainSingle(ev => ev.Path == "manual-review://F-401/F-401-C1");
-        updated.Activity.Should().HaveCount(2);
+        updated.Activity.Should().HaveCount(1);
         var activity = updated.Activity.Last();
         activity.Outcome.Should().Be("verified");
         activity.Issues.Should().BeEmpty();
@@ -144,7 +144,7 @@ public class SpecRecordConditionReviewCommandTests : IDisposable
         condition.Metadata.Should().NotContainKey("requiresManualVerification");
         condition.Metadata.Should().NotContainKey("manualVerificationStatus");
         condition.Tests.Should().ContainSingle(test => test.TestId == "manual-review:F-402-C1" && test.Status == "failed" && test.ErrorMessage == "저장 후 오류 토스트 발생");
-        updated.Activity.Should().HaveCount(2);
+        updated.Activity.Should().HaveCount(1);
         var activity = updated.Activity.Last();
         activity.Outcome.Should().Be("requeue");
         activity.Issues.Should().ContainSingle().Which.Should().Be("test-failed");

@@ -369,9 +369,30 @@ if ($cwd -like '*.flow\worktrees\*') {
 
 Start-Sleep -Milliseconds 400
 
-$specPath = Get-ChildItem -Path (Join-Path $cwd 'docs\\specs') -Filter '*.json' |
-    Sort-Object Name |
-    Select-Object -First 1 -ExpandProperty FullName
+$projectName = Split-Path $cwd -Leaf
+$candidateSpecDirs = @(
+    (Join-Path (Join-Path $HOME '.flow') (Join-Path $projectName 'specs')),
+    (Join-Path $cwd 'docs\\specs')
+)
+
+$specPath = $null
+foreach ($candidateDir in $candidateSpecDirs) {
+    if (-not (Test-Path $candidateDir)) {
+        continue
+    }
+
+    $specPath = Get-ChildItem -Path $candidateDir -Filter '*.json' |
+        Sort-Object Name |
+        Select-Object -First 1 -ExpandProperty FullName
+
+    if ($specPath) {
+        break
+    }
+}
+
+if (-not $specPath) {
+    throw "Unable to locate spec JSON under shared or local spec directories."
+}
 
 $spec = Get-Content $specPath -Raw | ConvertFrom-Json -AsHashtable
 $now = [DateTime]::UtcNow.ToString('o')

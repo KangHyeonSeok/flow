@@ -137,6 +137,8 @@ public class SpecReviewQuestion
     public string Question { get; set; } = "";
     public string Why { get; set; } = "";
     public string Status { get; set; } = "open";
+    public string? Answer { get; set; }
+    public string? AnsweredAt { get; set; }
     public string? RequestedAt { get; set; }
     public string? RequestedBy { get; set; }
 }
