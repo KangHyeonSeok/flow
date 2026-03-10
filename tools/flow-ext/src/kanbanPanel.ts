@@ -984,12 +984,16 @@ function filterCards(query) {
             ? `<div class="question-count">❓ 미해결 질문 ${feedback.openQuestionCount}건</div>`
             : '';
 
-        const reviewBadge = review.requiresManualVerification && spec.status !== 'verified'
+        const reviewBadge = feedback.openQuestionCount > 0
+          ? `<div class="review-badge">⏸ 자동 검증 보류</div>`
+          : review.requiresManualVerification && spec.status !== 'verified'
             ? `<div class="review-badge">⚠ 수동 검증 ${review.manualVerificationItems.length}건</div>`
-            : '';
-        const reviewNote = review.requiresManualVerification && spec.status !== 'verified'
-            ? `<div class="review-note">${this.esc(review.manualVerificationItems[0]?.reason || review.manualVerificationItems[0]?.label || '수동 검증 항목 확인 필요')}</div>`
-            : '';
+            : review.autoVerifyEligible && spec.status !== 'verified'
+              ? `<div class="review-badge">✔ 자동 검증 대상</div>`
+              : '';
+        const reviewNote = (feedback.openQuestionCount > 0 || review.requiresManualVerification || review.autoVerifyEligible) && spec.status !== 'verified'
+          ? `<div class="review-note">${this.esc(review.statusSummary)}</div>`
+          : '';
         // 질문이 정확히 1건일 때만 카드 내 인라인 표시. 여러 건이면 상세 패널에서만 표시.
         const inlineQuestion = feedback.openQuestionCount === 1 ? feedback.openQuestions[0] : undefined;
         const questionBox = inlineQuestion ? this.renderQuestionBox(inlineQuestion, feedback.openQuestionCount) : '';

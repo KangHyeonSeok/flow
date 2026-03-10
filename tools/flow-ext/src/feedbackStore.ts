@@ -4,6 +4,10 @@ import { getUserFeedbackState, UserQuestion } from './reviewState';
 
 type JsonRecord = Record<string, unknown>;
 
+const TERMINAL_STATUSES = new Set(['verified', 'done', 'deprecated']);
+const LEGACY_OR_QUESTION_DISPOSITIONS = new Set(['needs-user-decision', 'retry-queued', 'open-question']);
+const OPEN_QUESTION_REASONS = new Set(['open-question', 'needs-user-decision']);
+
 export async function saveQuestionAnswer(specsDirectory: string, specId: string, question: UserQuestion, answer: string): Promise<void> {
     const trimmedAnswer = answer.trim();
     if (!trimmedAnswer) {
@@ -57,16 +61,31 @@ export async function saveQuestionAnswer(specsDirectory: string, specId: string,
     const nextFeedback = getUserFeedbackState({ metadata });
     const stillNeedsInput = nextFeedback.openQuestionCount > 0;
 
-    metadata.reviewDisposition = stillNeedsInput ? 'needs-user-decision' : 'retry-queued';
     metadata.plannerState = stillNeedsInput ? 'waiting-user-input' : 'standby';
     delete metadata.requiresUserInput;
 
+    const currentStatus = typeof spec.status === 'string' ? spec.status : '';
+    const currentDisposition = typeof metadata.reviewDisposition === 'string' ? metadata.reviewDisposition : undefined;
+    const currentReason = typeof metadata.reviewReason === 'string' ? metadata.reviewReason : undefined;
+
     if (stillNeedsInput) {
+        if (!TERMINAL_STATUSES.has(currentStatus)) {
+            spec.status = 'needs-review';
+        }
+        metadata.reviewDisposition = 'open-question';
+        metadata.reviewReason = 'open-question';
         metadata.questionStatus = 'waiting-user-input';
     } else {
+        if (!TERMINAL_STATUSES.has(currentStatus)) {
+            spec.status = 'needs-review';
+        }
         delete metadata.questionStatus;
-        // 모든 질문이 답변됨 → 리뷰 루프와 무관하게 즉시 queued로 복귀
-        spec.status = 'queued';
+        if (currentDisposition && LEGACY_OR_QUESTION_DISPOSITIONS.has(currentDisposition)) {
+            delete metadata.reviewDisposition;
+        }
+        if (currentReason && OPEN_QUESTION_REASONS.has(currentReason)) {
+            delete metadata.reviewReason;
+        }
     }
 
     if (reviewMetadata) {

@@ -7,7 +7,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { Spec, Condition, SpecStatus, STATUS_COLORS, GitHubRef, DocLink } from './types';
-import { getConditionManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
+import { describeReviewDisposition, getConditionManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
 import { saveQuestionAnswer } from './feedbackStore';
 
 export class SpecViewProvider {
@@ -1005,11 +1005,17 @@ export class SpecViewProvider {
         }
 
         let reviewHtml = '';
-        if (review.requiresManualVerification || review.autoVerifyEligible) {
+        if (review.requiresManualVerification || review.autoVerifyEligible || review.blockedByOpenQuestions) {
+            const reviewText = review.blockedByOpenQuestions
+                ? review.statusSummary
+                : review.requiresManualVerification
+                    ? `수동 검증 ${review.manualVerificationItems.length}건 필요`
+                    : review.statusSummary;
             reviewHtml = `
-            <div class="review-callout ${review.requiresManualVerification ? 'manual' : 'eligible'}">
+            <div class="review-callout ${review.blockedByOpenQuestions ? 'blocked' : review.requiresManualVerification ? 'manual' : 'eligible'}">
                 <div class="review-callout-title">검증 상태</div>
-                <div>${review.requiresManualVerification ? `수동 검증 ${review.manualVerificationItems.length}건 필요` : '모든 조건 충족, Runner 자동 검증 대상'}</div>
+                <div>${esc(reviewText)}</div>
+                ${feedback.reviewDisposition ? `<div class="review-callout-reason">사유: ${esc(describeReviewDisposition(feedback.reviewDisposition) ?? feedback.reviewDisposition)}</div>` : ''}
                 ${review.requiresManualVerification ? `<ul class="review-callout-items">${review.manualVerificationItems.map((item) => `<li><strong>${esc(item.label)}</strong>${item.reason ? ` - ${esc(item.reason)}` : ''}</li>`).join('')}</ul>` : ''}
             </div>`;
         }
@@ -1040,6 +1046,7 @@ export class SpecViewProvider {
             feedbackHtml = `
             <div class="feedback-callout">
                 <div class="feedback-callout-title">❓ 사용자 판단 필요</div>
+                ${feedback.reviewDisposition ? `<div class="feedback-review-reason">현재 상태: ${esc(describeReviewDisposition(feedback.reviewDisposition) ?? feedback.reviewDisposition)}</div>` : ''}
                 ${lastAnsweredRow}
                 ${questionsHtml || '<div class="feedback-no-questions">대기 중인 미해결 질문이 없습니다.</div>'}
             </div>`;

@@ -17,6 +17,7 @@ export interface UserQuestion {
 export interface UserFeedbackState {
     requiresUserInput: boolean;
     questionStatus: string | null;
+    reviewDisposition: string | null;
     questions: UserQuestion[];
     openQuestions: UserQuestion[];
     openQuestionCount: number;
@@ -38,6 +39,9 @@ export interface ReviewState {
     requiresManualVerification: boolean;
     manualVerificationItems: ManualVerificationItem[];
     autoVerifyEligible: boolean;
+    blockedByOpenQuestions: boolean;
+    reviewDisposition: string | null;
+    statusSummary: string;
 }
 
 type MetadataHolder = {
@@ -45,6 +49,7 @@ type MetadataHolder = {
 };
 
 export function getSpecReviewState(spec: Spec): ReviewState {
+    const feedback = getUserFeedbackState(spec);
     const totalConditions = spec.conditions.length;
     const verifiedConditions = spec.conditions.filter((condition) => condition.status === 'verified').length;
     const progressPercent = totalConditions > 0
@@ -59,6 +64,19 @@ export function getSpecReviewState(spec: Spec): ReviewState {
 
     const allConditionsVerified = totalConditions > 0 && verifiedConditions === totalConditions;
     const requiresManualVerification = manualVerificationItems.length > 0;
+    const reviewDisposition = readString(spec.metadata?.reviewDisposition) ?? null;
+    const blockedByOpenQuestions = feedback.openQuestionCount > 0;
+    const autoVerifyEligible = allConditionsVerified && !requiresManualVerification && !blockedByOpenQuestions;
+    const statusSummary = blockedByOpenQuestions
+        ? `열린 질문 ${feedback.openQuestionCount}건이 남아 자동 검증이 보류됨`
+        : requiresManualVerification
+            ? `수동 검증 ${manualVerificationItems.length}건 필요`
+            : autoVerifyEligible
+                ? '모든 조건 충족, Runner 자동 검증 대상'
+                : describeReviewDisposition(reviewDisposition)
+                    ?? (totalConditions > 0
+                        ? `조건 ${verifiedConditions}/${totalConditions} 충족`
+                        : '조건 없음');
 
     return {
         totalConditions,
@@ -67,8 +85,33 @@ export function getSpecReviewState(spec: Spec): ReviewState {
         allConditionsVerified,
         requiresManualVerification,
         manualVerificationItems,
-        autoVerifyEligible: allConditionsVerified && !requiresManualVerification,
+        autoVerifyEligible,
+        blockedByOpenQuestions,
+        reviewDisposition,
+        statusSummary,
     };
+}
+
+export function describeReviewDisposition(reviewDisposition: string | null): string | null {
+    switch (reviewDisposition) {
+        case 'open-question':
+        case 'needs-user-decision':
+            return '질문 답변이 필요함';
+        case 'user-test-required':
+            return '사용자 수동 검증 필요';
+        case 'test-failed':
+            return '검증 실패로 재작업 필요';
+        case 'missing-evidence':
+            return '근거 부족으로 재검토 필요';
+        case 'retry-queued':
+            return '재작업 대기';
+        case 'review-verified':
+            return '자동 검증 완료';
+        case 'review-done':
+            return 'task 완료 판정';
+        default:
+            return null;
+    }
 }
 
 export function getConditionManualVerificationItems(condition: Condition): ManualVerificationItem[] {
@@ -175,7 +218,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function getUserFeedbackState(holder: { metadata?: Record<string, unknown> | null }): UserFeedbackState {
     const metadata = holder.metadata;
     if (!metadata) {
-        return { requiresUserInput: false, questionStatus: null, questions: [], openQuestions: [], openQuestionCount: 0, lastAnsweredAt: null };
+        return { requiresUserInput: false, questionStatus: null, reviewDisposition: null, questions: [], openQuestions: [], openQuestionCount: 0, lastAnsweredAt: null };
     }
 
     const reviewMetadata = isRecord(metadata.review) ? metadata.review : undefined;
@@ -195,6 +238,7 @@ export function getUserFeedbackState(holder: { metadata?: Record<string, unknown
     return {
         requiresUserInput,
         questionStatus,
+        reviewDisposition,
         questions,
         openQuestions,
         openQuestionCount: openQuestions.length,

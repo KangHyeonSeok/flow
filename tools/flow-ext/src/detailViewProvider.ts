@@ -6,7 +6,7 @@
 import * as vscode from 'vscode';
 import { SpecLoader } from './specLoader';
 import { STATUS_COLORS, SpecStatus, GraphNode, GitHubRef, DocLink, Condition, Spec } from './types';
-import { getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
+import { describeReviewDisposition, getConditionManualVerificationItems, getNodeManualVerificationItems, getSpecReviewState, getUserFeedbackState } from './reviewState';
 import { saveQuestionAnswer } from './feedbackStore';
 
 export class DetailViewProvider implements vscode.WebviewViewProvider {
@@ -101,20 +101,15 @@ body {
 
         let reviewHtml = '';
         if (review) {
-            const statusText = review.requiresManualVerification
-                ? `수동 검증 ${review.manualVerificationItems.length}건 필요`
-                : review.autoVerifyEligible
-                    ? '모든 조건 충족, Runner 자동 검증 대상'
-                    : review.totalConditions > 0
-                        ? `조건 ${review.verifiedConditions}/${review.totalConditions} 충족`
-                        : '조건 없음';
-            reviewHtml = `<div class="review-panel ${review.requiresManualVerification ? 'manual' : review.autoVerifyEligible ? 'eligible' : ''}">
+            const statusText = review.statusSummary;
+            reviewHtml = `<div class="review-panel ${review.blockedByOpenQuestions ? 'blocked' : review.requiresManualVerification ? 'manual' : review.autoVerifyEligible ? 'eligible' : ''}">
                 <div class="review-title">검증 상태</div>
                 <div class="review-badge-row">
                     <span class="review-pill">${statusText}</span>
                     ${review.totalConditions > 0 ? `<span class="review-progress">${review.progressPercent}%</span>` : ''}
                 </div>
                 ${review.totalConditions > 0 ? `<div class="progress-track"><div class="progress-fill" style="width:${review.progressPercent}%;background:${review.progressPercent === 100 ? '#4caf50' : '#2196f3'}"></div></div>` : ''}
+                ${feedback?.reviewDisposition ? `<div class="review-disposition">사유: ${this.escapeHtml(describeReviewDisposition(feedback.reviewDisposition) ?? feedback.reviewDisposition)}</div>` : ''}
                 ${review.requiresManualVerification ? `<ul class="review-items">${review.manualVerificationItems.map((item) => `<li><strong>${this.escapeHtml(item.label)}</strong>${item.reason ? ` - ${this.escapeHtml(item.reason)}` : ''}</li>`).join('')}</ul>` : ''}
             </div>`;
         } else if (nodeManualItems.length > 0) {
@@ -129,6 +124,9 @@ body {
         if (feedback && feedback.openQuestionCount > 0) {
             const lastAnsweredRow = feedback.lastAnsweredAt
                 ? `<div class="feedback-last-answered">🕐 마지막 답변: ${this.escapeHtml(feedback.lastAnsweredAt)}</div>`
+                : '';
+            const dispositionRow = feedback.reviewDisposition
+                ? `<div class="feedback-review-reason">현재 상태: ${this.escapeHtml(describeReviewDisposition(feedback.reviewDisposition) ?? feedback.reviewDisposition)}</div>`
                 : '';
 
             const questionsHtml = feedback.openQuestions.map((q, idx) => {
@@ -159,6 +157,7 @@ body {
 
             feedbackHtml = `<div class="feedback-panel">
                 <div class="feedback-title">❓ 사용자 판단 필요</div>
+                ${dispositionRow}
                 ${lastAnsweredRow}
                 ${questionsHtml || '<div class="feedback-no-questions">대기 중인 미해결 질문이 없습니다.</div>'}
             </div>`;
