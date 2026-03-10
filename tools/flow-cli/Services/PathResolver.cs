@@ -80,6 +80,8 @@ public class PathResolver
 
     private static string ResolveProjectFolderName(string projectRoot)
     {
+        projectRoot = TryResolveWorktreeMainProjectRoot(projectRoot) ?? projectRoot;
+
         var current = projectRoot;
         while (current != null)
         {
@@ -91,6 +93,21 @@ public class PathResolver
 
         return Path.GetFileName(Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
     }
+
+    private static string? TryResolveWorktreeMainProjectRoot(string projectRoot)
+    {
+        var normalizedPath = Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var worktreeDirectory = Directory.GetParent(normalizedPath);
+        if (worktreeDirectory == null || !string.Equals(worktreeDirectory.Name, "worktrees", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var flowDirectory = worktreeDirectory.Parent;
+        if (flowDirectory == null || !string.Equals(flowDirectory.Name, ".flow", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return flowDirectory.Parent?.FullName;
+    }
+
     private static string GetUserHomeDirectory()
     {
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
