@@ -33,6 +33,8 @@ public class GitWorktreeService
         var branchName = $"runner/{specId}";
         var worktreePath = Path.Combine(_worktreeBaseDir, specId);
 
+        await PruneStaleWorktreesAsync(specId);
+
         // 기존 worktree가 있으면 재사용 시도
         if (Directory.Exists(worktreePath))
         {
@@ -59,14 +61,26 @@ public class GitWorktreeService
         }
 
         // 브랜치가 남아있으면 삭제
-        var branchExists = await RunGitAsync($"branch --list {branchName}");
-        if (!string.IsNullOrWhiteSpace(branchExists.Output))
+        if (!await DeleteExistingBranchAsync(branchName, specId))
         {
-            await RunGitAsync($"branch -D {branchName}");
+            return (false, worktreePath, branchName);
         }
 
         // worktree 추가 (새 브랜치 생성)
         var result = await RunGitAsync($"worktree add -b {branchName} \"{worktreePath}\"");
+        if (!result.Success && IsBranchAlreadyExistsError(result.Error, branchName))
+        {
+            _log.Warn("worktree-create", $"stale branch/worktree 정리 후 재시도: {result.Error}", specId);
+
+            await PruneStaleWorktreesAsync(specId);
+            if (!await DeleteExistingBranchAsync(branchName, specId))
+            {
+                return (false, worktreePath, branchName);
+            }
+
+            result = await RunGitAsync($"worktree add -b {branchName} \"{worktreePath}\"");
+        }
+
         if (!result.Success)
         {
             _log.Error("worktree-create", $"worktree 생성 실패: {result.Error}", specId);
@@ -126,6 +140,45 @@ public class GitWorktreeService
         _log.Info("worktree-remove", $"worktree 정리 완료: {specId}", specId);
         return true;
     }
+
+    private async Task PruneStaleWorktreesAsync(string specId)
+    {
+        var pruneResult = await RunGitAsync("worktree prune");
+        if (!pruneResult.Success)
+        {
+            _log.Warn("worktree-prune", $"stale worktree prune 실패: {pruneResult.Error}", specId);
+        }
+    }
+
+    private async Task<bool> DeleteExistingBranchAsync(string branchName, string specId)
+    {
+        var branchExists = await RunGitAsync($"branch --list {branchName}");
+        if (string.IsNullOrWhiteSpace(branchExists.Output))
+        {
+            return true;
+        }
+
+        var deleteResult = await RunGitAsync($"branch -D {branchName}");
+        if (deleteResult.Success)
+        {
+            return true;
+        }
+
+        _log.Warn("worktree-create", $"브랜치 삭제 실패, prune 후 재시도: {deleteResult.Error}", specId);
+        await PruneStaleWorktreesAsync(specId);
+
+        deleteResult = await RunGitAsync($"branch -D {branchName}");
+        if (deleteResult.Success)
+        {
+            return true;
+        }
+
+        _log.Error("worktree-create", $"브랜치 정리 실패: {deleteResult.Error}", specId);
+        return false;
+    }
+
+    private static bool IsBranchAlreadyExistsError(string error, string branchName)
+        => error.Contains($"a branch named '{branchName}' already exists", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// worktree의 변경사항을 커밋한다.
