@@ -85,6 +85,7 @@ export interface SpecActivityEntry {
     actor?: string;
     role?: string;
     summary?: string;
+    comment?: string;
     relatedIds?: string[];
     statusChange?: SpecActivityStatusChange;
     outcome?: string;

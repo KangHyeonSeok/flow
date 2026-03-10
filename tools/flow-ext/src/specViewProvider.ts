@@ -516,6 +516,38 @@ export class SpecViewProvider {
             font-size: 13px;
             line-height: 1.6;
         }
+        .activity-comment {
+            margin-top: 8px;
+            padding: 8px 10px;
+            border-left: 3px solid rgba(33, 150, 243, 0.45);
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--fg-secondary);
+            font-size: 12px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .activity-related-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 8px;
+        }
+        .activity-related-label {
+            font-size: 11px;
+            color: var(--fg-secondary);
+        }
+        .activity-related-link {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            color: var(--link-color);
+            text-decoration: none;
+        }
+        .activity-related-link:hover {
+            text-decoration: underline;
+        }
         .activity-meta {
             display: flex;
             flex-wrap: wrap;

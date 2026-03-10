@@ -43,6 +43,7 @@ test('F-001-C1/C2: activity section renders newest entries first with readable m
                 type: 'status-update',
                 at: '2026-03-10T14:15:00.000Z',
                 author: 'flow-bot',
+                role: 'tester',
                 summary: 'Older update',
                 relatedIds: ['F-003'],
             },
@@ -50,7 +51,9 @@ test('F-001-C1/C2: activity section renders newest entries first with readable m
                 kind: 'implementation',
                 at: '2026-03-10T14:16:00.000Z',
                 author: 'copilot',
+                role: 'developer',
                 summary: 'Latest update',
+                comment: 'Added the UI card and linked related specs.',
                 relatedIds: ['F-010', 'F-011'],
                 statusChange: { from: 'queued', to: 'working' },
                 outcome: 'handoff',
@@ -63,9 +66,12 @@ test('F-001-C1/C2: activity section renders newest entries first with readable m
     assert.match(html, /Activity \(2\)/);
     assert.ok(html.indexOf('Latest update') < html.indexOf('Older update'), 'latest activity should come first');
     assert.match(html, /Implementation/);
-    assert.match(html, /2026-03-10 14:16 UTC/);
+    assert.match(html, /로컬 시간:/);
     assert.match(html, /작성자: copilot/);
-    assert.match(html, /관련 스펙: F-010, F-011/);
+    assert.match(html, /역할: developer/);
+    assert.match(html, /Added the UI card and linked related specs\./);
+    assert.match(html, /data-focus-spec="F-010"/);
+    assert.match(html, /href="#spec-F-011"/);
     assert.match(html, /상태 변경: queued → working/);
     assert.match(html, /결과: handoff/);
 });
