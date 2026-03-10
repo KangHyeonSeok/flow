@@ -172,17 +172,63 @@ public class SpecStore
             }
 
             // runner가 명시적으로 설정하지 않은 경우에만 디스크 값 보존
-            var onlyIfMissing = new[] { "questionStatus", "reviewDisposition", "reviewReason", "plannerState" };
+            var onlyIfMissing = new[] { "reviewDisposition", "reviewReason", "plannerState" };
             foreach (var key in onlyIfMissing)
             {
                 if (!spec.Metadata.ContainsKey(key) && diskMeta.TryGetProperty(key, out var diskVal))
                     spec.Metadata[key] = JsonSerializer.Deserialize<object>(diskVal.GetRawText(), ReadOptions)!;
+            }
+
+            if (!spec.Metadata.ContainsKey("questionStatus")
+                && HasOpenQuestions(spec.Metadata)
+                && diskMeta.TryGetProperty("questionStatus", out var diskQuestionStatus))
+            {
+                spec.Metadata["questionStatus"] = JsonSerializer.Deserialize<object>(diskQuestionStatus.GetRawText(), ReadOptions)!;
             }
         }
         catch
         {
             // 디스크 읽기/파싱 실패 시 무시 (기존 동작 유지)
         }
+    }
+
+    private static bool HasOpenQuestions(Dictionary<string, object> metadata)
+    {
+        if (!metadata.TryGetValue("questions", out var rawQuestions) || rawQuestions == null)
+        {
+            return false;
+        }
+
+        if (rawQuestions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray().Any(question =>
+                question.ValueKind == JsonValueKind.Object
+                && question.TryGetProperty("status", out var status)
+                && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (rawQuestions is IEnumerable<object> questions)
+        {
+            return questions.Any(question =>
+            {
+                if (question is JsonElement questionElement)
+                {
+                    return questionElement.ValueKind == JsonValueKind.Object
+                        && questionElement.TryGetProperty("status", out var status)
+                        && string.Equals(status.GetString(), "open", StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (question is Dictionary<string, object> dictionary
+                    && dictionary.TryGetValue("status", out var statusValue))
+                {
+                    return string.Equals(statusValue?.ToString(), "open", StringComparison.OrdinalIgnoreCase);
+                }
+
+                return false;
+            });
+        }
+
+        return false;
     }
 
     /// <summary>

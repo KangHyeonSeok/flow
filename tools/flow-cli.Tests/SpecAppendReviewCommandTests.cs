@@ -1,5 +1,6 @@
 using FlowCLI.Services.SpecGraph;
 using FluentAssertions;
+using System.Text.Json;
 
 namespace FlowCLI.Tests;
 
@@ -83,7 +84,7 @@ public class SpecAppendReviewCommandTests : IDisposable
         updated.Metadata["reviewReason"].ToString().Should().Be("open-question");
         updated.Metadata.Should().NotContainKey("requiresUserInput");
         updated.Metadata["questionStatus"].ToString().Should().Be("waiting-user-input");
-        updated.Activity.Should().HaveCount(2);
+        updated.Activity.Should().HaveCount(1);
         var activity = updated.Activity.Last();
         activity.Role.Should().Be("tester");
         activity.Outcome.Should().Be("needs-review");
@@ -91,6 +92,194 @@ public class SpecAppendReviewCommandTests : IDisposable
         activity.StatusChange.To.Should().Be("needs-review");
         activity.Issues.Should().ContainSingle().Which.Should().Be("user-input-required");
         ReadCapturedOutput().Should().Contain("spec-append-review");
+    }
+
+    [Fact]
+    public void SpecAppendReview_WhenAllRequestedOpinionsAreAnswered_RequeuesSpecResetsConditionsAndRecordsTrigger()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(new SpecNode
+        {
+            Id = "F-305",
+            Title = "answered review feedback",
+            Description = "review append answered feedback",
+            Status = "needs-review",
+            NodeType = "feature",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-305-C1",
+                    Status = "needs-review"
+                },
+                new SpecCondition
+                {
+                    Id = "F-305-C2",
+                    Status = "verified",
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["lastVerifiedBy"] = "runner-test"
+                    }
+                }
+            ],
+            Metadata = new Dictionary<string, object>
+            {
+                ["questionStatus"] = "waiting-user-input",
+                ["lastAnsweredAt"] = "2026-03-10T14:30:00Z",
+                ["questions"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-305-Q1",
+                        ["type"] = "user-decision",
+                        ["question"] = "배너를 항상 표시할까요?",
+                        ["why"] = "정책 확정이 필요합니다.",
+                        ["status"] = "answered",
+                        ["answer"] = "설정이 켜진 경우에만 표시합니다.",
+                        ["answeredAt"] = "2026-03-10T14:30:00Z",
+                        ["requestedAt"] = "2026-03-10T14:00:00Z",
+                        ["requestedBy"] = "runner-test"
+                    }
+                }
+            }
+        });
+
+        var inputFile = Path.Combine(_tempDir, "review-answered.json");
+        File.WriteAllText(inputFile, """
+        {
+          "summary": "사용자 답변이 반영되어 다시 구현 가능합니다.",
+          "failureReasons": ["정책이 확정되어 재시도 대기열로 돌립니다."],
+          "alternatives": [],
+          "suggestedAttempts": ["답변 기준으로 구현을 다시 시도합니다."],
+          "requiresUserInput": false,
+          "questions": []
+        }
+        """);
+
+        var app = new FlowApp();
+
+        app.SpecAppendReview("F-305", inputFile: inputFile, reviewer: "runner-test");
+
+        Environment.ExitCode.Should().Be(0);
+        var updated = store.Get("F-305");
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be("queued");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("missing-evidence");
+        updated.Metadata["lastAnsweredAt"].ToString().Should().Be("2026-03-10T14:30:00Z");
+        updated.Metadata.Should().NotContainKey("questionStatus");
+
+        var questions = ReadQuestions(updated.Metadata["questions"]);
+        questions.Should().ContainSingle();
+        questions[0]["status"].ToString().Should().Be("answered");
+        questions[0]["answer"].ToString().Should().Be("설정이 켜진 경우에만 표시합니다.");
+
+        updated.Conditions.Should().OnlyContain(condition => condition.Status == "draft");
+        updated.Activity.Should().HaveCount(1);
+        var activity = updated.Activity.Last();
+        activity.Outcome.Should().Be("requeue");
+        activity.StatusChange!.From.Should().Be("needs-review");
+        activity.StatusChange.To.Should().Be("queued");
+        activity.Comment.Should().Contain("배너를 항상 표시할까요?");
+        activity.Comment.Should().Contain("설정이 켜진 경우에만 표시합니다.");
+        activity.Comment.Should().Contain("2026-03-10T14:30:00Z");
+        activity.ConditionUpdates.Should().HaveCount(2);
+        activity.ConditionUpdates.Should().Contain(update =>
+            update.ConditionId == "F-305-C1" &&
+            update.Status == "draft" &&
+            update.Reason == "reset-for-requeue");
+        activity.ConditionUpdates.Should().Contain(update =>
+            update.ConditionId == "F-305-C2" &&
+            update.Status == "draft" &&
+            update.Reason == "reset-for-requeue");
+    }
+
+    [Fact]
+    public void SpecAppendReview_WhenSomeRequestedOpinionsRemainOpen_StaysNeedsReviewWithoutEarlyReset()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(new SpecNode
+        {
+            Id = "F-306",
+            Title = "partial review feedback",
+            Description = "review append partial feedback",
+            Status = "needs-review",
+            NodeType = "feature",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-306-C1",
+                    Status = "needs-review"
+                },
+                new SpecCondition
+                {
+                    Id = "F-306-C2",
+                    Status = "verified"
+                }
+            ],
+            Metadata = new Dictionary<string, object>
+            {
+                ["questionStatus"] = "waiting-user-input",
+                ["lastAnsweredAt"] = "2026-03-10T14:40:00Z",
+                ["questions"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-306-Q1",
+                        ["question"] = "알림을 즉시 보낼까요?",
+                        ["status"] = "answered",
+                        ["answer"] = "즉시 보냅니다.",
+                        ["answeredAt"] = "2026-03-10T14:40:00Z"
+                    },
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-306-Q2",
+                        ["question"] = "이메일도 함께 보낼까요?",
+                        ["status"] = "open",
+                        ["requestedAt"] = "2026-03-10T14:35:00Z",
+                        ["requestedBy"] = "runner-test"
+                    }
+                }
+            }
+        });
+
+        var inputFile = Path.Combine(_tempDir, "review-partial-answer.json");
+        File.WriteAllText(inputFile, """
+        {
+          "summary": "일부 답변은 반영되었지만 아직 추가 의견이 필요합니다.",
+          "failureReasons": ["남은 질문이 있습니다."],
+          "alternatives": [],
+          "suggestedAttempts": ["남은 질문에 답변한 뒤 다시 시도합니다."],
+          "requiresUserInput": false,
+          "questions": []
+        }
+        """);
+
+        var app = new FlowApp();
+
+        app.SpecAppendReview("F-306", inputFile: inputFile, reviewer: "runner-test");
+
+        Environment.ExitCode.Should().Be(0);
+        var updated = store.Get("F-306");
+        updated.Should().NotBeNull();
+        updated!.Status.Should().Be("needs-review");
+        updated.Metadata!["reviewDisposition"].ToString().Should().Be("open-question");
+        updated.Metadata["questionStatus"].ToString().Should().Be("waiting-user-input");
+
+        var questions = ReadQuestions(updated.Metadata["questions"]);
+        questions.Should().HaveCount(2);
+        questions.Should().Contain(question =>
+            question["id"].ToString() == "F-306-Q2" &&
+            question["status"].ToString() == "open");
+
+        updated.Conditions.Single(condition => condition.Id == "F-306-C1").Status.Should().Be("needs-review");
+        updated.Conditions.Single(condition => condition.Id == "F-306-C2").Status.Should().Be("verified");
+
+        var activity = updated.Activity.Last();
+        activity.Outcome.Should().Be("needs-review");
+        activity.ConditionUpdates.Should().NotContain(update => update.Reason == "reset-for-requeue");
     }
 
     [Fact]
@@ -171,7 +360,7 @@ public class SpecAppendReviewCommandTests : IDisposable
         updated.Metadata!["reviewDisposition"].ToString().Should().Be("missing-evidence");
         updated.Metadata["reviewReason"].ToString().Should().Be("missing-evidence");
         updated.Conditions[0].Status.Should().Be("draft");
-        updated.Activity.Should().HaveCount(2);
+        updated.Activity.Should().HaveCount(1);
         var activity = updated.Activity.Last();
         activity.Outcome.Should().Be("requeue");
         activity.ConditionUpdates.Should().ContainSingle(update =>
@@ -232,7 +421,7 @@ public class SpecAppendReviewCommandTests : IDisposable
         updated.Conditions[0].Metadata.Should().NotContainKey("requiresManualVerification");
         updated.Metadata!["reviewDisposition"].ToString().Should().Be("review-verified");
         updated.Metadata.Should().NotContainKey("reviewReason");
-                updated.Activity.Should().HaveCount(2);
+                updated.Activity.Should().HaveCount(1);
                 var activity = updated.Activity.Last();
                 activity.Outcome.Should().Be("verified");
                 activity.Issues.Should().BeEmpty();
@@ -247,5 +436,17 @@ public class SpecAppendReviewCommandTests : IDisposable
         var text = _capturedOut.ToString();
         _capturedOut.GetStringBuilder().Clear();
         return text;
+    }
+
+    private static List<Dictionary<string, object>> ReadQuestions(object rawQuestions)
+    {
+        if (rawQuestions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray()
+                .Select(question => JsonSerializer.Deserialize<Dictionary<string, object>>(question.GetRawText())!)
+                .ToList();
+        }
+
+        return ((IEnumerable<object>)rawQuestions).Cast<Dictionary<string, object>>().ToList();
     }
 }

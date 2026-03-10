@@ -221,4 +221,145 @@ public class RunnerReviewWorkflowTests
         spec.Activity.Should().ContainSingle();
         spec.Activity[0].Outcome.Should().Be("verified");
     }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WhenAllRequestedOpinionsAreAnswered_RequeuesAndRecordsAnswerContext()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-203",
+            NodeType = "feature",
+            Status = "needs-review",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-203-C1",
+                    Status = "needs-review"
+                }
+            ],
+            Metadata = new Dictionary<string, object>
+            {
+                ["questionStatus"] = "waiting-user-input",
+                ["lastAnsweredAt"] = "2026-03-10T14:30:00Z",
+                ["questions"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-203-Q1",
+                        ["type"] = "user-decision",
+                        ["question"] = "배너를 항상 표시할까요?",
+                        ["status"] = "answered",
+                        ["answer"] = "설정이 켜진 경우에만 표시합니다.",
+                        ["answeredAt"] = "2026-03-10T14:30:00Z"
+                    }
+                }
+            }
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "답변을 반영해 다시 구현 대기열로 보냅니다.",
+            FailureReasons = ["정책은 확정됐지만 구현은 다시 시도해야 합니다."],
+            SuggestedAttempts = ["답변 기준으로 다시 구현합니다."],
+            RequiresUserInput = false
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-10T15:00:00Z"));
+
+        spec.Status.Should().Be("queued");
+        spec.Metadata.Should().NotContainKey("questionStatus");
+        spec.Metadata!["lastAnsweredAt"].Should().Be("2026-03-10T14:30:00Z");
+        spec.Conditions[0].Status.Should().Be("draft");
+        spec.Activity.Should().ContainSingle();
+        spec.Activity[0].Outcome.Should().Be("requeue");
+        spec.Activity[0].Comment.Should().Contain("배너를 항상 표시할까요?");
+        spec.Activity[0].Comment.Should().Contain("설정이 켜진 경우에만 표시합니다.");
+        spec.Activity[0].ConditionUpdates.Should().ContainSingle(update =>
+            update.ConditionId == "F-203-C1" &&
+            update.Status == "draft" &&
+            update.Reason == "reset-for-requeue");
+    }
+
+    [Fact]
+    public void ApplyReviewAnalysis_WhenOpenOpinionStillRemains_KeepsNeedsReviewAndPreservesOpenQuestion()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-204",
+            NodeType = "feature",
+            Status = "needs-review",
+            Conditions =
+            [
+                new SpecCondition
+                {
+                    Id = "F-204-C1",
+                    Status = "needs-review"
+                }
+            ],
+            Metadata = new Dictionary<string, object>
+            {
+                ["questionStatus"] = "waiting-user-input",
+                ["questions"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-204-Q1",
+                        ["question"] = "배너를 항상 표시할까요?",
+                        ["status"] = "answered",
+                        ["answer"] = "아니요"
+                    },
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-204-Q2",
+                        ["question"] = "대체 문구는 무엇인가요?",
+                        ["status"] = "open"
+                    }
+                }
+            }
+        };
+        var analysis = new SpecReviewAnalysis
+        {
+            Summary = "아직 미해결 질문이 있습니다.",
+            FailureReasons = ["추가 사용자 의견이 필요합니다."],
+            SuggestedAttempts = ["남은 질문 답변 후 재시도합니다."],
+            RequiresUserInput = false
+        };
+
+        RunnerService.ApplyReviewAnalysis(spec, analysis, "runner-test", DateTime.Parse("2026-03-10T15:00:00Z"));
+
+        spec.Status.Should().Be("needs-review");
+        spec.Metadata!["questionStatus"].Should().Be("waiting-user-input");
+        spec.Metadata["reviewDisposition"].Should().Be("open-question");
+        spec.Conditions[0].Status.Should().Be("needs-review");
+        spec.Activity.Should().ContainSingle();
+        spec.Activity[0].Outcome.Should().Be("needs-review");
+
+        var questions = ((IEnumerable<object>)spec.Metadata["questions"]).Cast<Dictionary<string, object>>().ToList();
+        questions.Should().HaveCount(2);
+        questions.Should().Contain(question =>
+            question["id"].ToString() == "F-204-Q2" &&
+            question["status"].ToString() == "open");
+    }
+
+    [Fact]
+    public void HasPersistedReviewResult_AcceptsQueuedStatusAfterReviewAppend()
+    {
+        var spec = new SpecNode
+        {
+            Id = "F-205",
+            Status = "queued",
+            Metadata = new Dictionary<string, object>
+            {
+                ["lastReviewAt"] = "2026-03-10T15:00:00Z",
+                ["lastReviewBy"] = "runner-test"
+            }
+        };
+
+        var method = typeof(RunnerService).GetMethod("HasPersistedReviewResult", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        method.Should().NotBeNull();
+        var persisted = (bool)method!.Invoke(null, [spec])!;
+
+        persisted.Should().BeTrue();
+    }
 }
