@@ -7,6 +7,7 @@ function renderCard(spec) {
   const timeStr = spec.updatedAt ? formatRelativeTime(spec.updatedAt) : '';
 
   let metaBadges = '';
+  metaBadges += `<span class="card__badge badge--project">${escapeHtml(spec.project)}</span>`;
   metaBadges += `<span class="card__badge badge--type-${spec.type}">${spec.type}</span>`;
 
   if (spec.attemptCount > 0) {

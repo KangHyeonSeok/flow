@@ -2,30 +2,19 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 
+/**
+ * Spec directory structure:
+ *   specsDir/
+ *     <project>/              ← 프로젝트 폴더
+ *       project.json          ← { name, root, defaultBranch }
+ *       <specId>/
+ *         meta.json
+ *         spec.md
+ *         activity.log.md
+ *         questions.md
+ *         tests/ evidence/ artifacts/
+ */
 function createSpecReader(specsDir) {
-  // Find all spec folders: specsDir/<group>/<specId>/
-  async function findSpecDirs() {
-    const dirs = [];
-    try {
-      const groups = await fs.readdir(specsDir, { withFileTypes: true });
-      for (const group of groups) {
-        if (!group.isDirectory()) continue;
-        const groupPath = path.join(specsDir, group.name);
-        const specs = await fs.readdir(groupPath, { withFileTypes: true });
-        for (const spec of specs) {
-          if (!spec.isDirectory()) continue;
-          dirs.push({
-            specId: spec.name,
-            group: group.name,
-            path: path.join(groupPath, spec.name),
-          });
-        }
-      }
-    } catch {
-      // specsDir may not exist
-    }
-    return dirs;
-  }
 
   async function readJson(filePath) {
     try {
@@ -42,6 +31,49 @@ function createSpecReader(specsDir) {
     } catch {
       return null;
     }
+  }
+
+  // List all projects
+  async function listProjects() {
+    const projects = [];
+    try {
+      const entries = await fs.readdir(specsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const projPath = path.join(specsDir, entry.name);
+        const projJson = await readJson(path.join(projPath, 'project.json'));
+        projects.push({
+          key: entry.name,
+          name: projJson?.name || entry.name,
+          root: projJson?.root || null,
+          defaultBranch: projJson?.defaultBranch || 'main',
+        });
+      }
+    } catch { /* specsDir may not exist */ }
+    return projects;
+  }
+
+  // Find all spec folders across all projects
+  async function findSpecDirs() {
+    const dirs = [];
+    try {
+      const projects = await fs.readdir(specsDir, { withFileTypes: true });
+      for (const proj of projects) {
+        if (!proj.isDirectory()) continue;
+        const projPath = path.join(specsDir, proj.name);
+        const entries = await fs.readdir(projPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          // Skip if it's not a spec folder (project.json is a file, not a dir)
+          dirs.push({
+            specId: entry.name,
+            project: proj.name,
+            path: path.join(projPath, entry.name),
+          });
+        }
+      }
+    } catch { /* specsDir may not exist */ }
+    return dirs;
   }
 
   function parseQuestions(text) {
@@ -97,14 +129,13 @@ function createSpecReader(specsDir) {
     const questions = parseQuestions(questionsText);
     const openQuestionCount = questions.filter(q => q.status === '응답 대기').length;
 
-    // Count tests from meta
     const tests = meta.tests || [];
     const testTotal = tests.length;
     const testPass = tests.filter(t => t.lastResult === 'pass').length;
 
     return {
       id: specDir.specId,
-      group: specDir.group,
+      project: specDir.project,
       title: meta.title || specDir.specId,
       type: meta.type || '기능',
       status: meta.status || '초안',
@@ -145,22 +176,22 @@ function createSpecReader(specsDir) {
     // List evidence files
     const evidenceFiles = [];
     const evidenceDir = path.join(dir.path, 'evidence');
-    try {
-      const subdirs = ['unit', 'e2e', 'user'];
-      for (const sub of subdirs) {
-        const subPath = path.join(evidenceDir, sub);
-        try {
-          const files = await fs.readdir(subPath);
-          for (const f of files) {
-            evidenceFiles.push({ type: sub, name: f, path: `${sub}/${f}` });
-          }
-        } catch { /* subdir may not exist */ }
-      }
-    } catch { /* evidence dir may not exist */ }
+    for (const sub of ['unit', 'e2e', 'user']) {
+      try {
+        const files = await fs.readdir(path.join(evidenceDir, sub));
+        for (const f of files) {
+          evidenceFiles.push({ type: sub, name: f, path: `${sub}/${f}` });
+        }
+      } catch { /* subdir may not exist */ }
+    }
+
+    // Read project info
+    const projJson = await readJson(path.join(specsDir, dir.project, 'project.json'));
 
     return {
       id: dir.specId,
-      group: dir.group,
+      project: dir.project,
+      projectRoot: projJson?.root || null,
       title: meta.title || dir.specId,
       type: meta.type || '기능',
       status: meta.status || '초안',
@@ -187,12 +218,11 @@ function createSpecReader(specsDir) {
   }
 
   function getEvidencePath(specId, fileName) {
-    // Walk groups to find specId
     try {
-      const groups = fsSync.readdirSync(specsDir, { withFileTypes: true });
-      for (const group of groups) {
-        if (!group.isDirectory()) continue;
-        const specPath = path.join(specsDir, group.name, specId);
+      const projects = fsSync.readdirSync(specsDir, { withFileTypes: true });
+      for (const proj of projects) {
+        if (!proj.isDirectory()) continue;
+        const specPath = path.join(specsDir, proj.name, specId);
         const filePath = path.join(specPath, 'evidence', fileName);
         if (fsSync.existsSync(filePath)) return filePath;
       }
@@ -200,7 +230,21 @@ function createSpecReader(specsDir) {
     return null;
   }
 
-  return { listSpecs, getSpec, getActivity, getEvidencePath };
+  /**
+   * Read project.json for a given project key.
+   */
+  async function getProject(projectKey) {
+    const projJson = await readJson(path.join(specsDir, projectKey, 'project.json'));
+    if (!projJson) return null;
+    return {
+      key: projectKey,
+      name: projJson.name || projectKey,
+      root: projJson.root || null,
+      defaultBranch: projJson.defaultBranch || 'main',
+    };
+  }
+
+  return { listSpecs, listProjects, getSpec, getProject, getActivity, getEvidencePath };
 }
 
 module.exports = { createSpecReader };

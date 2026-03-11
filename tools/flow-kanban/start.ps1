@@ -1,6 +1,16 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# 스펙 디렉터리: ~/.flow/specs/
+if (-not $env:FLOW_SPECS_DIR) {
+    $env:FLOW_SPECS_DIR = Join-Path $env:USERPROFILE ".flow\specs"
+}
+
+# 워크트리 디렉터리: ~/.flow/worktrees/
+if (-not $env:FLOW_WORKTREES_DIR) {
+    $env:FLOW_WORKTREES_DIR = Join-Path $env:USERPROFILE ".flow\worktrees"
+}
+
 # node_modules 없으면 설치
 if (-not (Test-Path "$root\node_modules")) {
     Write-Host "Installing dependencies..." -ForegroundColor Cyan
@@ -9,12 +19,7 @@ if (-not (Test-Path "$root\node_modules")) {
     Pop-Location
 }
 
-# 스펙 디렉터리 없으면 데모 데이터 생성
-$specsDir = Join-Path $env:USERPROFILE ".flow\specs"
-if (-not (Test-Path $specsDir)) {
-    Write-Host "Seeding demo data..." -ForegroundColor Cyan
-    node "$root\seed-demo.js"
-}
-
 Write-Host "Starting Flow Kanban at http://localhost:3000" -ForegroundColor Green
+Write-Host "  Specs dir:     $env:FLOW_SPECS_DIR" -ForegroundColor DarkGray
+Write-Host "  Worktrees dir: $env:FLOW_WORKTREES_DIR" -ForegroundColor DarkGray
 node "$root\server.js"

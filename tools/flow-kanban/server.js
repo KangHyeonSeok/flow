@@ -19,6 +19,16 @@ const runner = createRunner(SPECS_DIR, reader, writer, logger);
 
 // --- API Routes ---
 
+// List all projects
+app.get('/api/projects', async (req, res) => {
+  try {
+    const projects = await reader.listProjects();
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // List all specs (card-level summary)
 app.get('/api/specs', async (req, res) => {
   try {
@@ -26,6 +36,18 @@ app.get('/api/specs', async (req, res) => {
     res.json(specs);
   } catch (err) {
     console.error('GET /api/specs error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get next available spec ID (must be before :specId wildcard)
+app.get('/api/specs/next-id', async (req, res) => {
+  try {
+    const { project, prefix } = req.query;
+    if (!project) return res.status(400).json({ error: 'project query param is required' });
+    const nextId = await writer.nextSpecId(project, prefix || 'F');
+    res.json({ nextId });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -59,6 +81,84 @@ app.get('/api/specs/:specId/evidence/:fileName', async (req, res) => {
     if (!filePath) return res.status(404).json({ error: 'File not found' });
     res.sendFile(filePath);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add project
+app.post('/api/projects', async (req, res) => {
+  try {
+    const { path: repoPath, name, defaultBranch } = req.body;
+    if (!repoPath) return res.status(400).json({ error: 'path is required' });
+
+    const absPath = path.resolve(repoPath);
+
+    // Check .git exists
+    const gitDir = path.join(absPath, '.git');
+    try {
+      await fs.promises.access(gitDir);
+    } catch {
+      return res.status(400).json({ error: `Not a git repository: ${absPath}` });
+    }
+
+    // Project key = folder name
+    const projectKey = path.basename(absPath);
+    const projectDir = path.join(SPECS_DIR, projectKey);
+
+    // Create project dir
+    await fs.promises.mkdir(projectDir, { recursive: true });
+
+    // Write project.json
+    const projectJson = {
+      name: name || projectKey,
+      root: absPath,
+      defaultBranch: defaultBranch || 'main',
+    };
+    await fs.promises.writeFile(
+      path.join(projectDir, 'project.json'),
+      JSON.stringify(projectJson, null, 2),
+      'utf-8'
+    );
+
+    res.json({ ok: true, key: projectKey, name: projectJson.name });
+  } catch (err) {
+    console.error('POST /api/projects error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new spec
+app.post('/api/specs', async (req, res) => {
+  try {
+    const { project, id, title, type, description, status, conditions, tests, relatedFiles, specMd } = req.body;
+    if (!project) return res.status(400).json({ error: 'project is required' });
+    if (!title) return res.status(400).json({ error: 'title is required' });
+
+    // Verify project exists
+    const projJsonPath = path.join(SPECS_DIR, project, 'project.json');
+    try {
+      await fs.promises.access(projJsonPath);
+    } catch {
+      return res.status(400).json({ error: `Project not found: ${project}` });
+    }
+
+    // Auto-generate ID if not provided
+    const prefix = (type === '태스크' || type === 'task') ? 'T' : 'F';
+    const specId = id || await writer.nextSpecId(project, prefix);
+
+    const result = await writer.createSpec(project, specId, {
+      title, type, description, status, conditions, tests, relatedFiles,
+    }, specMd);
+
+    await logger.append(specId, {
+      role: 'user',
+      summary: `스펙 생성: ${title}`,
+      result: 'handoff',
+    });
+
+    res.json({ ok: true, specId: result.specId, project: result.projectKey, meta: result.meta });
+  } catch (err) {
+    console.error('POST /api/specs error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -137,6 +237,17 @@ app.post('/api/specs/:specId/tests/:testId/result', async (req, res) => {
   }
 });
 
+// Seed demo data
+app.post('/api/demo/seed', (req, res) => {
+  try {
+    const { seedDemo } = require('./lib/demoData');
+    const result = seedDemo(SPECS_DIR);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Runner API ---
 
 app.get('/api/runner/status', (req, res) => {
@@ -200,7 +311,14 @@ try {
   // Specs directory may not exist yet
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Flow Kanban running at http://localhost:${PORT}`);
   console.log(`Specs directory: ${SPECS_DIR}`);
+  console.log(`Worktrees directory: ${process.env.FLOW_WORKTREES_DIR || path.join(require('os').homedir(), '.flow', 'worktrees')}`);
+  try {
+    const projects = await reader.listProjects();
+    for (const p of projects) {
+      console.log(`  Project "${p.name}" → ${p.root || '(no root)'}`);
+    }
+  } catch { /* */ }
 });

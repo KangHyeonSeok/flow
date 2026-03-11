@@ -10,7 +10,7 @@ const EventEmitter = require('events');
  */
 function createRunner(specsDir, reader, writer, logger) {
   const events = new EventEmitter();
-  const worktree = createWorktreeManager(specsDir);
+  const worktree = createWorktreeManager(specsDir, reader);
   const pipeline = createPipeline(specsDir, reader, writer, logger, worktree, events);
 
   let state = 'stopped';      // stopped | running | stopping

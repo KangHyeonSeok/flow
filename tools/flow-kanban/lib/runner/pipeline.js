@@ -7,6 +7,9 @@ const path = require('path');
  * Each stage invokes an external tool (Copilot CLI, etc.)
  * For now, stages have a stub mode that simulates work with a delay.
  * Set RUNNER_MODE=live to use real Copilot CLI.
+ *
+ * 워크트리에서 작업할 때 스펙 경로는 항상 절대경로로 전달한다.
+ * 워크트리의 프로젝트 폴더명은 원본과 다를 수 있기 때문이다.
  */
 function createPipeline(specsDir, reader, writer, logger, worktree, events) {
   const mode = process.env.RUNNER_MODE || 'stub';
@@ -47,10 +50,28 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
   }
 
   async function liveDevelop(specId, spec) {
-    // TODO: Invoke Copilot CLI in the spec's worktree
-    // const wt = await worktree.ensure(specId);
-    // const result = await runCopilot(wt.path, spec.specMd, 'develop');
-    // return result;
+    const wt = await worktree.ensure(specId);
+    if (!wt.specPath) {
+      return { failed: true, reason: `스펙 폴더를 찾을 수 없음: ${specId}` };
+    }
+
+    events.emit('log', {
+      specId,
+      stage: '작업',
+      message: `worktree: ${wt.worktreePath}, spec: ${wt.specPath}`,
+    });
+
+    // TODO: Invoke Copilot CLI
+    // Copilot은 워크트리(worktreePath)에서 코드 작업을 하고,
+    // 스펙(specPath)에서 요구사항을 읽고 로그/증거를 기록한다.
+    //
+    // const result = await runCopilot({
+    //   cwd: wt.worktreePath,           // 코드 작업 디렉터리
+    //   specDir: wt.specPath,           // 스펙 파일 절대경로
+    //   specMd: spec.specMd,            // 스펙 본문
+    //   mode: 'develop',
+    // });
+
     return { failed: true, reason: 'Live mode not yet implemented' };
   }
 
@@ -78,6 +99,18 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
   }
 
   async function liveValidate(specId, spec) {
+    const wt = await worktree.ensure(specId);
+    if (!wt.specPath) {
+      return { requeue: true, reason: `스펙 폴더를 찾을 수 없음: ${specId}` };
+    }
+
+    // TODO: Invoke Copilot CLI for test validation
+    // const result = await runCopilot({
+    //   cwd: wt.worktreePath,
+    //   specDir: wt.specPath,
+    //   mode: 'validate',
+    // });
+
     return { requeue: true, reason: 'Live mode not yet implemented' };
   }
 
@@ -130,6 +163,18 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
   }
 
   async function liveReview(specId, spec) {
+    const wt = await worktree.ensure(specId);
+    if (!wt.specPath) {
+      return { needsUserReview: true, reason: `스펙 폴더를 찾을 수 없음: ${specId}` };
+    }
+
+    // TODO: Invoke Copilot CLI for review
+    // const result = await runCopilot({
+    //   cwd: wt.worktreePath,
+    //   specDir: wt.specPath,
+    //   mode: 'review',
+    // });
+
     return { needsUserReview: true, reason: 'Live mode not yet implemented' };
   }
 

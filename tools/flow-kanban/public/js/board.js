@@ -44,10 +44,14 @@ function renderSpecs(specs) {
   });
 
   const searchTerm = (document.getElementById('search').value || '').toLowerCase();
+  const projectFilter = document.getElementById('project-filter').value;
 
   let filtered = specs;
+  if (projectFilter) {
+    filtered = filtered.filter(s => s.project === projectFilter);
+  }
   if (searchTerm) {
-    filtered = specs.filter(s =>
+    filtered = filtered.filter(s =>
       s.id.toLowerCase().includes(searchTerm) ||
       s.title.toLowerCase().includes(searchTerm)
     );

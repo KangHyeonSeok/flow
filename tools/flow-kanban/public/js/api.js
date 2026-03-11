@@ -1,4 +1,10 @@
 const API = {
+  async getProjects() {
+    const res = await fetch('/api/projects');
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   async getSpecs() {
     const res = await fetch('/api/specs');
     if (!res.ok) throw new Error(await res.text());
@@ -37,6 +43,41 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ result, comment }),
     });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async createSpec(project, data) {
+    const res = await fetch('/api/specs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, ...data }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async getNextSpecId(project, prefix = 'F') {
+    const res = await fetch(`/api/specs/next-id?project=${encodeURIComponent(project)}&prefix=${encodeURIComponent(prefix)}`);
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async addProject(repoPath, name, defaultBranch) {
+    const body = { path: repoPath };
+    if (name) body.name = name;
+    if (defaultBranch) body.defaultBranch = defaultBranch;
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async seedDemo() {
+    const res = await fetch('/api/demo/seed', { method: 'POST' });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
   },

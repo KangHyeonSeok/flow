@@ -21,7 +21,7 @@ function closeDetail() {
 function renderDetail(spec) {
   return `
     <div class="detail-header">
-      <div class="detail-header__id">${escapeHtml(spec.id)} · ${escapeHtml(spec.group)}</div>
+      <div class="detail-header__id">${escapeHtml(spec.id)} · ${escapeHtml(spec.project)}</div>
       <div class="detail-header__title">${escapeHtml(spec.title)}</div>
       <div class="detail-header__badges">
         <span class="detail-badge detail-badge--status">${spec.status}</span>
