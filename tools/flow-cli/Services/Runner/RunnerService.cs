@@ -1809,7 +1809,8 @@ public class RunnerService
         string? statusTo = null,
         List<string>? issues = null,
         List<SpecConditionUpdate>? conditionUpdates = null,
-        List<string>? relatedIds = null)
+        List<string>? relatedIds = null,
+        SpecActivityTrigger? triggeredBy = null)
     {
         spec.Activity ??= new List<SpecActivityEntry>();
         spec.Activity.Add(new SpecActivityEntry
@@ -1825,6 +1826,7 @@ public class RunnerService
             Issues = issues ?? new List<string>(),
             ConditionUpdates = conditionUpdates ?? new List<SpecConditionUpdate>(),
             RelatedIds = relatedIds ?? new List<string>(),
+            TriggeredBy = triggeredBy,
             StatusChange = !string.IsNullOrWhiteSpace(statusFrom) && !string.IsNullOrWhiteSpace(statusTo)
                 ? new SpecActivityStatusChange { From = statusFrom!, To = statusTo! }
                 : null
@@ -2100,6 +2102,7 @@ public class RunnerService
         List<SpecConditionUpdate>? conditionUpdates = null;
         string activityOutcome;
         string activitySummary;
+        SpecActivityTrigger? activityTrigger = null;
 
         if (hasOpenQuestions)
         {
@@ -2146,6 +2149,7 @@ public class RunnerService
             conditionUpdates = ResetConditionsForRequeue(spec);
             activityOutcome = "requeue";
             activitySummary = "리뷰 결과 자동 재시도를 위해 스펙을 queued로 되돌렸다.";
+            activityTrigger = BuildReviewTriggeredBy(questions, GetMetadataString(spec.Metadata, "lastAnsweredAt"));
         }
 
         spec.Metadata["review"] = new Dictionary<string, object>
@@ -2208,7 +2212,8 @@ public class RunnerService
             statusFrom: previousStatus,
             statusTo: spec.Status,
             issues: BuildActivityIssues(decision.ReviewDisposition),
-            conditionUpdates: conditionUpdates);
+            conditionUpdates: conditionUpdates,
+            triggeredBy: activityTrigger);
     }
 
     private static List<SpecConditionUpdate> BuildConditionUpdatesForNeedsReview(SpecNode spec, string reason, string comment)
@@ -2289,6 +2294,84 @@ public class RunnerService
         }
 
         return lines.Count == 0 ? null : string.Join(" ", lines);
+    }
+
+    private static SpecActivityTrigger? BuildReviewTriggeredBy(
+        IReadOnlyCollection<SpecReviewQuestion> questions,
+        string? lastAnsweredAt)
+    {
+        if (string.IsNullOrWhiteSpace(lastAnsweredAt))
+        {
+            return null;
+        }
+
+        var triggeredQuestions = questions
+            .Where(question =>
+                !string.Equals(question.Status, "open", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(question.Answer)
+                && IsTriggeredByAnsweredAt(question.AnsweredAt, lastAnsweredAt))
+            .ToList();
+
+        if (triggeredQuestions.Count == 0)
+        {
+            return null;
+        }
+
+        var questionIds = triggeredQuestions
+            .Select(question => question.Id?.Trim())
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var eventIdQuestionPart = questionIds.Count > 0
+            ? string.Join("+", questionIds)
+            : "anonymous";
+
+        return new SpecActivityTrigger
+        {
+            Type = "user-question-answer",
+            EventId = $"review-input:{eventIdQuestionPart}:{lastAnsweredAt}",
+            QuestionIds = questionIds,
+            QuestionTexts = triggeredQuestions
+                .Select(question => question.Question?.Trim())
+                .Where(question => !string.IsNullOrWhiteSpace(question))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            Answers = triggeredQuestions
+                .Select(question => question.Answer?.Trim())
+                .Where(answer => !string.IsNullOrWhiteSpace(answer))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            AnsweredAt = lastAnsweredAt
+        };
+    }
+
+    private static bool IsTriggeredByAnsweredAt(string? answeredAt, string lastAnsweredAt)
+    {
+        if (string.IsNullOrWhiteSpace(answeredAt))
+        {
+            return false;
+        }
+
+        if (string.Equals(answeredAt, lastAnsweredAt, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!DateTime.TryParse(answeredAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var answeredAtUtc))
+        {
+            return false;
+        }
+
+        if (!DateTime.TryParse(lastAnsweredAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var lastAnsweredAtUtc))
+        {
+            return false;
+        }
+
+        return answeredAtUtc.ToUniversalTime() == lastAnsweredAtUtc.ToUniversalTime();
     }
 
     private static bool HasPersistedReviewResult(SpecNode? spec)

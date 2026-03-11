@@ -76,6 +76,15 @@ export interface SpecActivityStatusChange {
     to: string;
 }
 
+export interface SpecActivityTrigger {
+    type?: string;
+    eventId?: string;
+    questionIds?: string[];
+    questionTexts?: string[];
+    answers?: string[];
+    answeredAt?: string;
+}
+
 /** 스펙 Activity 항목 */
 export interface SpecActivityEntry {
     type?: string;
@@ -88,6 +97,7 @@ export interface SpecActivityEntry {
     comment?: string;
     relatedIds?: string[];
     statusChange?: SpecActivityStatusChange;
+    triggeredBy?: SpecActivityTrigger;
     outcome?: string;
     model?: string;
 }

@@ -95,6 +95,9 @@ function renderActivityEntry(entry: SpecActivityEntry): string {
     if (entry.statusChange?.from && entry.statusChange?.to) {
         metaItems.push(`상태 변경: ${entry.statusChange.from} → ${entry.statusChange.to}`);
     }
+    if (entry.triggeredBy?.type) {
+        metaItems.push(`트리거: ${entry.triggeredBy.type.replace(/[_-]+/g, ' ')}`);
+    }
     if (entry.outcome) {
         metaItems.push(`결과: ${entry.outcome}`);
     }
@@ -102,6 +105,7 @@ function renderActivityEntry(entry: SpecActivityEntry): string {
         metaItems.push(`모델: ${entry.model}`);
     }
     const relatedIdsHtml = renderRelatedIds(entry.relatedIds);
+    const triggerHtml = renderTriggeredBy(entry);
 
     return `
         <li class="activity-item">
@@ -112,6 +116,7 @@ function renderActivityEntry(entry: SpecActivityEntry): string {
             ${entry.summary ? `<div class="activity-summary">${esc(entry.summary)}</div>` : ''}
             ${entry.comment ? `<div class="activity-comment">${esc(entry.comment)}</div>` : ''}
             ${relatedIdsHtml}
+            ${triggerHtml}
             ${metaItems.length > 0 ? `<div class="activity-meta">${metaItems.map((item) => `<span class="activity-meta-item">${esc(item)}</span>`).join('')}</div>` : ''}
         </li>`;
 }
@@ -151,6 +156,42 @@ function renderRelatedIds(relatedIds: string[] | undefined): string {
         <div class="activity-related-links">
             <span class="activity-related-label">관련 스펙:</span>
             ${relatedIds.map((id) => `<a class="activity-related-link" data-focus-spec="${esc(id)}" href="#spec-${esc(id)}">${esc(id)}</a>`).join('')}
+        </div>`;
+}
+
+function renderTriggeredBy(entry: SpecActivityEntry): string {
+    const trigger = entry.triggeredBy;
+    if (!trigger) {
+        return '';
+    }
+
+    const details: string[] = [];
+    if (trigger.eventId) {
+        details.push(`<span class="activity-trigger-item">이벤트 ID: ${esc(trigger.eventId)}</span>`);
+    }
+    if (trigger.questionIds && trigger.questionIds.length > 0) {
+        details.push(`<span class="activity-trigger-item">질문 ID: ${esc(trigger.questionIds.join(', '))}</span>`);
+    }
+    if (trigger.answeredAt) {
+        details.push(`<span class="activity-trigger-item">응답 시각: ${esc(formatActivityTimestamp(trigger.answeredAt))}</span>`);
+    }
+
+    const questions = trigger.questionTexts && trigger.questionTexts.length > 0
+        ? `<div class="activity-trigger-text">질문: ${esc(trigger.questionTexts.join(' | '))}</div>`
+        : '';
+    const answers = trigger.answers && trigger.answers.length > 0
+        ? `<div class="activity-trigger-text">답변: ${esc(trigger.answers.join(' | '))}</div>`
+        : '';
+
+    if (details.length === 0 && !questions && !answers) {
+        return '';
+    }
+
+    return `
+        <div class="activity-trigger">
+            ${details.length > 0 ? `<div class="activity-trigger-meta">${details.join('')}</div>` : ''}
+            ${questions}
+            ${answers}
         </div>`;
 }
 

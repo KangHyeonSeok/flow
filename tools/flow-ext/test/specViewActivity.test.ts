@@ -57,6 +57,14 @@ test('F-001-C1/C2: activity section renders newest entries first with readable m
                 relatedIds: ['F-010', 'F-011'],
                 statusChange: { from: 'queued', to: 'working' },
                 outcome: 'handoff',
+                triggeredBy: {
+                    type: 'user-question-answer',
+                    eventId: 'review-input:F-001-Q1:2026-03-10T14:15:30.000Z',
+                    questionIds: ['F-001-Q1'],
+                    questionTexts: ['기본 배너를 노출할까요?'],
+                    answers: ['설정이 켜진 경우에만 노출합니다.'],
+                    answeredAt: '2026-03-10T14:15:30.000Z',
+                },
             } satisfies SpecActivityEntry,
         ],
     });
@@ -74,6 +82,10 @@ test('F-001-C1/C2: activity section renders newest entries first with readable m
     assert.match(html, /href="#spec-F-011"/);
     assert.match(html, /상태 변경: queued → working/);
     assert.match(html, /결과: handoff/);
+    assert.match(html, /트리거: user question answer/);
+    assert.match(html, /질문 ID: F-001-Q1/);
+    assert.match(html, /기본 배너를 노출할까요\?/);
+    assert.match(html, /설정이 켜진 경우에만 노출합니다\./);
 });
 
 test('F-001-C3: empty or partial activity stays safe without breaking rendering', () => {

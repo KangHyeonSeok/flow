@@ -155,6 +155,9 @@ public class SpecActivityEntry
     [JsonPropertyName("statusChange")]
     public SpecActivityStatusChange? StatusChange { get; set; }
 
+    [JsonPropertyName("triggeredBy")]
+    public SpecActivityTrigger? TriggeredBy { get; set; }
+
     [JsonPropertyName("kind")]
     public string? Kind { get; set; }
 
@@ -163,6 +166,27 @@ public class SpecActivityEntry
 
     [JsonPropertyName("outcome")]
     public string Outcome { get; set; } = "handoff";
+}
+
+public class SpecActivityTrigger
+{
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = "system";
+
+    [JsonPropertyName("eventId")]
+    public string? EventId { get; set; }
+
+    [JsonPropertyName("questionIds")]
+    public List<string> QuestionIds { get; set; } = new();
+
+    [JsonPropertyName("questionTexts")]
+    public List<string> QuestionTexts { get; set; } = new();
+
+    [JsonPropertyName("answers")]
+    public List<string> Answers { get; set; } = new();
+
+    [JsonPropertyName("answeredAt")]
+    public string? AnsweredAt { get; set; }
 }
 
 /// <summary>

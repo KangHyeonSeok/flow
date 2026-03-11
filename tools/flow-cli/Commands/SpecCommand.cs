@@ -626,7 +626,8 @@ public partial class FlowApp
         string statusFrom,
         string statusTo,
         List<string> issues,
-        List<SpecConditionUpdate> conditionUpdates)
+        List<SpecConditionUpdate> conditionUpdates,
+        SpecActivityTrigger? triggeredBy = null)
     {
         spec.Activity ??= new List<SpecActivityEntry>();
         spec.Activity.Add(new SpecActivityEntry
@@ -641,6 +642,7 @@ public partial class FlowApp
             Kind = kind,
             Issues = issues,
             ConditionUpdates = conditionUpdates,
+            TriggeredBy = triggeredBy,
             StatusChange = new SpecActivityStatusChange
             {
                 From = statusFrom,

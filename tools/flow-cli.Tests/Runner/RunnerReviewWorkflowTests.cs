@@ -191,7 +191,23 @@ public class RunnerReviewWorkflowTests
             Status = "needs-review",
             Metadata = new Dictionary<string, object>
             {
-                ["questionStatus"] = "waiting-user-input"
+                ["questionStatus"] = "waiting-user-input",
+                ["lastAnsweredAt"] = "2026-03-10T14:30:00Z",
+                ["questions"] = new object[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = "F-201-Q1",
+                        ["type"] = "user-decision",
+                        ["question"] = "배포 플래그를 기본 활성화할까요?",
+                        ["why"] = "재시도 구현 기준이 필요합니다.",
+                        ["status"] = "answered",
+                        ["answer"] = "기본은 비활성화합니다.",
+                        ["answeredAt"] = "2026-03-10T14:30:00Z",
+                        ["requestedAt"] = "2026-03-10T14:00:00Z",
+                        ["requestedBy"] = "runner-test"
+                    }
+                }
             }
         };
         var analysis = new SpecReviewAnalysis
@@ -212,6 +228,10 @@ public class RunnerReviewWorkflowTests
         spec.Metadata["reviewReason"].Should().Be("missing-evidence");
         spec.Activity.Should().ContainSingle();
         spec.Activity[0].Outcome.Should().Be("requeue");
+        spec.Activity[0].TriggeredBy.Should().NotBeNull();
+        spec.Activity[0].TriggeredBy!.EventId.Should().Be("review-input:F-201-Q1:2026-03-10T14:30:00Z");
+        spec.Activity[0].TriggeredBy.QuestionIds.Should().ContainSingle().Which.Should().Be("F-201-Q1");
+        spec.Activity[0].TriggeredBy.Answers.Should().ContainSingle().Which.Should().Be("기본은 비활성화합니다.");
     }
 
     [Fact]

@@ -180,6 +180,13 @@ public class SpecAppendReviewCommandTests : IDisposable
         activity.Outcome.Should().Be("requeue");
         activity.StatusChange!.From.Should().Be("needs-review");
         activity.StatusChange.To.Should().Be("queued");
+        activity.TriggeredBy.Should().NotBeNull();
+        activity.TriggeredBy!.Type.Should().Be("user-question-answer");
+        activity.TriggeredBy.EventId.Should().Be("review-input:F-305-Q1:2026-03-10T14:30:00Z");
+        activity.TriggeredBy.QuestionIds.Should().ContainSingle().Which.Should().Be("F-305-Q1");
+        activity.TriggeredBy.QuestionTexts.Should().ContainSingle().Which.Should().Be("배너를 항상 표시할까요?");
+        activity.TriggeredBy.Answers.Should().ContainSingle().Which.Should().Be("설정이 켜진 경우에만 표시합니다.");
+        activity.TriggeredBy.AnsweredAt.Should().Be("2026-03-10T14:30:00Z");
         activity.Comment.Should().Contain("배너를 항상 표시할까요?");
         activity.Comment.Should().Contain("설정이 켜진 경우에만 표시합니다.");
         activity.Comment.Should().Contain("2026-03-10T14:30:00Z");
