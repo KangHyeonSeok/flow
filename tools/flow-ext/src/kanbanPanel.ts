@@ -10,15 +10,74 @@ import { Spec, SpecStatus, STATUS_COLORS, isValidStatus, VALID_STATUSES } from '
 import { getSpecReviewState, getUserFeedbackState, UserQuestion } from './reviewState';
 import { saveQuestionAnswer } from './feedbackStore';
 
-const COLUMNS: { status: SpecStatus; label: string; icon: string }[] = [
-    { status: 'draft',             label: '초안',              icon: '○' },
-  { status: 'queued',            label: '대기중',            icon: '→' },
-  { status: 'working',           label: '작업중',            icon: '●' },
-  { status: 'needs-review',      label: '검토 대기',          icon: '⚠' },
-  { status: 'verified',          label: '검증 완료',          icon: '✔' },
-  { status: 'deprecated',        label: '폐기',              icon: '✕' },
-  { status: 'done',              label: '완료',              icon: '✔✔' },
+type BoardColumnKey = 'draft' | 'queued' | 'working' | 'test-validation' | 'review' | 'needs-review' | 'verified' | 'deprecated' | 'done';
+
+const BOARD_COLUMNS: { key: BoardColumnKey; label: string; icon: string; color: string }[] = [
+  { key: 'draft', label: '초안', icon: '○', color: STATUS_COLORS.draft },
+  { key: 'queued', label: '대기중', icon: '→', color: STATUS_COLORS.queued },
+  { key: 'working', label: '작업중', icon: '●', color: STATUS_COLORS.working },
+  { key: 'test-validation', label: '테스트 검증', icon: '🧪', color: '#1e88e5' },
+  { key: 'review', label: '리뷰', icon: '🔎', color: '#fb8c00' },
+  { key: 'needs-review', label: '검토대기', icon: '⚠', color: STATUS_COLORS['needs-review'] },
+  { key: 'verified', label: '검증 완료', icon: '✔', color: STATUS_COLORS.verified },
+  { key: 'deprecated', label: '폐기', icon: '✕', color: STATUS_COLORS.deprecated },
+  { key: 'done', label: '완료', icon: '✔✔', color: STATUS_COLORS.done },
 ];
+
+const STATUS_OPTION_LABELS: Record<SpecStatus, string> = {
+  draft: '초안',
+  queued: '대기중',
+  working: '작업중',
+  'needs-review': '검토대기',
+  verified: '검증 완료',
+  deprecated: '폐기',
+  done: '완료',
+};
+
+const STATUS_OPTIONS = VALID_STATUSES.map((status) => ({
+  status,
+  label: STATUS_OPTION_LABELS[status],
+}));
+
+function normalizeRunnerStage(rawStage: unknown): string {
+  const stage = typeof rawStage === 'string' ? rawStage.trim() : '';
+  if (!stage) {
+    return 'implementation';
+  }
+  if (stage === 'review-ready') {
+    return 'test-validation';
+  }
+
+  return stage;
+}
+
+function getBoardColumnKey(spec: Spec): BoardColumnKey {
+  if (spec.status !== 'working') {
+    return spec.status;
+  }
+
+  const stage = normalizeRunnerStage(spec.metadata?.runnerStage);
+  if (stage === 'test-validation') {
+    return 'test-validation';
+  }
+  if (stage === 'review') {
+    return 'review';
+  }
+
+  return 'working';
+}
+
+function getStageBadgeLabel(spec: Spec): string | null {
+  const column = getBoardColumnKey(spec);
+  if (column === 'test-validation') {
+    return '테스트 검증';
+  }
+  if (column === 'review') {
+    return '리뷰';
+  }
+
+  return null;
+}
 
 export class KanbanPanel {
     public static currentPanel: KanbanPanel | undefined;
@@ -244,10 +303,12 @@ export class KanbanPanel {
     // ─── HTML 생성 ───────────────────────────────────────────────────────────
 
     private getHtml(specs: Spec[]): string {
-        const byStatus: Record<SpecStatus, Spec[]> = {
+        const byColumn: Record<BoardColumnKey, Spec[]> = {
             'draft': [],
-          'queued': [],
-          'working': [],
+            'queued': [],
+            'working': [],
+            'test-validation': [],
+            'review': [],
             'needs-review': [],
             'verified': [],
             'deprecated': [],
@@ -255,33 +316,29 @@ export class KanbanPanel {
         };
 
         for (const spec of specs) {
-            const bucket = byStatus[spec.status];
+            const bucket = byColumn[getBoardColumnKey(spec)];
             if (bucket) { bucket.push(spec); }
         }
 
-        const columnsHtml = COLUMNS.map(col => {
-            const items = byStatus[col.status];
-            const color = STATUS_COLORS[col.status];
+        const columnsHtml = BOARD_COLUMNS.map(col => {
+            const items = byColumn[col.key];
+            const color = col.color;
             const cardsHtml = items.length === 0
                 ? '<div class="empty-col">스펙 없음</div>'
                 : items.map(s => this.renderCard(s)).join('');
 
             return /* html */`
-<div class="column" data-status="${col.status}">
+<div class="column" data-status="${col.key}">
   <div class="col-header" style="border-top: 3px solid ${color};">
     <span class="col-icon" style="color:${color};">${col.icon}</span>
     <span class="col-title">${col.label}</span>
     <span class="col-count">${items.length}</span>
   </div>
-  <div class="col-body" id="col-${col.status}">
+  <div class="col-body" id="col-${col.key}">
     ${cardsHtml}
   </div>
 </div>`;
         }).join('');
-
-        const statusOptions = COLUMNS.map(c =>
-            `<option value="${c.status}">${c.label}</option>`
-        ).join('');
 
         return /* html */`<!DOCTYPE html>
 <html lang="ko">
@@ -961,6 +1018,7 @@ function filterCards(query) {
         const color = STATUS_COLORS[spec.status];
         const review = getSpecReviewState(spec);
         const feedback = getUserFeedbackState(spec);
+        const stageBadgeLabel = getStageBadgeLabel(spec);
         // C6: 태그 목록 기본 렌더링에서 제거 — 다음 행동 결정 정보만 표시
         const date = spec.updatedAt ? spec.updatedAt.slice(0, 10) : '';
         const title = spec.title || spec.id;
@@ -994,11 +1052,14 @@ function filterCards(query) {
         const reviewNote = (feedback.openQuestionCount > 0 || review.requiresManualVerification || review.autoVerifyEligible) && spec.status !== 'verified'
           ? `<div class="review-note">${this.esc(review.statusSummary)}</div>`
           : '';
+        const stageBadge = stageBadgeLabel
+          ? `<div class="review-badge">${this.esc(stageBadgeLabel)}</div>`
+          : '';
         // 질문이 정확히 1건일 때만 카드 내 인라인 표시. 여러 건이면 상세 패널에서만 표시.
         const inlineQuestion = feedback.openQuestionCount === 1 ? feedback.openQuestions[0] : undefined;
         const questionBox = inlineQuestion ? this.renderQuestionBox(inlineQuestion, feedback.openQuestionCount) : '';
 
-        const statusOptions = COLUMNS.map(c =>
+        const statusOptions = STATUS_OPTIONS.map(c =>
             `<option value="${c.status}"${c.status === spec.status ? ' selected' : ''}>${c.label}</option>`
         ).join('');
 
@@ -1030,6 +1091,7 @@ function filterCards(query) {
   ${openQuestionInfo}
   <div class="card-title">${this.esc(title)}</div>
   ${progressHtml}
+  ${stageBadge}
   ${reviewBadge}
   ${reviewNote}
   ${questionBox}

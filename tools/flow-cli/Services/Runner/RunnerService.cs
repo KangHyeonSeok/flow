@@ -15,6 +15,10 @@ namespace FlowCLI.Services.Runner;
 /// </summary>
 public class RunnerService
 {
+    private const string ImplementationStage = "implementation";
+    private const string TestValidationStage = "test-validation";
+    private const string ReviewStage = "review";
+
     private readonly string _projectRoot;
     private readonly string _flowRoot;
     private readonly RunnerConfig _config;
@@ -41,6 +45,7 @@ public class RunnerService
         "runnerProcessId", "retryNotBefore", "lastErrorType",
         "selectionReason", "lastCompletedAt", "lastCompletedBy",
         "lastReviewAt", "lastReviewBy", "worktreePath", "worktreeBranch",
+        "runnerStage",
         "review", "reviewDisposition", "plannerState", "questionStatus",
         "lastError", "lastErrorAt", "lastVerifiedAt", "lastVerifiedBy",
         "verificationSource", "lastAnsweredAt",
@@ -138,15 +143,31 @@ public class RunnerService
     public RunnerQueuePlan GetQueuePlan()
     {
         var selection = EvaluateTargetSpecs(updateSelectionMetadata: false, logSelection: false);
+        var stagedSpecs = FindSequentialStageSpecs()
+            .Select(spec => new RunnerStageSpec
+            {
+                SpecId = spec.Id,
+                Title = spec.Title,
+                Status = spec.Status,
+                Stage = NormalizeRunnerStage(GetMetadataString(spec.Metadata, "runnerStage")),
+                LastCompletedAt = GetMetadataString(spec.Metadata, "lastCompletedAt"),
+                WorktreePath = GetMetadataString(spec.Metadata, "worktreePath")
+            })
+            .ToList();
+
         return new RunnerQueuePlan
         {
             TargetStatuses = _config.TargetStatuses,
             TotalCandidates = selection.ReadySpecs.Count + selection.BlockedSpecs.Count,
             ReadyCount = selection.ReadySpecs.Count,
             BlockedCount = selection.BlockedSpecs.Count,
+            StagedCount = stagedSpecs.Count,
+            ReviewReadyCount = stagedSpecs.Count,
             NextSpecId = selection.ReadySpecs.FirstOrDefault()?.SpecId,
             ReadySpecs = selection.ReadySpecs,
-            BlockedSpecs = selection.BlockedSpecs
+            BlockedSpecs = selection.BlockedSpecs,
+            StagedSpecs = stagedSpecs,
+            ReviewReadySpecs = stagedSpecs
         };
     }
 
@@ -166,21 +187,48 @@ public class RunnerService
         var brokenRepaired = await RepairBrokenSpecsAsync();
         results.AddRange(brokenRepaired);
 
+        // 1.6. needs-review 상태의 자동 확정 후보를 먼저 처리한다.
+        var autoVerified = await AutoVerifyReviewedSpecsAsync();
+        results.AddRange(autoVerified);
+
+        // 1.7. 이전 사이클에서 구현 완료된 staged 작업은 구현 배치와 분리된 stage로 처리한다.
+        // 현재 사이클에서 막 구현된 스펙은 다음 poll/reschedule에서 후속 검증으로 넘겨 개발 단계 throughput을 우선한다.
+        var stagedSpecs = FindSequentialStageSpecs()
+            .Take(_config.MaxConcurrentSpecs)
+            .ToList();
+
         // 2. 구현 대상 스펙 탐색
         var targets = FindTargetSpecs();
-        if (targets.Count == 0)
+        if (targets.Count == 0 && stagedSpecs.Count == 0)
         {
             _log.Info("scan", "구현 대상 스펙 없음");
             return results;
         }
 
-        _log.Info("scan", $"구현 대상 스펙 {targets.Count}개 발견: {string.Join(", ", targets.Select(s => s.Id))}");
+        if (targets.Count > 0)
+        {
+            _log.Info("scan", $"구현 대상 스펙 {targets.Count}개 발견: {string.Join(", ", targets.Select(s => s.Id))}");
+        }
+
+        if (stagedSpecs.Count > 0)
+        {
+            var stagedLabels = stagedSpecs
+                .Select(s => $"{s.Id}({NormalizeRunnerStage(GetMetadataString(s.Metadata, "runnerStage"))})");
+            _log.Info("review-stage", $"후속 검증/리뷰 스펙 {stagedSpecs.Count}개 발견: {string.Join(", ", stagedLabels)}");
+        }
 
         // 3. 각 스펙 처리 (maxConcurrent 만큼)
         var batch = targets.Take(_config.MaxConcurrentSpecs).ToList();
         foreach (var spec in batch)
         {
             var result = await ProcessSpecAsync(spec);
+            results.Add(result);
+        }
+
+        // 4. test-validation/review stage 처리
+        foreach (var spec in stagedSpecs)
+        {
+            var result = await ProcessSequentialStageSpecAsync(spec);
             results.Add(result);
         }
 
@@ -302,22 +350,33 @@ public class RunnerService
     {
         var results = new List<SpecWorkResult>();
 
+        var stagedSpecs = FindSequentialStageSpecs()
+            .Take(_config.MaxConcurrentSpecs)
+            .ToList();
+
         // C2: 최신 스펙 그래프 기반 후보 탐색 (stale 캐시/이전 선택 결과 재사용 금지)
         var targets = FindTargetSpecs();
-        if (targets.Count == 0)
+        if (targets.Count == 0 && stagedSpecs.Count == 0)
         {
             // C4: 후보 없음 사유를 선택 메타데이터에 기록
             LogNoRescheduleCandidates();
             return results;
         }
 
-        _log.Info("reschedule", $"즉시 재스케줄 후보 {targets.Count}개 발견 — 처리 시작");
+        _log.Info("reschedule", $"즉시 재스케줄 후보 구현 {targets.Count}개 / staged {stagedSpecs.Count}개 발견 — 처리 시작");
 
         var batch = targets.Take(_config.MaxConcurrentSpecs).ToList();
         foreach (var spec in batch)
         {
             if (_cts?.Token.IsCancellationRequested == true) break;
             var result = await ProcessSpecAsync(spec);
+            results.Add(result);
+        }
+
+        foreach (var spec in stagedSpecs)
+        {
+            if (_cts?.Token.IsCancellationRequested == true) break;
+            var result = await ProcessSequentialStageSpecAsync(spec);
             results.Add(result);
         }
 
@@ -502,26 +561,15 @@ public class RunnerService
                 return FinalizeResult(result);
             }
 
-            // 6. 성공 → 한 사이클 내 sequential validation/tester 수행
+            // 6. 성공 → test-validation stage로 handoff하고 다음 구현 사이클로 넘긴다.
             spec = _specStore.Get(spec.Id) ?? spec;
-            await PrepareSpecForSequentialReviewAsync(spec, worktreePath, branchName);
-            var finalizedSpec = await RunSequentialValidationAsync(spec, worktreePath, branchName, result);
-            if (finalizedSpec == null)
-            {
-                return FinalizeResult(result);
-            }
+            await PrepareSpecForSequentialValidationAsync(spec, worktreePath, branchName);
 
             // 7. 프로젝트 변경사항 push
             await _git.PushAsync(_config.RemoteName, _config.MainBranch);
 
-            result.Success = !string.Equals(finalizedSpec.Status, "queued", StringComparison.OrdinalIgnoreCase);
-            result.Action = finalizedSpec.Status switch
-            {
-                "verified" => "verify",
-                "done" => "done",
-                "needs-review" => "needs-review",
-                _ => "requeue"
-            };
+            result.Success = true;
+            result.Action = "handoff-review";
             result.TriggeredReschedule = true;
             return FinalizeResult(result);
         }
@@ -563,6 +611,15 @@ public class RunnerService
             .Cast<SpecNode>()
             .ToList();
     }
+
+    private List<SpecNode> FindSequentialStageSpecs()
+        => _specStore.GetAll()
+            .Where(spec => string.Equals(spec.Status, "working", StringComparison.OrdinalIgnoreCase))
+            .Where(spec => !string.Equals(NormalizeRunnerStage(GetMetadataString(spec.Metadata, "runnerStage")), ImplementationStage, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(spec => GetRunnerStageOrder(NormalizeRunnerStage(GetMetadataString(spec.Metadata, "runnerStage"))))
+            .ThenBy(spec => ParseIsoDate(GetMetadataString(spec.Metadata, "lastCompletedAt")) ?? DateTime.MaxValue)
+            .ThenBy(spec => spec.Id)
+            .ToList();
 
     private RunnerQueuePlan EvaluateTargetSpecs(bool updateSelectionMetadata, bool logSelection)
     {
@@ -749,6 +806,7 @@ public class RunnerService
         spec.Metadata["runnerInstanceId"] = _instanceId;
         spec.Metadata["runnerProcessId"] = Environment.ProcessId;
         spec.Metadata["runnerStartedAt"] = DateTime.UtcNow.ToString("o");
+        spec.Metadata["runnerStage"] = ImplementationStage;
         spec.Metadata.Remove("retryNotBefore");
         spec.Metadata.Remove("lastErrorType");
         spec.Metadata["implementationPlan"] = new
@@ -771,13 +829,14 @@ public class RunnerService
     }
 
     /// <summary>
-    /// 구현 완료 메타데이터를 기록하고 sequential review 입력을 준비한다.
+    /// 구현 완료 메타데이터를 기록하고 test-validation 입력을 준비한다.
     /// </summary>
-    private async Task PrepareSpecForSequentialReviewAsync(SpecNode spec, string? worktreePath = null, string? worktreeBranch = null)
+    private async Task PrepareSpecForSequentialValidationAsync(SpecNode spec, string? worktreePath = null, string? worktreeBranch = null)
     {
         spec.Metadata ??= new Dictionary<string, object>();
         spec.Metadata["lastCompletedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastCompletedBy"] = _instanceId;
+        spec.Metadata["runnerStage"] = TestValidationStage;
         spec.Metadata.Remove("lastError");
         spec.Metadata.Remove("lastErrorAt");
         spec.Metadata.Remove("lastErrorType");
@@ -794,7 +853,7 @@ public class RunnerService
 
         AppendActivity(spec,
             role: "developer",
-            summary: $"구현 단계를 완료하고 검증 단계로 전달한다.",
+            summary: $"구현 단계를 완료하고 test-validation stage로 전달한다.",
             outcome: "handoff",
             kind: "implementation",
             actor: _instanceId,
@@ -828,6 +887,7 @@ public class RunnerService
         spec.Metadata["runnerInstanceId"] = _instanceId;
         spec.Metadata.Remove("runnerProcessId");
         spec.Metadata["reviewDisposition"] = reviewDisposition;
+        spec.Metadata.Remove("runnerStage");
         if (!string.IsNullOrWhiteSpace(reviewReason))
         {
             spec.Metadata["reviewReason"] = reviewReason;
@@ -886,6 +946,7 @@ public class RunnerService
         var prevStatus = spec.Status;
         spec.Status = "needs-review";
         spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata.Remove("runnerStage");
         spec.Metadata.Remove("lastVerifiedAt");
         spec.Metadata.Remove("lastVerifiedBy");
         spec.Metadata.Remove("verificationSource");
@@ -922,6 +983,7 @@ public class RunnerService
         var prevStatus = spec.Status;
         spec.Status = "verified";
         spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata.Remove("runnerStage");
         spec.Metadata["lastVerifiedAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastVerifiedBy"] = _instanceId;
         spec.Metadata["verificationSource"] = verificationSource;
@@ -949,6 +1011,7 @@ public class RunnerService
     {
         spec.Status = "done";
         spec.Metadata ??= new Dictionary<string, object>();
+        spec.Metadata.Remove("runnerStage");
         spec.Metadata["lastDoneAt"] = DateTime.UtcNow.ToString("o");
         spec.Metadata["lastDoneBy"] = _instanceId;
         spec.Metadata.Remove("lastError");
@@ -1061,6 +1124,140 @@ public class RunnerService
             "tester",
             "verification");
         return reviewedSpec;
+    }
+
+    private async Task<SpecWorkResult> ProcessSequentialStageSpecAsync(SpecNode spec)
+    {
+        var stage = NormalizeRunnerStage(GetMetadataString(spec.Metadata, "runnerStage"));
+        return string.Equals(stage, ReviewStage, StringComparison.OrdinalIgnoreCase)
+            ? await ProcessReviewStageSpecAsync(spec)
+            : await ProcessTestValidationStageSpecAsync(spec);
+    }
+
+    private async Task<SpecWorkResult> ProcessTestValidationStageSpecAsync(SpecNode spec)
+    {
+        var result = new SpecWorkResult
+        {
+            SpecId = spec.Id,
+            StartedAt = DateTime.UtcNow.ToString("o"),
+            Action = "test-validation"
+        };
+
+        try
+        {
+            var worktreePath = GetMetadataString(spec.Metadata, "worktreePath") ?? _git.GetWorktreePath(spec.Id);
+            var branchName = GetMetadataString(spec.Metadata, "worktreeBranch") ?? _git.GetBranchName(spec.Id);
+
+            if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            {
+                result.Success = false;
+                result.ErrorMessage = "test-validation stage에서 worktree를 찾지 못해 자동 재시도 대기열로 되돌립니다.";
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, null, null, "execution-crash", "execution-crash", "system", "validation",
+                    GetRetryNotBefore("execution-crash"), "execution-crash");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
+                return FinalizeResult(result);
+            }
+
+            spec.Metadata ??= new Dictionary<string, object>();
+            spec.Metadata["runnerStage"] = ReviewStage;
+            spec.Metadata["lastValidatedAt"] = DateTime.UtcNow.ToString("o");
+            AppendActivity(spec,
+                role: "tester",
+                summary: "test-validation 단계를 마치고 review stage로 전달한다.",
+                outcome: "handoff",
+                kind: "verification",
+                actor: _instanceId,
+                model: "gpt-5-mini");
+            _specStore.Update(spec);
+
+            result.Success = true;
+            result.Action = "handoff-review";
+            result.TriggeredReschedule = false;
+            return FinalizeResult(result);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("test-validation", $"test-validation 처리 중 예외: {ex.Message}", spec.Id);
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            MarkSpecQueuedForRetry(spec, ex.Message,
+                GetMetadataString(spec.Metadata, "worktreePath"),
+                GetMetadataString(spec.Metadata, "worktreeBranch"),
+                "execution-crash",
+                "execution-crash",
+                "system",
+                "validation",
+                GetRetryNotBefore("execution-crash"),
+                "execution-crash");
+            result.Action = "requeue";
+            result.TriggeredReschedule = true;
+            return FinalizeResult(result);
+        }
+    }
+
+    private async Task<SpecWorkResult> ProcessReviewStageSpecAsync(SpecNode spec)
+    {
+        var result = new SpecWorkResult
+        {
+            SpecId = spec.Id,
+            StartedAt = DateTime.UtcNow.ToString("o"),
+            Action = "review"
+        };
+
+        try
+        {
+            var worktreePath = GetMetadataString(spec.Metadata, "worktreePath") ?? _git.GetWorktreePath(spec.Id);
+            var branchName = GetMetadataString(spec.Metadata, "worktreeBranch") ?? _git.GetBranchName(spec.Id);
+
+            if (string.IsNullOrWhiteSpace(worktreePath) || !Directory.Exists(worktreePath))
+            {
+                result.Success = false;
+                result.ErrorMessage = "review stage worktree가 없어 자동 재시도 대기열로 되돌립니다.";
+                MarkSpecQueuedForRetry(spec, result.ErrorMessage, null, null, "execution-crash", "execution-crash", "system", "validation",
+                    GetRetryNotBefore("execution-crash"), "execution-crash");
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
+                return FinalizeResult(result);
+            }
+
+            var finalizedSpec = await RunSequentialValidationAsync(spec, worktreePath, branchName, result);
+            if (finalizedSpec == null)
+            {
+                result.Action = "requeue";
+                result.TriggeredReschedule = true;
+                return FinalizeResult(result);
+            }
+
+            result.Success = !string.Equals(finalizedSpec.Status, "queued", StringComparison.OrdinalIgnoreCase);
+            result.Action = finalizedSpec.Status switch
+            {
+                "verified" => "verify",
+                "done" => "done",
+                "needs-review" => "needs-review",
+                _ => "requeue"
+            };
+            result.TriggeredReschedule = true;
+            return FinalizeResult(result);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("review-stage", $"review stage 처리 중 예외: {ex.Message}", spec.Id);
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            MarkSpecQueuedForRetry(spec, ex.Message,
+                GetMetadataString(spec.Metadata, "worktreePath"),
+                GetMetadataString(spec.Metadata, "worktreeBranch"),
+                "execution-crash",
+                "execution-crash",
+                "system",
+                "validation",
+                GetRetryNotBefore("execution-crash"),
+                "execution-crash");
+            result.Action = "requeue";
+            result.TriggeredReschedule = true;
+            return FinalizeResult(result);
+        }
     }
 
     private async Task<List<SpecWorkResult>> AutoVerifyReviewedSpecsAsync()
@@ -1443,6 +1640,22 @@ public class RunnerService
 
         return value.ToString();
     }
+
+    private static string NormalizeRunnerStage(string? stage)
+        => stage?.Trim() switch
+        {
+            null or "" => ImplementationStage,
+            "review-ready" => TestValidationStage,
+            _ => stage.Trim()
+        };
+
+    private static int GetRunnerStageOrder(string stage)
+        => NormalizeRunnerStage(stage) switch
+        {
+            TestValidationStage => 0,
+            ReviewStage => 1,
+            _ => 2
+        };
 
     private static List<string> BuildActivityIssues(string disposition)
         => disposition switch

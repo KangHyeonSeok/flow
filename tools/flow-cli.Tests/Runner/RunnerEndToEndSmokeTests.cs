@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using FlowCLI.Services.Runner;
 using FlowCLI.Services.SpecGraph;
 using FluentAssertions;
@@ -59,14 +60,38 @@ public class RunnerEndToEndSmokeTests : IDisposable
     public async Task RunDaemon_WithFakeCopilot_RequeuesWhenReviewMarksAutoTestFailed()
     {
         const string specId = "F-901";
-        var result = await RunScenarioAsync(
-            specId,
-            "test-failed",
-            spec => string.Equals(spec?.Status, "queued", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(GetMetadataString(spec, "reviewDisposition"), "test-failed", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(GetMetadataString(spec, "lastReviewBy"), "fake-copilot", StringComparison.OrdinalIgnoreCase));
+        await InitializeGitRepoAsync(_tempDir);
+        File.WriteAllText(Path.Combine(_tempDir, "runner-scenario.txt"), "test-failed");
+        WriteFakeCopilotScript(_tempDir);
 
-        var spec = result.Spec;
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(CreateFeatureSpec(specId));
+        await CommitAllAsync(_tempDir, "seed spec");
+
+        var runner = new RunnerService(_tempDir, new RunnerConfig
+        {
+            MaxConcurrentSpecs = 1,
+            CopilotCliPath = Path.Combine(_tempDir, "fake-copilot.ps1"),
+            MainBranch = "main",
+            RemoteName = "origin"
+        });
+
+        var firstCycle = await runner.RunOnceAsync();
+        firstCycle.Should().ContainSingle();
+        firstCycle[0].Action.Should().Be("handoff-review");
+
+        var secondCycle = await runner.RunOnceAsync();
+        secondCycle.Should().ContainSingle();
+        secondCycle[0].Action.Should().Be("handoff-review");
+
+        var thirdCycle = await runner.RunOnceAsync();
+        thirdCycle.Should().ContainSingle();
+        thirdCycle[0].Action.Should().Be("requeue");
+
+        var spec = store.Get(specId);
+        spec.Should().NotBeNull();
+        spec = spec!;
         spec.Status.Should().Be("queued");
         spec.Metadata.Should().NotBeNull();
         spec.Metadata!["reviewDisposition"].ToString().Should().Be("test-failed");
@@ -79,10 +104,6 @@ public class RunnerEndToEndSmokeTests : IDisposable
         condition.Tests.Should().ContainSingle();
         condition.Tests[0].Status.Should().Be("failed");
         condition.Evidence.Should().ContainSingle(evidence => evidence.Type == "test-result");
-
-        result.ObservedStatuses.Should().Contain("working");
-        result.ObservedStatuses.Should().Contain("queued");
-        result.ObservedStatuses.Should().NotContain("verified");
     }
 
     [Fact]
@@ -164,6 +185,86 @@ public class RunnerEndToEndSmokeTests : IDisposable
         result.ObservedStatuses.Should().Contain("queued");
     }
 
+    [Fact]
+    public async Task RunOnce_StagesReviewSoNextImplementationRunsBeforePreviousReview()
+    {
+        await InitializeGitRepoAsync(_tempDir);
+        File.WriteAllText(Path.Combine(_tempDir, "runner-scenario.txt"), "verified");
+        WriteFakeCopilotScript(_tempDir);
+
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+        store.Create(CreateFeatureSpec("F-910"));
+        store.Create(CreateFeatureSpec("F-911"));
+
+        await CommitAllAsync(_tempDir, "seed specs");
+
+        var runner = new RunnerService(_tempDir, new RunnerConfig
+        {
+            MaxConcurrentSpecs = 1,
+            CopilotCliPath = Path.Combine(_tempDir, "fake-copilot.ps1"),
+            MainBranch = "main",
+            RemoteName = "origin"
+        });
+
+        var firstCycle = await runner.RunOnceAsync();
+        firstCycle.Should().ContainSingle();
+        firstCycle[0].SpecId.Should().Be("F-910");
+        firstCycle[0].Action.Should().Be("handoff-review");
+
+        var firstSpecAfterCycle1 = store.Get("F-910");
+        var secondSpecAfterCycle1 = store.Get("F-911");
+        firstSpecAfterCycle1.Should().NotBeNull();
+        secondSpecAfterCycle1.Should().NotBeNull();
+        firstSpecAfterCycle1!.Status.Should().Be("working");
+        firstSpecAfterCycle1.Metadata!["runnerStage"].ToString().Should().Be("test-validation");
+        secondSpecAfterCycle1!.Status.Should().Be("queued");
+
+        var secondCycle = await runner.RunOnceAsync();
+        secondCycle.Should().HaveCount(2);
+        secondCycle[0].SpecId.Should().Be("F-911");
+        secondCycle[0].Action.Should().Be("handoff-review");
+        secondCycle[1].SpecId.Should().Be("F-910");
+        secondCycle[1].Action.Should().Be("handoff-review");
+
+        store.Get("F-910")!.Status.Should().Be("working");
+        store.Get("F-910")!.Metadata!["runnerStage"].ToString().Should().Be("review");
+        store.Get("F-911")!.Status.Should().Be("working");
+        store.Get("F-911")!.Metadata!["runnerStage"].ToString().Should().Be("test-validation");
+
+        var thirdCycle = await runner.RunOnceAsync();
+        thirdCycle.Should().ContainSingle();
+        thirdCycle[0].SpecId.Should().Be("F-911");
+        thirdCycle[0].Action.Should().Be("handoff-review");
+
+        var fourthCycle = await runner.RunOnceAsync();
+        fourthCycle.Should().ContainSingle();
+        fourthCycle[0].SpecId.Should().Be("F-910");
+        fourthCycle[0].Action.Should().Be("verify");
+
+        store.Get("F-910")!.Status.Should().Be("verified");
+        store.Get("F-911")!.Status.Should().Be("working");
+        store.Get("F-911")!.Metadata!["runnerStage"].ToString().Should().Be("review");
+    }
+
+    private static SpecNode CreateFeatureSpec(string specId) => new()
+    {
+        Id = specId,
+        Title = $"Runner smoke {specId}",
+        Description = $"runner smoke test for {specId}",
+        Status = "queued",
+        NodeType = "feature",
+        Conditions =
+        [
+            new SpecCondition
+            {
+                Id = $"{specId}-C1",
+                Description = $"condition for {specId}",
+                Status = "draft"
+            }
+        ]
+    };
+
     private async Task<ScenarioResult> RunScenarioAsync(string specId, string scenario, Func<SpecNode?, bool> completionPredicate)
     {
         await InitializeGitRepoAsync(_tempDir);
@@ -194,7 +295,7 @@ public class RunnerEndToEndSmokeTests : IDisposable
 
         var config = new RunnerConfig
         {
-            PollIntervalMinutes = 1,
+            PollIntervalMinutes = 0,
             ReviewPollIntervalSeconds = 1,
             MaxConcurrentSpecs = 1,
             CopilotCliPath = Path.Combine(_tempDir, "fake-copilot.ps1"),
@@ -227,7 +328,17 @@ public class RunnerEndToEndSmokeTests : IDisposable
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            var spec = store.Get(specId);
+            SpecNode? spec;
+            try
+            {
+                spec = store.Get(specId);
+            }
+            catch (JsonException)
+            {
+                await Task.Delay(50, cancellationToken);
+                continue;
+            }
+
             var currentStatus = spec?.Status;
 
             if (!string.IsNullOrWhiteSpace(currentStatus) && !string.Equals(currentStatus, lastStatus, StringComparison.OrdinalIgnoreCase))
@@ -370,6 +481,13 @@ if ($cwd -like '*.flow\worktrees\*') {
 Start-Sleep -Milliseconds 400
 
 $projectName = Split-Path $cwd -Leaf
+$specId = $null
+if ($p) {
+    $specIdMatch = [regex]::Match($p, '"id"\s*:\s*"([^"]+)"')
+    if ($specIdMatch.Success) {
+        $specId = $specIdMatch.Groups[1].Value
+    }
+}
 $candidateSpecDirs = @(
     (Join-Path (Join-Path $HOME '.flow') (Join-Path $projectName 'specs')),
     (Join-Path $cwd 'docs\\specs')
@@ -379,6 +497,14 @@ $specPath = $null
 foreach ($candidateDir in $candidateSpecDirs) {
     if (-not (Test-Path $candidateDir)) {
         continue
+    }
+
+    if ($specId) {
+        $candidatePath = Join-Path $candidateDir ("{0}.json" -f $specId)
+        if (Test-Path $candidatePath) {
+            $specPath = $candidatePath
+            break
+        }
     }
 
     $specPath = Get-ChildItem -Path $candidateDir -Filter '*.json' |

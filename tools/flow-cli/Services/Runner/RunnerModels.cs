@@ -66,9 +66,13 @@ public sealed class RunnerQueuePlan
     public int TotalCandidates { get; init; }
     public int ReadyCount { get; init; }
     public int BlockedCount { get; init; }
+    public int StagedCount { get; init; }
+    public int ReviewReadyCount { get; init; }
     public string? NextSpecId { get; init; }
     public List<RunnerQueueCandidate> ReadySpecs { get; init; } = [];
     public List<RunnerBlockedSpec> BlockedSpecs { get; init; } = [];
+    public List<RunnerStageSpec> StagedSpecs { get; init; } = [];
+    public List<RunnerStageSpec> ReviewReadySpecs { get; init; } = [];
 }
 
 public sealed class RunnerQueueCandidate
@@ -92,6 +96,16 @@ public sealed class RunnerBlockedSpec
     public string[] UnmetDependencies { get; init; } = [];
     public int OpenQuestionCount { get; init; }
     public string? RetryNotBefore { get; init; }
+}
+
+public sealed class RunnerStageSpec
+{
+    public string SpecId { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string Stage { get; init; } = "";
+    public string? LastCompletedAt { get; init; }
+    public string? WorktreePath { get; init; }
 }
 
 /// <summary>

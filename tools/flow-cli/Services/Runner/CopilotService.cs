@@ -290,18 +290,23 @@ public class CopilotService
 5. 최종 응답은 완료 메시지 한 줄만 출력합니다.
 
 검토 목적:
-- verified가 아닌 condition이 이미 충족되었는지 판단
+- verified가 아닌 condition이 이미 충족되었는지 최대한 적극적으로 판단
+- 테스트/로그/evidence/codeRefs만으로 결론 가능한 항목은 질문하지 말고 바로 판정
 - 실패/재작업 이유 요약, 대안 제안, 다음 시도 제안
-- 사용자 판단이 필요한지 식별
+- 정말 사용자 판단이 필요한지 마지막에만 식별
 
 condition 판정:
-- 충족이 확인된 condition ID를 `verifiedConditionIds`에 추가 (확신 없으면 넣지 마세요)
+- 각 미검증 condition마다 먼저 codeRefs/tests/evidence/metadata를 확인해 충족 여부를 판정하세요
+- 충족이 확인된 condition ID를 `verifiedConditionIds`에 추가하세요
+- 근거가 부족하지만 개발자가 추가 확인 가능하면 사용자 질문 대신 `failureReasons` 또는 `additionalInformationRequests`로 남기세요
 - `verifiedConditionIds`의 condition은 코드 수정 없이 verified 처리됩니다
 
 질문 생성:
+- 기본값은 `questions`를 비우는 것입니다
 - 사용자 결정이 필요한 항목만 `questions`에 넣으세요
-- 구현 전에 개발자가 확인하거나 재현할 수 있는 항목은 `additionalInformationRequests`에 넣으세요
+- 개발자나 reviewer가 재현/확인 가능한 항목은 절대 사용자 질문으로 만들지 말고 `additionalInformationRequests`에 넣으세요
 - 내부 디버깅 정보는 사용자 질문으로 만들지 말고 failureReasons/suggestedAttempts 또는 additionalInformationRequests에 남기세요
+- 질문이 필요하다면 1건만 남기고, 왜 사용자의 답 없이는 판정할 수 없는지 `why`에 구체적으로 쓰세요
 
 review JSON 스키마:
 {{

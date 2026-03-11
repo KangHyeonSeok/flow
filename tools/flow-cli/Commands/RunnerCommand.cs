@@ -254,6 +254,8 @@ public partial class FlowApp
                 totalCandidates = plan.TotalCandidates,
                 readyCount = plan.ReadyCount,
                 blockedCount = plan.BlockedCount,
+                stagedCount = plan.StagedCount,
+                reviewReadyCount = plan.ReviewReadyCount,
                 nextSpecId = plan.NextSpecId,
                 readySpecs = plan.ReadySpecs.Select(spec => new
                 {
@@ -273,7 +275,26 @@ public partial class FlowApp
                     status = spec.Status,
                     reason = spec.Reason,
                     unmetDependencies = spec.UnmetDependencies,
-                    openQuestionCount = spec.OpenQuestionCount
+                    openQuestionCount = spec.OpenQuestionCount,
+                    retryNotBefore = spec.RetryNotBefore
+                }),
+                stagedSpecs = plan.StagedSpecs.Select(spec => new
+                {
+                    specId = spec.SpecId,
+                    title = spec.Title,
+                    status = spec.Status,
+                    stage = spec.Stage,
+                    lastCompletedAt = spec.LastCompletedAt,
+                    worktreePath = spec.WorktreePath
+                }),
+                reviewReadySpecs = plan.ReviewReadySpecs.Select(spec => new
+                {
+                    specId = spec.SpecId,
+                    title = spec.Title,
+                    status = spec.Status,
+                    stage = spec.Stage,
+                    lastCompletedAt = spec.LastCompletedAt,
+                    worktreePath = spec.WorktreePath
                 })
             }, plan.NextSpecId == null
                 ? "Runner 후보 없음"

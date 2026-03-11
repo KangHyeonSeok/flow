@@ -90,6 +90,8 @@ public class RunnerPlanCommandTests : IDisposable
         data.GetProperty("next_spec_id").GetString().Should().Be("F-005");
         data.GetProperty("ready_count").GetInt32().Should().Be(1);
         data.GetProperty("blocked_count").GetInt32().Should().Be(2);
+        data.GetProperty("staged_count").GetInt32().Should().Be(0);
+        data.GetProperty("review_ready_count").GetInt32().Should().Be(0);
 
         var readySpecs = data.GetProperty("ready_specs");
         readySpecs.GetArrayLength().Should().Be(1);
@@ -132,14 +134,73 @@ public class RunnerPlanCommandTests : IDisposable
 
         using var json = JsonDocument.Parse(ReadCapturedOutput());
         var data = json.RootElement.GetProperty("data");
-        data.GetProperty("next_spec_id").ValueKind.Should().Be(JsonValueKind.Null);
-        data.GetProperty("ready_count").GetInt32().Should().Be(0);
-        data.GetProperty("blocked_count").GetInt32().Should().Be(1);
+        data.TryGetProperty("review_ready_count", out var reviewReadyCount).Should().BeTrue();
+        data.TryGetProperty("staged_count", out var stagedCount).Should().BeTrue();
+        data.TryGetProperty("ready_count", out var readyCount).Should().BeTrue();
+        data.TryGetProperty("blocked_count", out var blockedCount).Should().BeTrue();
+        if (data.TryGetProperty("next_spec_id", out var nextSpecId))
+        {
+            nextSpecId.ValueKind.Should().Be(JsonValueKind.Null);
+        }
+        readyCount.GetInt32().Should().Be(0);
+        blockedCount.GetInt32().Should().Be(1);
+        stagedCount.GetInt32().Should().Be(0);
+        reviewReadyCount.GetInt32().Should().Be(0);
 
-        var blockedSpec = data.GetProperty("blocked_specs")[0];
-        blockedSpec.GetProperty("spec_id").GetString().Should().Be("F-010");
-        blockedSpec.GetProperty("reason").GetString().Should().Be("retry-cooldown");
-        blockedSpec.GetProperty("retry_not_before").GetString().Should().NotBeNullOrWhiteSpace();
+        data.TryGetProperty("blocked_specs", out var blockedSpecs).Should().BeTrue();
+        blockedSpecs.GetArrayLength().Should().Be(1);
+
+        var blockedSpec = blockedSpecs[0];
+        blockedSpec.TryGetProperty("retry_not_before", out var retryNotBefore).Should().BeTrue();
+        blockedSpec.TryGetProperty("spec_id", out var specId).Should().BeTrue();
+        blockedSpec.TryGetProperty("reason", out var reason).Should().BeTrue();
+        specId.GetString().Should().Be("F-010");
+        reason.GetString().Should().Be("retry-cooldown");
+        retryNotBefore.GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void RunnerPlan_IncludesReviewReadySpecsInStageSummary()
+    {
+        var store = new SpecStore(_tempDir);
+        store.Initialize();
+
+        store.Create(new SpecNode
+        {
+            Id = "F-020",
+            Title = "Review-ready spec",
+            Description = "already implemented and waiting for review stage",
+            Status = "working",
+            NodeType = "feature",
+            Metadata = new Dictionary<string, object>
+            {
+                ["runnerStage"] = "test-validation",
+                ["lastCompletedAt"] = "2026-03-11T00:00:00Z",
+                ["worktreePath"] = "D:/temp/worktree/F-020"
+            }
+        });
+
+        var app = new FlowApp();
+        app.RunnerPlan(pretty: true);
+
+        Environment.ExitCode.Should().Be(0);
+
+        using var json = JsonDocument.Parse(ReadCapturedOutput());
+        var data = json.RootElement.GetProperty("data");
+        data.GetProperty("ready_count").GetInt32().Should().Be(0);
+        data.GetProperty("staged_count").GetInt32().Should().Be(1);
+        data.GetProperty("review_ready_count").GetInt32().Should().Be(1);
+
+        var stagedSpecs = data.GetProperty("staged_specs");
+        stagedSpecs.GetArrayLength().Should().Be(1);
+        stagedSpecs[0].GetProperty("spec_id").GetString().Should().Be("F-020");
+        stagedSpecs[0].GetProperty("stage").GetString().Should().Be("test-validation");
+
+        var reviewReadySpecs = data.GetProperty("review_ready_specs");
+        reviewReadySpecs.GetArrayLength().Should().Be(1);
+        reviewReadySpecs[0].GetProperty("spec_id").GetString().Should().Be("F-020");
+        reviewReadySpecs[0].GetProperty("stage").GetString().Should().Be("test-validation");
+        reviewReadySpecs[0].GetProperty("last_completed_at").GetString().Should().Be("2026-03-11T00:00:00Z");
     }
 
     private string ReadCapturedOutput() => _capturedOut.ToString().Trim();
