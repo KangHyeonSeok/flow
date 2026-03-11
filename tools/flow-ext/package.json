@@ -176,11 +176,6 @@
           "group": "navigation"
         },
         {
-          "command": "flowExt.reloadWindow",
-          "when": "view == specTree",
-          "group": "navigation@1"
-        },
-        {
           "command": "flowExt.startDaemon",
           "when": "view == specTree && !flowExt.daemonRunning",
           "group": "navigation@0"
