@@ -3,6 +3,7 @@ const path = require('path');
 const { createSpecReader } = require('./lib/specReader');
 const { createSpecWriter } = require('./lib/specWriter');
 const { createActivityLogger } = require('./lib/activityLogger');
+const { createRunner } = require('./lib/runner');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const reader = createSpecReader(SPECS_DIR);
 const writer = createSpecWriter(SPECS_DIR);
 const logger = createActivityLogger(SPECS_DIR);
+const runner = createRunner(SPECS_DIR, reader, writer, logger);
 
 // --- API Routes ---
 
@@ -135,6 +137,31 @@ app.post('/api/specs/:specId/tests/:testId/result', async (req, res) => {
   }
 });
 
+// --- Runner API ---
+
+app.get('/api/runner/status', (req, res) => {
+  res.json(runner.getStatus());
+});
+
+app.post('/api/runner/start', async (req, res) => {
+  try {
+    const status = await runner.start();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/runner/stop', (req, res) => {
+  const status = runner.stop();
+  res.json(status);
+});
+
+app.post('/api/runner/schedule-stop', (req, res) => {
+  const status = runner.scheduleStop();
+  res.json(status);
+});
+
 // SSE for live updates
 const clients = new Set();
 app.get('/api/events', (req, res) => {
@@ -154,6 +181,14 @@ function broadcast(event, data) {
     client.write(msg);
   }
 }
+
+// Broadcast runner state changes via SSE
+runner.events.on('state', (status) => {
+  broadcast('runner', status);
+});
+runner.events.on('log', (entry) => {
+  broadcast('runner-log', entry);
+});
 
 // Watch specs directory for changes
 const fs = require('fs');

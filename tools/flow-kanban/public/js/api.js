@@ -41,10 +41,40 @@ const API = {
     return res.json();
   },
 
-  connectSSE(onMessage) {
+  async getRunnerStatus() {
+    const res = await fetch('/api/runner/status');
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async runnerStart() {
+    const res = await fetch('/api/runner/start', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async runnerStop() {
+    const res = await fetch('/api/runner/stop', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async runnerScheduleStop() {
+    const res = await fetch('/api/runner/schedule-stop', { method: 'POST' });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  connectSSE(onChange, onRunner) {
     const es = new EventSource('/api/events');
     es.addEventListener('change', (e) => {
-      onMessage(JSON.parse(e.data));
+      if (onChange) onChange(JSON.parse(e.data));
+    });
+    es.addEventListener('runner', (e) => {
+      if (onRunner) onRunner(JSON.parse(e.data));
+    });
+    es.addEventListener('runner-log', (e) => {
+      // Could show in a log panel later
     });
     es.onerror = () => {
       // Reconnect handled automatically by EventSource

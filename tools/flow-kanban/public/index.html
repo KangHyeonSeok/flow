@@ -10,6 +10,18 @@
 <body>
   <header class="header">
     <h1 class="header__title">Flow Kanban</h1>
+    <div class="runner-controls" id="runner-controls">
+      <div class="runner-status" id="runner-status">
+        <span class="runner-dot" id="runner-dot"></span>
+        <span class="runner-label" id="runner-label">stopped</span>
+        <span class="runner-spec" id="runner-spec"></span>
+      </div>
+      <div class="runner-buttons">
+        <button class="runner-btn runner-btn--start" id="runner-start" title="Start">Start</button>
+        <button class="runner-btn runner-btn--schedule" id="runner-schedule" title="현재 작업 완료 후 정지">Stop</button>
+        <button class="runner-btn runner-btn--stop" id="runner-force-stop" title="즉시 정지">Force</button>
+      </div>
+    </div>
     <div class="header__actions">
       <input type="text" id="search" class="search-input" placeholder="스펙 검색...">
       <span id="spec-count" class="spec-count"></span>

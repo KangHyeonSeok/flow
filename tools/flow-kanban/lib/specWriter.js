@@ -100,7 +100,50 @@ function createSpecWriter(specsDir) {
     }, null, 2), 'utf-8');
   }
 
-  return { updateStatus, resetAttemptCount, answerQuestion, submitTestResult };
+  async function incrementAttemptCount(specId) {
+    const specPath = findSpecPath(specId);
+    if (!specPath) throw new Error(`Spec not found: ${specId}`);
+    const meta = await readMeta(specPath);
+    meta.attemptCount = (meta.attemptCount || 0) + 1;
+    await writeMeta(specPath, meta);
+  }
+
+  async function setLastError(specId, error) {
+    const specPath = findSpecPath(specId);
+    if (!specPath) throw new Error(`Spec not found: ${specId}`);
+    const meta = await readMeta(specPath);
+    meta.lastError = error || null;
+    await writeMeta(specPath, meta);
+  }
+
+  async function setRetryAt(specId, isoTime) {
+    const specPath = findSpecPath(specId);
+    if (!specPath) throw new Error(`Spec not found: ${specId}`);
+    const meta = await readMeta(specPath);
+    meta.retryAt = isoTime || null;
+    await writeMeta(specPath, meta);
+  }
+
+  async function updateTests(specId, tests) {
+    const specPath = findSpecPath(specId);
+    if (!specPath) throw new Error(`Spec not found: ${specId}`);
+    const meta = await readMeta(specPath);
+    meta.tests = tests;
+    await writeMeta(specPath, meta);
+  }
+
+  async function updateConditions(specId, conditions) {
+    const specPath = findSpecPath(specId);
+    if (!specPath) throw new Error(`Spec not found: ${specId}`);
+    const meta = await readMeta(specPath);
+    meta.conditions = conditions;
+    await writeMeta(specPath, meta);
+  }
+
+  return {
+    updateStatus, resetAttemptCount, answerQuestion, submitTestResult,
+    incrementAttemptCount, setLastError, setRetryAt, updateTests, updateConditions,
+  };
 }
 
 module.exports = { createSpecWriter };
