@@ -31,34 +31,130 @@ $ExtDir = Join-Path $ProjectRoot "tools" "flow-ext"
 
 Write-Host "=== Flow Extension Build ===" -ForegroundColor Cyan
 
-function Get-CurrentVSCodeCliCandidate {
-    $currentExe = $env:VSCODE_GIT_ASKPASS_NODE
-    if (-not [string]::IsNullOrWhiteSpace($currentExe) -and (Test-Path $currentExe)) {
-        return $currentExe
+function Test-VSCodeCliCandidate {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        return $false
     }
 
-    return $null
+    $leaf = [System.IO.Path]::GetFileName($Path)
+    return $leaf -in @('code.cmd', 'code-insiders.cmd', 'code', 'code-insiders')
+}
+
+function Get-ResolvedCliFromPath {
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+        return $null
+    }
+
+    if (Test-VSCodeCliCandidate -Path $Path) {
+        return $Path
+    }
+
+    $leaf = [System.IO.Path]::GetFileName($Path)
+    $directory = Split-Path -Parent $Path
+    $derivedCandidates = @()
+
+    if ($leaf -in @('Code.exe', 'Code - Insiders.exe')) {
+        $derivedCandidates += Join-Path $directory 'bin\code.cmd'
+        $derivedCandidates += Join-Path $directory 'bin\code-insiders.cmd'
+    }
+
+    $derivedCandidates += Join-Path $directory 'code.cmd'
+    $derivedCandidates += Join-Path $directory 'code-insiders.cmd'
+    $derivedCandidates += Join-Path $directory 'bin\code.cmd'
+    $derivedCandidates += Join-Path $directory 'bin\code-insiders.cmd'
+
+    return $derivedCandidates | Where-Object { Test-VSCodeCliCandidate -Path $_ } | Select-Object -First 1
+}
+
+function Get-ResolvedCliFromCommand {
+    param(
+        [string]$CommandName
+    )
+
+    $command = Get-Command $CommandName -ErrorAction SilentlyContinue
+    if (-not $command) {
+        return $null
+    }
+
+    return Get-ResolvedCliFromPath -Path $command.Source
 }
 
 function Resolve-VSCodeCli {
-    $currentVsCodeCli = Get-CurrentVSCodeCliCandidate
-    if ($currentVsCodeCli) {
-        return $currentVsCodeCli
+    $activeEditorCli = Get-ResolvedCliFromPath -Path $env:VSCODE_GIT_ASKPASS_NODE
+    if ($activeEditorCli) {
+        return $activeEditorCli
     }
 
-    $codeCmd = Get-Command code -ErrorAction SilentlyContinue
-    if ($codeCmd) {
-        return $codeCmd.Source
+    $preferredCommands = @('code.cmd', 'code-insiders.cmd', 'code', 'code-insiders')
+    foreach ($commandName in $preferredCommands) {
+        $resolved = Get-ResolvedCliFromCommand -CommandName $commandName
+        if ($resolved) {
+            return $resolved
+        }
     }
 
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin\code.cmd"),
+        (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code\bin\code-insiders.cmd"),
         (Join-Path $env:LOCALAPPDATA "Programs\Microsoft VS Code Insiders\bin\code-insiders.cmd"),
         (Join-Path $env:ProgramFiles "Microsoft VS Code\bin\code.cmd"),
         (Join-Path ${env:ProgramFiles(x86)} "Microsoft VS Code\bin\code.cmd")
-    ) | Where-Object { $_ -and (Test-Path $_) }
+    ) | Where-Object { Test-VSCodeCliCandidate -Path $_ }
 
     return $candidates | Select-Object -First 1
+}
+
+function Get-InstalledFlowExtensionVersion {
+    param(
+        [string]$VsCodeCli
+    )
+
+    $listOutput = & $VsCodeCli --list-extensions --show-versions 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($listOutput)) {
+        return $null
+    }
+
+    $extensionLine = $listOutput -split "`r?`n" |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -like 'flow-team.flow-ext@*' } |
+        Select-Object -First 1
+
+    if ([string]::IsNullOrWhiteSpace($extensionLine)) {
+        return $null
+    }
+
+    return ($extensionLine -replace '^flow-team\.flow-ext@', '').Trim()
+}
+
+function Wait-InstalledFlowExtensionVersion {
+    param(
+        [string]$VsCodeCli,
+        [string]$ExpectedVersion,
+        [int]$MaxAttempts = 8,
+        [int]$DelaySeconds = 1
+    )
+
+    $lastSeenVersion = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        $lastSeenVersion = Get-InstalledFlowExtensionVersion -VsCodeCli $VsCodeCli
+        if ($lastSeenVersion -eq $ExpectedVersion) {
+            return $lastSeenVersion
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+
+    return $lastSeenVersion
 }
 
 function Remove-LegacyFlowExtensions {
@@ -218,7 +314,14 @@ try {
             exit 1
         }
 
-        Write-Host "[INFO] 강제 설치 완료" -ForegroundColor Green
+        $installedVersion = Wait-InstalledFlowExtensionVersion -VsCodeCli $vsCodeCli -ExpectedVersion $Version
+        if ($installedVersion -ne $Version) {
+            Write-Host "[ERROR] 설치 후 활성 확장 버전이 기대값과 다릅니다. expected=$Version actual=$installedVersion" -ForegroundColor Red
+            Write-Host "[HINT] VS Code 창이 여러 개 열려 있으면 잠시 뒤 'Developer: Reload Window'를 실행하세요." -ForegroundColor Yellow
+            exit 1
+        }
+
+        Write-Host "[INFO] 강제 설치 완료 (active version: $installedVersion)" -ForegroundColor Green
         Write-ReloadSignal -ProjectRootPath $ProjectRoot -VersionText $Version
     } else {
         Write-Host "[ERROR] .vsix 파일을 찾을 수 없습니다" -ForegroundColor Red

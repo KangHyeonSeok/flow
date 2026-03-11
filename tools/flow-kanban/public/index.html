@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Kanban</title>
+  <link rel="stylesheet" href="/css/kanban.css">
+  <link rel="stylesheet" href="/css/detail.css">
+</head>
+<body>
+  <header class="header">
+    <h1 class="header__title">Flow Kanban</h1>
+    <div class="header__actions">
+      <input type="text" id="search" class="search-input" placeholder="스펙 검색...">
+      <span id="spec-count" class="spec-count"></span>
+    </div>
+  </header>
+
+  <main class="board" id="board"></main>
+
+  <!-- Detail Panel -->
+  <div class="detail-overlay" id="detail-overlay">
+    <div class="detail-panel" id="detail-panel">
+      <button class="detail-close" id="detail-close">&times;</button>
+      <div id="detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/js/api.js"></script>
+  <script src="/js/card.js"></script>
+  <script src="/js/detail.js"></script>
+  <script src="/js/dragdrop.js"></script>
+  <script src="/js/board.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

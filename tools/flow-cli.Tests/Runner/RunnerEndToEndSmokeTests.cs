@@ -226,6 +226,7 @@ public class RunnerEndToEndSmokeTests : IDisposable
         secondCycle[0].Action.Should().Be("handoff-review");
         secondCycle[1].SpecId.Should().Be("F-910");
         secondCycle[1].Action.Should().Be("handoff-review");
+        secondCycle[1].TriggeredReschedule.Should().BeTrue();
 
         store.Get("F-910")!.Status.Should().Be("working");
         store.Get("F-910")!.Metadata!["runnerStage"].ToString().Should().Be("review");

@@ -1173,7 +1173,7 @@ public class RunnerService
 
             result.Success = true;
             result.Action = "handoff-review";
-            result.TriggeredReschedule = false;
+            result.TriggeredReschedule = true;
             return FinalizeResult(result);
         }
         catch (Exception ex)
