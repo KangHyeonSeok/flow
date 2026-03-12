@@ -24,8 +24,8 @@ function renderDetail(spec) {
       <div class="detail-header__id">${escapeHtml(spec.id)} · ${escapeHtml(spec.project)}</div>
       <div class="detail-header__title">${escapeHtml(spec.title)}</div>
       <div class="detail-header__badges">
-        <span class="detail-badge detail-badge--status">${spec.status}</span>
-        <span class="detail-badge detail-badge--type">${spec.type}</span>
+        <span class="detail-badge detail-badge--status">${statusLabel(spec.status)}</span>
+        <span class="detail-badge detail-badge--type">${typeLabel(spec.type)}</span>
         ${spec.attemptCount > 0 ? `<span class="detail-badge detail-badge--attempts">시도 ${spec.attemptCount}회</span>` : ''}
         ${spec.lastFailReason ? `<span class="detail-badge" style="background:rgba(243,139,168,0.15);color:var(--red)">${escapeHtml(spec.lastFailReason)}</span>` : ''}
       </div>
@@ -66,7 +66,7 @@ function renderConditions(conditions) {
               <tr>
                 <td style="font-family:var(--font-mono);color:var(--accent)">${escapeHtml(c.id)}</td>
                 <td>${escapeHtml(c.description)}</td>
-                <td><span class="condition-status condition-status--${(c.status || '초안').replace(/\s/g, '')}">${c.status || '초안'}</span></td>
+                <td><span class="condition-status condition-status--${(c.status || 'draft').replace(/\s/g, '')}">${conditionStatusLabel(c.status || 'draft')}</span></td>
               </tr>
             `).join('')}
           </tbody>
@@ -95,7 +95,7 @@ function renderTestItem(spec, test) {
   const resultText = test.lastResult || '미실행';
 
   let actions = '';
-  if (test.type === '사용자 테스트') {
+  if (test.type === 'user') {
     actions = `
       <div class="test-actions">
         <button class="btn btn--pass" data-spec-id="${spec.id}" data-test-id="${test.id}" data-result="pass">Pass</button>
@@ -109,7 +109,7 @@ function renderTestItem(spec, test) {
     <div class="test-item">
       <div class="test-item__header">
         <span class="test-item__id">${escapeHtml(test.id)}</span>
-        <span class="test-item__type">${test.type || '단위 테스트'}</span>
+        <span class="test-item__type">${testTypeLabel(test.type || 'unit')}</span>
         <span class="test-item__result ${resultClass}">${resultText}</span>
       </div>
       ${test.description ? `<div style="color:var(--text-muted);font-size:11px;margin-top:2px">${escapeHtml(test.description)}</div>` : ''}
@@ -154,7 +154,7 @@ function renderQuestions(spec) {
 }
 
 function renderQuestionItem(spec, q) {
-  const statusCls = q.status === '응답 완료' ? 'q-status--응답완료' : 'q-status--응답대기';
+  const statusCls = q.status === 'answered' ? 'q-status--answered' : 'q-status--pending';
   let answerHtml = '';
 
   if (q.answer) {
@@ -172,7 +172,7 @@ function renderQuestionItem(spec, q) {
     <div class="question-item">
       <div>
         <strong>${escapeHtml(q.id)}</strong>
-        <span class="question-item__status ${statusCls}">${q.status}</span>
+        <span class="question-item__status ${statusCls}">${questionStatusLabel(q.status)}</span>
       </div>
       <div class="question-item__text">${escapeHtml(q.question)}</div>
       ${answerHtml}

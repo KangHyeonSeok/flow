@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const { TEST_TYPE, CONDITION_STATUS, QUESTION_STATUS } = require('../constants');
 
 /**
  * Pipeline stages: develop → validate → review
@@ -37,7 +38,7 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
     const full = await reader.getSpec(specId);
     if (full && full.tests) {
       for (const test of full.tests) {
-        if (test.type !== '사용자 테스트') {
+        if (test.type !== TEST_TYPE.USER) {
           test.lastResult = 'pass';
           test.lastResultAt = new Date().toISOString();
         }
@@ -131,8 +132,8 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
     const full = await reader.getSpec(specId);
 
     // Check if user tests exist and need user action
-    const hasUserTests = (full.tests || []).some(t => t.type === '사용자 테스트');
-    const hasOpenQuestions = (full.questions || []).some(q => q.status === '응답 대기');
+    const hasUserTests = (full.tests || []).some(t => t.type === TEST_TYPE.USER);
+    const hasOpenQuestions = (full.questions || []).some(q => q.status === QUESTION_STATUS.PENDING);
 
     if (hasUserTests || hasOpenQuestions) {
       return { needsUserReview: true, reason: '사용자 테스트 또는 질문 답변 필요' };
@@ -140,7 +141,7 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
 
     // Check if any non-user tests failed
     const failedTests = (full.tests || []).filter(t =>
-      t.type !== '사용자 테스트' && t.lastResult === 'fail'
+      t.type !== TEST_TYPE.USER && t.lastResult === 'fail'
     );
     if (failedTests.length > 0) {
       return {
@@ -154,7 +155,7 @@ function createPipeline(specsDir, reader, writer, logger, worktree, events) {
     // Update condition statuses
     if (full.conditions) {
       for (const c of full.conditions) {
-        c.status = '검증 완료';
+        c.status = CONDITION_STATUS.VERIFIED;
       }
       await writer.updateConditions(specId, full.conditions);
     }

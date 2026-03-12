@@ -1,6 +1,12 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const {
+  STATUS, TYPE, CONDITION_STATUS, QUESTION_STATUS, TEST_TYPE,
+  normalize,
+  LABEL_TO_STATUS, LABEL_TO_TYPE,
+  LABEL_TO_CONDITION_STATUS, LABEL_TO_QUESTION_STATUS, LABEL_TO_TEST_TYPE,
+} = require('./constants');
 
 /**
  * Spec directory structure:
@@ -86,7 +92,8 @@ function createSpecReader(specsDir) {
       const idMatch = titleLine.match(/\[([^\]]+)\]/);
       const statusMatch = titleLine.match(/`([^`]+)`/);
       const id = idMatch ? idMatch[1] : `q${questions.length + 1}`;
-      const status = statusMatch ? statusMatch[1] : '응답 대기';
+      const rawStatus = statusMatch ? statusMatch[1] : QUESTION_STATUS.PENDING;
+      const status = normalize(rawStatus, LABEL_TO_QUESTION_STATUS) || QUESTION_STATUS.PENDING;
       const bodyLines = lines.slice(1);
       const questionText = bodyLines.filter(l => !l.startsWith('> 답변:')).join('\n').trim();
       const answerLine = bodyLines.find(l => l.startsWith('> 답변:'));
@@ -127,7 +134,7 @@ function createSpecReader(specsDir) {
 
     const questionsText = await readText(path.join(specDir.path, 'questions.md'));
     const questions = parseQuestions(questionsText);
-    const openQuestionCount = questions.filter(q => q.status === '응답 대기').length;
+    const openQuestionCount = questions.filter(q => q.status === QUESTION_STATUS.PENDING).length;
 
     const tests = meta.tests || [];
     const testTotal = tests.length;
@@ -137,8 +144,8 @@ function createSpecReader(specsDir) {
       id: specDir.specId,
       project: specDir.project,
       title: meta.title || specDir.specId,
-      type: meta.type || '기능',
-      status: meta.status || '초안',
+      type: normalize(meta.type, LABEL_TO_TYPE, Object.values(TYPE)) || TYPE.FEATURE,
+      status: normalize(meta.status, LABEL_TO_STATUS, Object.values(STATUS)) || STATUS.DRAFT,
       attemptCount: meta.attemptCount || 0,
       openQuestionCount,
       testSummary: { total: testTotal, pass: testPass },
@@ -188,16 +195,26 @@ function createSpecReader(specsDir) {
     // Read project info
     const projJson = await readJson(path.join(specsDir, dir.project, 'project.json'));
 
+    const conditions = (meta.conditions || []).map(c => ({
+      ...c,
+      status: normalize(c.status, LABEL_TO_CONDITION_STATUS, Object.values(CONDITION_STATUS)) || CONDITION_STATUS.DRAFT,
+    }));
+
+    const tests = (meta.tests || []).map(t => ({
+      ...t,
+      type: normalize(t.type, LABEL_TO_TEST_TYPE, Object.values(TEST_TYPE)) || t.type,
+    }));
+
     return {
       id: dir.specId,
       project: dir.project,
       projectRoot: projJson?.root || null,
       title: meta.title || dir.specId,
-      type: meta.type || '기능',
-      status: meta.status || '초안',
+      type: normalize(meta.type, LABEL_TO_TYPE, Object.values(TYPE)) || TYPE.FEATURE,
+      status: normalize(meta.status, LABEL_TO_STATUS, Object.values(STATUS)) || STATUS.DRAFT,
       attemptCount: meta.attemptCount || 0,
-      conditions: meta.conditions || [],
-      tests: meta.tests || [],
+      conditions,
+      tests,
       questions,
       activity,
       evidenceFiles,

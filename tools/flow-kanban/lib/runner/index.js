@@ -1,6 +1,7 @@
 const { createPipeline } = require('./pipeline');
 const { createWorktreeManager } = require('./worktree');
 const EventEmitter = require('events');
+const { STATUS, TYPE } = require('../constants');
 
 /**
  * Runner states:
@@ -112,7 +113,7 @@ function createRunner(specsDir, reader, writer, logger) {
 
       // Find next spec to work on
       const specs = await reader.listSpecs();
-      const target = specs.find(s => s.status === '대기' && !isOnCooldown(s));
+      const target = specs.find(s => s.status === STATUS.QUEUED && !isOnCooldown(s));
 
       if (!target) {
         currentSpec = null;
@@ -159,15 +160,15 @@ function createRunner(specsDir, reader, writer, logger) {
     const fullSpec = await reader.getSpec(spec.id);
     if (!fullSpec) return;
 
-    // Stage 1: 작업 (Developer)
-    currentStage = '작업';
+    // Stage 1: Developer
+    currentStage = STATUS.WORKING;
     events.emit('state', getStatus());
-    await writer.updateStatus(spec.id, '작업');
+    await writer.updateStatus(spec.id, STATUS.WORKING);
     await writer.incrementAttemptCount(spec.id);
     await logger.append(spec.id, {
       role: 'runner',
       summary: '구현 단계 시작',
-      statusChange: { from: '대기', to: '작업' },
+      statusChange: { from: STATUS.QUEUED, to: STATUS.WORKING },
       result: 'handoff',
     });
 
@@ -180,84 +181,84 @@ function createRunner(specsDir, reader, writer, logger) {
     // Check attempt count limit
     const updatedSpec = await reader.getSpec(spec.id);
     if (updatedSpec && updatedSpec.attemptCount >= 3) {
-      await writer.updateStatus(spec.id, '검토');
+      await writer.updateStatus(spec.id, STATUS.INSPECT);
       await logger.append(spec.id, {
         role: 'runner',
         summary: '작업 횟수 3회 초과, 검토로 전환',
-        statusChange: { from: '작업', to: '검토' },
+        statusChange: { from: STATUS.WORKING, to: STATUS.INSPECT },
         result: 'needs-review',
       });
       return;
     }
 
-    // Stage 2: 테스트 검증 (Test Validator)
-    currentStage = '테스트 검증';
+    // Stage 2: Test Validator
+    currentStage = STATUS.TESTING;
     events.emit('state', getStatus());
-    await writer.updateStatus(spec.id, '테스트 검증');
+    await writer.updateStatus(spec.id, STATUS.TESTING);
     await logger.append(spec.id, {
       role: 'runner',
       summary: '테스트 검증 단계 시작',
-      statusChange: { from: '작업', to: '테스트 검증' },
+      statusChange: { from: STATUS.WORKING, to: STATUS.TESTING },
       result: 'handoff',
     });
 
     const valResult = await pipeline.validate(spec.id, fullSpec);
     if (valResult.requeue) {
-      await writer.updateStatus(spec.id, '대기');
+      await writer.updateStatus(spec.id, STATUS.QUEUED);
       await logger.append(spec.id, {
         role: 'validator',
         summary: `테스트 부적절: ${valResult.reason}`,
-        statusChange: { from: '테스트 검증', to: '대기' },
+        statusChange: { from: STATUS.TESTING, to: STATUS.QUEUED },
         result: 'requeue',
       });
       return;
     }
 
-    // Stage 3: 리뷰 (Test Reviewer)
-    currentStage = '리뷰';
+    // Stage 3: Test Reviewer
+    currentStage = STATUS.REVIEW;
     events.emit('state', getStatus());
-    await writer.updateStatus(spec.id, '리뷰');
+    await writer.updateStatus(spec.id, STATUS.REVIEW);
     await logger.append(spec.id, {
       role: 'runner',
       summary: '리뷰 단계 시작',
-      statusChange: { from: '테스트 검증', to: '리뷰' },
+      statusChange: { from: STATUS.TESTING, to: STATUS.REVIEW },
       result: 'handoff',
     });
 
     const reviewResult = await pipeline.review(spec.id, fullSpec);
 
     if (reviewResult.needsUserReview) {
-      await writer.updateStatus(spec.id, '검토');
+      await writer.updateStatus(spec.id, STATUS.INSPECT);
       await logger.append(spec.id, {
         role: 'reviewer',
         summary: reviewResult.reason || '사용자 확인 필요',
-        statusChange: { from: '리뷰', to: '검토' },
+        statusChange: { from: STATUS.REVIEW, to: STATUS.INSPECT },
         result: 'needs-review',
       });
     } else if (reviewResult.requeue) {
-      await writer.updateStatus(spec.id, '대기');
+      await writer.updateStatus(spec.id, STATUS.QUEUED);
       await writer.setLastError(spec.id, reviewResult.reason);
       await logger.append(spec.id, {
         role: 'reviewer',
         summary: `테스트 실패: ${reviewResult.reason}`,
-        statusChange: { from: '리뷰', to: '대기' },
+        statusChange: { from: STATUS.REVIEW, to: STATUS.QUEUED },
         result: 'requeue',
       });
     } else {
       // Success — set final status based on type
-      const finalStatus = fullSpec.type === '태스크' ? '완료' : '활성';
+      const finalStatus = fullSpec.type === TYPE.TASK ? STATUS.DONE : STATUS.ACTIVE;
       await writer.updateStatus(spec.id, finalStatus);
       await logger.append(spec.id, {
         role: 'reviewer',
         summary: `모든 테스트 통과, ${finalStatus}으로 전환`,
-        statusChange: { from: '리뷰', to: finalStatus },
-        result: finalStatus === '완료' ? 'done' : 'verified',
+        statusChange: { from: STATUS.REVIEW, to: finalStatus },
+        result: finalStatus === STATUS.DONE ? 'done' : 'verified',
       });
     }
   }
 
   async function handleFailure(spec, result) {
-    await writer.updateStatus(spec.id, '대기');
+    await writer.updateStatus(spec.id, STATUS.QUEUED);
     await writer.setLastError(spec.id, result.reason);
     if (result.retryAfterMs) {
       await writer.setRetryAt(spec.id, new Date(Date.now() + result.retryAfterMs).toISOString());
@@ -265,7 +266,7 @@ function createRunner(specsDir, reader, writer, logger) {
     await logger.append(spec.id, {
       role: 'developer',
       summary: `구현 실패: ${result.reason}`,
-      statusChange: { from: '작업', to: '대기' },
+      statusChange: { from: STATUS.WORKING, to: STATUS.QUEUED },
       result: 'requeue',
     });
   }

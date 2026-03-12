@@ -4,6 +4,7 @@ const { createSpecReader } = require('./lib/specReader');
 const { createSpecWriter } = require('./lib/specWriter');
 const { createActivityLogger } = require('./lib/activityLogger');
 const { createRunner } = require('./lib/runner');
+const { STATUS_LIST, normalize, LABEL_TO_STATUS, LABEL_TO_TYPE } = require('./lib/constants');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -143,7 +144,8 @@ app.post('/api/specs', async (req, res) => {
     }
 
     // Auto-generate ID if not provided
-    const prefix = (type === '태스크' || type === 'task') ? 'T' : 'F';
+    const normalizedType = normalize(type, LABEL_TO_TYPE) || type;
+    const prefix = normalizedType === 'task' ? 'T' : 'F';
     const specId = id || await writer.nextSpecId(project, prefix);
 
     const result = await writer.createSpec(project, specId, {
@@ -167,8 +169,9 @@ app.post('/api/specs', async (req, res) => {
 app.patch('/api/specs/:specId/status', async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['초안', '대기', '작업', '테스트 검증', '리뷰', '검토', '활성', '완료'];
-    if (!validStatuses.includes(status)) {
+    // Normalize: accept both English keys and Korean labels
+    const normalized = normalize(status, LABEL_TO_STATUS) || status;
+    if (!STATUS_LIST.includes(normalized)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
     }
 
@@ -176,17 +179,17 @@ app.patch('/api/specs/:specId/status', async (req, res) => {
     if (!spec) return res.status(404).json({ error: 'Spec not found' });
 
     const oldStatus = spec.status;
-    await writer.updateStatus(req.params.specId, status);
+    await writer.updateStatus(req.params.specId, normalized);
 
-    // Reset attempt count when moving from 검토 to 대기
-    if (oldStatus === '검토' && status === '대기') {
+    // Reset attempt count when moving from inspect to queued
+    if (oldStatus === 'inspect' && normalized === 'queued') {
       await writer.resetAttemptCount(req.params.specId);
     }
 
     await logger.append(req.params.specId, {
       role: 'user',
-      summary: `상태 변경: ${oldStatus} → ${status}`,
-      statusChange: { from: oldStatus, to: status },
+      summary: `상태 변경: ${oldStatus} → ${normalized}`,
+      statusChange: { from: oldStatus, to: normalized },
       result: 'handoff',
     });
 

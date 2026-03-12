@@ -174,9 +174,9 @@
   border-radius: 3px;
 }
 
-.condition-status--초안 { background: rgba(88,91,112,0.3); color: var(--text-dim); }
-.condition-status--검토필요 { background: rgba(250,179,135,0.15); color: var(--peach); }
-.condition-status--검증완료 { background: rgba(166,227,161,0.15); color: var(--green); }
+.condition-status--draft { background: rgba(88,91,112,0.3); color: var(--text-dim); }
+.condition-status--needs-review { background: rgba(250,179,135,0.15); color: var(--peach); }
+.condition-status--verified { background: rgba(166,227,161,0.15); color: var(--green); }
 
 /* === Tests List === */
 .test-item {
@@ -272,8 +272,8 @@
   margin-left: 6px;
 }
 
-.q-status--응답대기 { background: rgba(250,179,135,0.15); color: var(--peach); }
-.q-status--응답완료 { background: rgba(166,227,161,0.15); color: var(--green); }
+.q-status--pending { background: rgba(250,179,135,0.15); color: var(--peach); }
+.q-status--answered { background: rgba(166,227,161,0.15); color: var(--green); }
 
 .question-item__text {
   margin: 6px 0;

@@ -47,7 +47,7 @@ function setupColumnDrop(columnBody, status) {
 
     try {
       await API.updateStatus(specId, status);
-      showToast(`${specId} → ${status}`, 'success');
+      showToast(`${specId} → ${statusLabel(status)}`, 'success');
       // Refresh after a short delay to get updated data
       setTimeout(() => refreshBoard(), 500);
     } catch (err) {

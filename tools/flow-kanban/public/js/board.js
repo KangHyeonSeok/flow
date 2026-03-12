@@ -1,19 +1,17 @@
-const COLUMNS = ['초안', '대기', '작업', '테스트 검증', '리뷰', '검토', '활성', '완료'];
-
 let allSpecs = [];
 
 function createBoard() {
   const board = document.getElementById('board');
   board.innerHTML = '';
 
-  for (const status of COLUMNS) {
+  for (const status of STATUS_LIST) {
     const col = document.createElement('div');
     col.className = 'column';
     col.dataset.status = status;
 
     col.innerHTML = `
       <div class="column__header">
-        <span>${status}</span>
+        <span>${statusLabel(status)}</span>
         <span class="column__count">0</span>
       </div>
       <div class="column__body"></div>
@@ -62,8 +60,8 @@ function renderSpecs(specs) {
     if (col) {
       col.appendChild(renderCard(spec));
     } else {
-      // Unknown status, put in 초안
-      const fallback = document.querySelector('.column[data-status="초안"] .column__body');
+      // Unknown status, put in draft
+      const fallback = document.querySelector('.column[data-status="draft"] .column__body');
       if (fallback) fallback.appendChild(renderCard(spec));
     }
   }

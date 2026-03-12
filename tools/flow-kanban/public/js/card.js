@@ -8,7 +8,7 @@ function renderCard(spec) {
 
   let metaBadges = '';
   metaBadges += `<span class="card__badge badge--project">${escapeHtml(spec.project)}</span>`;
-  metaBadges += `<span class="card__badge badge--type-${spec.type}">${spec.type}</span>`;
+  metaBadges += `<span class="card__badge badge--type-${spec.type}">${typeLabel(spec.type)}</span>`;
 
   if (spec.attemptCount > 0) {
     metaBadges += `<span class="card__badge badge--attempts">시도 ${spec.attemptCount}</span>`;

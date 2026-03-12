@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
+const { STATUS, TYPE, CONDITION_STATUS, normalize, LABEL_TO_STATUS, LABEL_TO_TYPE, LABEL_TO_CONDITION_STATUS } = require('./constants');
 
 function createSpecWriter(specsDir) {
 
@@ -25,11 +26,14 @@ function createSpecWriter(specsDir) {
 
     const meta = {
       title: data.title || specId,
-      type: data.type || '기능',
-      status: data.status || '초안',
+      type: normalize(data.type, LABEL_TO_TYPE) || TYPE.FEATURE,
+      status: normalize(data.status, LABEL_TO_STATUS) || STATUS.DRAFT,
       attemptCount: 0,
       updatedAt: new Date().toISOString(),
-      conditions: data.conditions || [],
+      conditions: (data.conditions || []).map(c => ({
+        ...c,
+        status: normalize(c.status, LABEL_TO_CONDITION_STATUS) || CONDITION_STATUS.DRAFT,
+      })),
       tests: data.tests || [],
       relatedFiles: data.relatedFiles || [],
     };
@@ -117,11 +121,14 @@ function createSpecWriter(specsDir) {
       content = await fs.readFile(qPath, 'utf-8');
     } catch { /* file may not exist */ }
 
-    const pattern = new RegExp(`(## \\[${questionId}\\][^]*?\`)(응답 대기)(\`[^]*?)(?=## \\[|$)`, 's');
+    // Match the question block (supports both legacy Korean and English status markers)
+    const escId = questionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp('(## \\[' + escId + '\\][^]*?)`[^`]+`([^]*?)(?=## \\[|$)', 's');
     const match = content.match(pattern);
     if (match) {
       let block = match[0];
-      block = block.replace('`응답 대기`', '`응답 완료`');
+      // Replace any status marker with 'answered'
+      block = block.replace(/`[^`]+`/, '`answered`');
       if (block.includes('> 답변:')) {
         block = block.replace(/> 답변:.*/, `> 답변: ${answer}`);
       } else {
@@ -129,7 +136,7 @@ function createSpecWriter(specsDir) {
       }
       content = content.replace(match[0], block);
     } else {
-      content += `\n## [${questionId}] \`응답 완료\`\n\n> 답변: ${answer}\n`;
+      content += `\n## [${questionId}] \`answered\`\n\n> 답변: ${answer}\n`;
     }
 
     await fs.writeFile(qPath, content, 'utf-8');
