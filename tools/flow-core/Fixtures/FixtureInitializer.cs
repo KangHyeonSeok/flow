@@ -121,7 +121,7 @@ public sealed class FixtureInitializer
     private async Task CreateRetryExceeded(CancellationToken ct)
     {
         var spec = MakeSpec("fixture-retry-exceeded", "3회 초과 실패 spec",
-            FlowState.ArchitectureReview, ProcessingStatus.InProgress, RiskLevel.High);
+            FlowState.ArchitectureReview, ProcessingStatus.Pending, RiskLevel.High);
         spec.RetryCounters = new RetryCounters { ArchitectReviewLoopCount = 3 };
         await SaveSpecOrThrow(spec, ct);
     }

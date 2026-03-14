@@ -98,6 +98,27 @@ public class SpecModelTests
     }
 
     [Fact]
+    public void Pruner_KeepsRetryNotBefore()
+    {
+        var notBefore = new DateTimeOffset(2026, 3, 14, 12, 0, 0, TimeSpan.Zero);
+        var spec = new Spec
+        {
+            Id = "spec-001", ProjectId = "proj-001", Title = "Test",
+            State = FlowState.Draft, ProcessingStatus = ProcessingStatus.Pending,
+            RetryCounters = new RetryCounters { RetryNotBefore = notBefore },
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            Version = 1
+        };
+
+        var json = SpecPruner.Serialize(spec);
+        json.Should().Contain("\"retryCounters\"");
+        json.Should().Contain("\"retryNotBefore\"");
+
+        var restored = SpecPruner.Deserialize(json);
+        restored.RetryCounters.RetryNotBefore.Should().Be(notBefore);
+    }
+
+    [Fact]
     public void Pruner_RemovesEmptyDependencies()
     {
         var spec = new Spec

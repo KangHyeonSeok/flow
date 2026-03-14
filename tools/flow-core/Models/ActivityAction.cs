@@ -29,12 +29,22 @@ public enum ActivityAction
     ReviewRequestTimedOut,
     RollbackRequested,
 
-    // 로그 전용 값
+    // 로그 전용 값 — side effect / 상태 변경
     SpecActivated,
     SpecFailed,
     AssignmentCancelled,
     AssignmentFailed,
     ReviewRequestClosed,
     CounterReset,
-    ManualOverride
+    ManualOverride,
+
+    // 로그 전용 값 — runner orchestration
+    SpecSelected,
+    DispatchDecided,
+    AgentInvoked,
+    AgentCompleted,
+    EventRejected,
+    StateTransitionCommitted,
+    ConflictDetected,
+    RetryScheduled
 }

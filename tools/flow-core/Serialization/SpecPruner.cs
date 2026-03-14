@@ -26,19 +26,25 @@ public static class SpecPruner
                 node.Remove("dependencies");
         }
 
-        // retryCounters: 모든 값이 0이면 제거
+        // retryCounters: 모든 int 값이 0이고 다른 필드가 없으면 제거
         if (node["retryCounters"] is JsonObject counters)
         {
-            bool allZero = true;
+            bool allDefault = true;
             foreach (var kvp in counters)
             {
-                if (kvp.Value?.GetValue<int>() != 0)
+                var val = kvp.Value;
+                if (val is null) continue;
+                if (val.GetValueKind() == JsonValueKind.Number)
                 {
-                    allZero = false;
-                    break;
+                    if (val.GetValue<int>() != 0) { allDefault = false; break; }
+                }
+                else
+                {
+                    // retryNotBefore 등 non-null 값이 있으면 유지
+                    allDefault = false; break;
                 }
             }
-            if (allZero)
+            if (allDefault)
                 node.Remove("retryCounters");
         }
 

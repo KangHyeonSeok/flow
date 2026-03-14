@@ -39,3 +39,9 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 .vscode/settings.json
 /.flow/worktrees
 /.flow/review
+/.flow/spec-state.json
+/tools/flow-kanban/node_modules
+/참조용
+/tools/flow-core.tests/bin
+/tools/flow-core.tests/obj
+/tools/flow-core/obj

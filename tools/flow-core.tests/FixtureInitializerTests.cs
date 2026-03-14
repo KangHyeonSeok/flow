@@ -102,7 +102,9 @@ public class FixtureInitializerTests : IDisposable
 
         var spec = await _store.LoadAsync("fixture-retry-exceeded");
         spec.Should().NotBeNull();
-        spec!.RetryCounters.ArchitectReviewLoopCount.Should().Be(3);
+        spec!.State.Should().Be(FlowState.ArchitectureReview);
+        spec.ProcessingStatus.Should().Be(ProcessingStatus.Pending);
+        spec.RetryCounters.ArchitectReviewLoopCount.Should().Be(3);
     }
 
     [Fact]
