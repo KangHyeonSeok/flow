@@ -37,6 +37,7 @@ public static class RuleEvaluator
         { FlowEvent.AssignmentTimedOut,                   [ActorKind.Runner] },
         { FlowEvent.AssignmentResumed,                   [ActorKind.Runner, ActorKind.SpecManager] },
         { FlowEvent.ReviewRequestTimedOut,               [ActorKind.Runner] },
+        { FlowEvent.SpecArchived,                        [ActorKind.Runner] },
     };
 
     public static RuleOutput Evaluate(RuleInput input)
@@ -102,6 +103,9 @@ public static class RuleEvaluator
             // timeout/resume
             FlowEvent.AssignmentTimedOut => EvalAssignmentTimedOut(input),
             FlowEvent.AssignmentResumed => EvalAssignmentResumed(input),
+
+            // archive
+            FlowEvent.SpecArchived => EvalSpecArchived(input),
 
             _ => RuleOutput.Reject(RejectionReason.InvalidStateForEvent)
         };
@@ -424,12 +428,15 @@ public static class RuleEvaluator
                 ]);
         }
 
-        return Accept(input.Spec, FlowState.Review, ProcessingStatus.UserReview, counters,
-            [
-                SideEffect.Log("user review requested"),
-                SideEffect.CreateReviewRequest(
-                    "사용자 판단 필요", input.Spec.Id)
-            ]);
+        var effects = new List<SideEffect> { SideEffect.Log("user review requested") };
+
+        // 기존 Open RR을 Superseded로 전환
+        effects.AddRange(GetOpenReviewRequests(input)
+            .Select(r => SideEffect.SupersedeReviewRequest(r.Id, "superseded by new user review request")));
+
+        effects.Add(SideEffect.CreateReviewRequest("사용자 판단 필요", input.Spec.Id));
+
+        return Accept(input.Spec, FlowState.Review, ProcessingStatus.UserReview, counters, effects);
     }
 
     private static RuleOutput EvalSpecValidationFailed(RuleInput input)
@@ -511,8 +518,8 @@ public static class RuleEvaluator
     {
         var state = input.Spec.State;
 
-        // 금지: 활성, 실패, 완료
-        if (state is FlowState.Active or FlowState.Failed or FlowState.Completed)
+        // 금지: 활성, 실패, 완료, 보관
+        if (state is FlowState.Active or FlowState.Failed or FlowState.Completed or FlowState.Archived)
             return RuleOutput.Reject(RejectionReason.ForbiddenTransition,
                 [SideEffect.Log($"cancel_requested forbidden in state {state}")]);
 
@@ -538,7 +545,7 @@ public static class RuleEvaluator
     private static RuleOutput EvalDependencyBlocked(RuleInput input)
     {
         var state = input.Spec.State;
-        if (state is FlowState.Completed or FlowState.Failed)
+        if (state is FlowState.Completed or FlowState.Failed or FlowState.Archived)
             return RejectState(state, input.Event);
 
         var effects = new List<SideEffect> { SideEffect.Log("dependency blocked") };
@@ -552,7 +559,7 @@ public static class RuleEvaluator
     private static RuleOutput EvalDependencyFailed(RuleInput input)
     {
         var state = input.Spec.State;
-        if (state is FlowState.Completed or FlowState.Failed)
+        if (state is FlowState.Completed or FlowState.Failed or FlowState.Archived)
             return RejectState(state, input.Event);
 
         var effects = new List<SideEffect>
@@ -603,6 +610,19 @@ public static class RuleEvaluator
             [SideEffect.Log("assignment resumed")]);
     }
 
+    // ── archive ──
+
+    private static RuleOutput EvalSpecArchived(RuleInput input)
+    {
+        if (input.Spec.State != FlowState.Failed)
+            return RejectState(input.Spec.State, input.Event);
+
+        var effects = new List<SideEffect> { SideEffect.Log("spec archived") };
+        effects.AddRange(BuildCloseOpenReviewRequestEffects(input, "spec archived"));
+
+        return AcceptPhaseTransition(input.Spec, FlowState.Archived, null, effects);
+    }
+
     // ── helpers ──
 
     private static readonly Dictionary<(FlowState from, FlowState to), ProcessingStatus> PhaseTransitionInitialStatus = new()
@@ -624,6 +644,7 @@ public static class RuleEvaluator
         { (FlowState.ArchitectureReview, FlowState.Failed), ProcessingStatus.Error },
         { (FlowState.Implementation, FlowState.Failed), ProcessingStatus.Error },
         { (FlowState.TestValidation, FlowState.Failed), ProcessingStatus.Error },
+        { (FlowState.Failed, FlowState.Archived), ProcessingStatus.Done },
     };
 
     private static bool IsForwardTransition(FlowState from, FlowState to)

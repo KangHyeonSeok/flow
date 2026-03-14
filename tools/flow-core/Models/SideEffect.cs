@@ -8,7 +8,8 @@ public enum SideEffectKind
     CancelAssignment,
     FailAssignment,
     CreateReviewRequest,
-    CloseReviewRequest
+    CloseReviewRequest,
+    SupersedeReviewRequest
 }
 
 /// <summary>Rule evaluator가 반환하는 부수 효과. runner가 실행할 수 있도록 대상 ID와 payload를 포함한다.</summary>
@@ -29,9 +30,11 @@ public sealed class SideEffect
     // ── CreateReviewRequest payload ──
     public string? Reason { get; init; }
     public IReadOnlyList<string>? Questions { get; init; }
+    public IReadOnlyList<ReviewRequestOption>? ReviewRequestOptions { get; init; }
+    public string? ReviewRequestSummary { get; init; }
     public int? DeadlineSeconds { get; init; }
 
-    // ── CloseReviewRequest target ──
+    // ── CloseReviewRequest / SupersedeReviewRequest target ──
     public string? TargetReviewRequestId { get; init; }
 
     // ── factory methods ──
@@ -73,19 +76,31 @@ public sealed class SideEffect
     public static SideEffect CreateReviewRequest(
         string reason, string? specId = null,
         IReadOnlyList<string>? questions = null,
-        int? deadlineSeconds = null) => new()
+        int? deadlineSeconds = null,
+        IReadOnlyList<ReviewRequestOption>? options = null,
+        string? summary = null) => new()
     {
         Kind = SideEffectKind.CreateReviewRequest,
         Reason = reason,
         SpecId = specId,
         Questions = questions,
-        DeadlineSeconds = deadlineSeconds
+        DeadlineSeconds = deadlineSeconds,
+        ReviewRequestOptions = options,
+        ReviewRequestSummary = summary
     };
 
     public static SideEffect CloseReviewRequest(
         string? targetReviewRequestId = null, string? description = null) => new()
     {
         Kind = SideEffectKind.CloseReviewRequest,
+        TargetReviewRequestId = targetReviewRequestId,
+        Description = description
+    };
+
+    public static SideEffect SupersedeReviewRequest(
+        string? targetReviewRequestId = null, string? description = null) => new()
+    {
+        Kind = SideEffectKind.SupersedeReviewRequest,
         TargetReviewRequestId = targetReviewRequestId,
         Description = description
     };

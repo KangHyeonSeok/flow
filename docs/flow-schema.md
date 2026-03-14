@@ -62,6 +62,7 @@
     "reworkLoopCount": 0,
     "architectReviewLoopCount": 0
   },
+  "derivedFrom": null,
   "createdAt": "2026-03-14T10:00:00Z",
   "updatedAt": "2026-03-14T10:10:00Z",
   "version": 1
@@ -86,6 +87,7 @@
 - `testIds`: 연결된 테스트 식별자 목록. 빠른 조회용 인덱스이며, 실제 AC 연결은 test의 `acIds` 또는 AC의 `relatedTestIds`로 표현한다.
 - `tests`: test 객체 배열. 각 test의 정의와 상태를 spec.json 안에 inline으로 저장한다.
 - `retryCounters`: 반복 제한 카운터. `userReviewLoopCount`(사용자검토 루프), `reworkLoopCount`(재작업 루프), `architectReviewLoopCount`(Architect 반려 루프). 모든 값이 0이면 저장 시 생략 가능.
+- `derivedFrom`: 이 spec이 실패한 다른 spec으로부터 Planner 재등록으로 생성된 경우, 원본 spec ID를 기록한다. 추적용.
 - `createdAt`, `updatedAt`: 타임스탬프
 - `version`: optimistic concurrency 제어용 버전
 
@@ -104,6 +106,7 @@
 - `state=활성`이면 `processingStatus`는 `완료` 중 하나다.
 - `state=실패`이면 `processingStatus`는 `실패` 중 하나다.
 - `state=완료`이면 `processingStatus`는 `완료` 중 하나다.
+- `state=보관`이면 `processingStatus`는 `완료` 중 하나다.
 - `processingStatus`만 바뀌고 `state`는 유지될 수 있지만, phase 자체가 바뀌는 이벤트는 항상 `state` 변경으로 반영해야 한다.
 
 ## 2.4 비워도 되는 필드
@@ -115,6 +118,7 @@
 - `reviewRequestIds`
 - `testIds`
 - `retryCounters` (모든 값이 0인 경우)
+- `derivedFrom`
 
 # 3. acceptance criterion
 
@@ -286,6 +290,7 @@ review request와 spec의 연결 규칙은 아래처럼 해석한다.
 - review request가 `open`이면 일반적으로 spec의 `state=검토`, `processingStatus=사용자검토`다.
 - review request가 `answered`가 되면 runner 또는 rule evaluator가 `user_review_submitted`를 발생시키고 spec은 다시 `processingStatus=검토`로 돌아간다.
 - deadline을 넘긴 open review request는 timeout 정책 대상이 된다.
+- `실패` 상태 spec의 review request에 사용자가 응답하면, Planner 재등록 후 원본 spec이 `보관`으로 전이된다. 보관된 spec의 review request도 함께 archived 디렉토리로 이동한다.
 
 # 7. review response
 
@@ -366,7 +371,7 @@ activity event는 replay, audit, debug 기준 데이터다. 따라서 상태 전
   "spec": {},
   "activeAssignment": {},
   "recentActivity": [],
-  "openReviewRequests": [],
+  "reviewRequests": [],
   "context": {
     "projectId": "proj-001",
     "runId": "run-001",

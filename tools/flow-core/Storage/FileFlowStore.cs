@@ -8,6 +8,7 @@ namespace FlowCore.Storage;
 public sealed class FileFlowStore : IFlowStore
 {
     private readonly string _specsRoot;
+    private readonly string _archivedRoot;
 
     public FileFlowStore(string projectId, string? flowHome = null)
     {
@@ -15,11 +16,14 @@ public sealed class FileFlowStore : IFlowStore
             ?? Environment.GetEnvironmentVariable("FLOW_HOME")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".flow");
         _specsRoot = Path.Combine(home, "projects", projectId, "specs");
+        _archivedRoot = Path.Combine(home, "projects", projectId, "specs-archived");
     }
 
     // ── Path helpers ──
 
     private string SpecDir(string specId) => Path.Combine(_specsRoot, specId);
+    private string ArchivedSpecDir(string specId) => Path.Combine(_archivedRoot, specId);
+    private string ArchivedSpecFile(string specId) => Path.Combine(ArchivedSpecDir(specId), "spec.json");
     private string SpecFile(string specId) => Path.Combine(SpecDir(specId), "spec.json");
     private string AssignmentFile(string specId, string asgId) =>
         Path.Combine(SpecDir(specId), "assignments", $"{asgId}.json");
@@ -83,6 +87,62 @@ public sealed class FileFlowStore : IFlowStore
         if (Directory.Exists(dir))
             Directory.Delete(dir, recursive: true);
         return Task.CompletedTask;
+    }
+
+    public async Task ArchiveAsync(string specId, CancellationToken ct = default)
+    {
+        var srcDir = SpecDir(specId);
+        if (!Directory.Exists(srcDir)) return;
+
+        var destDir = ArchivedSpecDir(specId);
+
+        try
+        {
+            Directory.CreateDirectory(destDir);
+
+            // Copy all files recursively
+            var srcFiles = Directory.GetFiles(srcDir, "*", SearchOption.AllDirectories);
+            foreach (var srcFile in srcFiles)
+            {
+                var relativePath = Path.GetRelativePath(srcDir, srcFile);
+                var destFile = Path.Combine(destDir, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(destFile)!);
+                File.Copy(srcFile, destFile, overwrite: true);
+            }
+
+            // Verify: all source files must exist in dest
+            foreach (var srcFile in srcFiles)
+            {
+                var relativePath = Path.GetRelativePath(srcDir, srcFile);
+                var destFile = Path.Combine(destDir, relativePath);
+                if (!File.Exists(destFile))
+                    throw new InvalidOperationException(
+                        $"Archive verification failed for {specId}: missing {relativePath}");
+            }
+        }
+        catch
+        {
+            // Rollback: remove partial archive
+            try
+            {
+                if (Directory.Exists(destDir))
+                    Directory.Delete(destDir, recursive: true);
+            }
+            catch { /* best-effort rollback */ }
+
+            throw;
+        }
+
+        // Delete original only after full copy + verification
+        Directory.Delete(srcDir, recursive: true);
+    }
+
+    public async Task<Spec?> LoadArchivedAsync(string specId, CancellationToken ct = default)
+    {
+        var path = ArchivedSpecFile(specId);
+        if (!File.Exists(path)) return null;
+        var json = await File.ReadAllTextAsync(path, ct);
+        return SpecPruner.Deserialize(json);
     }
 
     // ── IAssignmentStore ──

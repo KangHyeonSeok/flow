@@ -16,6 +16,7 @@ public sealed class FlowRunner
     private readonly Dictionary<AgentRole, IAgentAdapter> _agents;
     private readonly RunnerConfig _config;
     private readonly TimeProvider _time;
+    private readonly ReviewResponseSubmitter _submitter;
 
     public FlowRunner(
         IFlowStore store,
@@ -27,6 +28,7 @@ public sealed class FlowRunner
         _agents = agents.ToDictionary(a => a.Role);
         _config = config;
         _time = time ?? TimeProvider.System;
+        _submitter = new ReviewResponseSubmitter(store);
     }
 
     /// <summary>한 번의 cycle을 실행한다. 처리한 spec 수를 반환한다.</summary>
@@ -109,6 +111,162 @@ public sealed class FlowRunner
                 break;
             }
         }
+    }
+
+    /// <summary>사용자 ReviewRequest 응답을 제출하고 후속 처리를 수행한다.</summary>
+    public async Task<bool> SubmitReviewResponseAsync(
+        string specId, string reviewRequestId,
+        ReviewResponse response, CancellationToken ct = default)
+    {
+        var runId = FlowId.New("run");
+        var result = await _submitter.SubmitResponseAsync(specId, reviewRequestId, response, ct);
+
+        switch (result.Kind)
+        {
+            case SubmitResultKind.Success when result.ProposedEvent.HasValue:
+            {
+                var spec = await _store.LoadAsync(specId, ct);
+                if (spec == null) return false;
+                var assignments = await ((IAssignmentStore)_store).LoadBySpecAsync(specId, ct);
+                var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(specId, ct);
+                var success = await EvaluateAndApply(spec, result.ProposedEvent.Value, ActorKind.User,
+                    assignments, reviewRequests, runId, ct);
+
+                // RR을 Answered로 커밋: 상태 전이가 성공한 후에만
+                if (success && result.ValidatedReviewRequest != null)
+                {
+                    await _submitter.CommitAsync(result.ValidatedReviewRequest, ct);
+                }
+                return success;
+            }
+            case SubmitResultKind.NeedsPlannerReregistration:
+            {
+                var success = await HandleFailedSpecReregistrationAsync(specId, response, runId, ct);
+
+                // RR을 Answered로 커밋: 재등록/아카이브가 성공한 후에만
+                if (success && result.ValidatedReviewRequest != null)
+                {
+                    await _submitter.CommitAsync(result.ValidatedReviewRequest, ct);
+                }
+                return success;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private async Task<bool> HandleFailedSpecReregistrationAsync(
+        string failedSpecId, ReviewResponse response,
+        string runId, CancellationToken ct)
+    {
+        var failedSpec = await _store.LoadAsync(failedSpecId, ct);
+        if (failedSpec == null || failedSpec.State != FlowState.Failed)
+        {
+            return false;
+        }
+
+        // "discard" 옵션: 재등록 없이 아카이브
+        if (response.SelectedOptionId == "discard")
+        {
+            return await ArchiveFailedSpecAsync(failedSpec, runId, ct);
+        }
+
+        // Planner 호출하여 재등록
+        if (!_agents.TryGetValue(AgentRole.Planner, out var planner))
+        {
+            await LogActivity(failedSpec, ActivityAction.EventRejected, runId,
+                "failed spec re-registration aborted: no Planner agent registered", ct);
+            return false;
+        }
+
+        var recentActivity = await ((IActivityStore)_store).LoadRecentAsync(failedSpecId, 20, ct);
+        var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(failedSpecId, ct);
+
+        var asgId = FlowId.New("asg");
+        var plannerAssignment = new Assignment
+        {
+            Id = asgId, SpecId = failedSpecId,
+            AgentRole = AgentRole.Planner,
+            Type = AssignmentType.Planning,
+            Status = AssignmentStatus.Running,
+            StartedAt = _time.GetUtcNow(),
+            TimeoutSeconds = _config.DefaultTimeoutSeconds
+        };
+        await ((IAssignmentStore)_store).SaveAsync(plannerAssignment, ct);
+
+        var input = new AgentInput
+        {
+            Spec = failedSpec,
+            Assignment = plannerAssignment,
+            RecentActivity = recentActivity,
+            ReviewRequests = reviewRequests,
+            ProjectId = failedSpec.ProjectId,
+            RunId = runId,
+            CurrentVersion = failedSpec.Version
+        };
+
+        await LogActivity(failedSpec, ActivityAction.AgentInvoked, runId,
+            "invoking Planner for failed spec re-registration", ct);
+
+        var output = await planner.ExecuteAsync(input, ct);
+
+        if (output.Result != AgentResult.Success)
+        {
+            plannerAssignment.Status = AssignmentStatus.Failed;
+            plannerAssignment.FinishedAt = _time.GetUtcNow();
+            plannerAssignment.ResultSummary = output.Message ?? output.Summary;
+            await ((IAssignmentStore)_store).SaveAsync(plannerAssignment, ct);
+
+            await LogActivity(failedSpec, ActivityAction.EventRejected, runId,
+                $"Planner returned {output.Result}: {output.Message ?? output.Summary}", ct);
+            return false;
+        }
+
+        plannerAssignment.Status = AssignmentStatus.Completed;
+        plannerAssignment.FinishedAt = _time.GetUtcNow();
+        plannerAssignment.ResultSummary = output.Summary;
+        await ((IAssignmentStore)_store).SaveAsync(plannerAssignment, ct);
+
+        // 새 spec 생성
+        var newSpecId = FlowId.New("spec");
+        var newSpec = new Spec
+        {
+            Id = newSpecId,
+            ProjectId = failedSpec.ProjectId,
+            Title = failedSpec.Title,
+            Type = failedSpec.Type,
+            Problem = failedSpec.Problem,
+            Goal = failedSpec.Goal,
+            AcceptanceCriteria = failedSpec.AcceptanceCriteria,
+            RiskLevel = failedSpec.RiskLevel,
+            DerivedFrom = failedSpecId,
+            State = FlowState.Draft,
+            ProcessingStatus = ProcessingStatus.Pending,
+            CreatedAt = _time.GetUtcNow(),
+            UpdatedAt = _time.GetUtcNow(),
+            Version = 1
+        };
+        await _store.SaveAsync(newSpec, 0, ct);
+
+        await LogActivity(newSpec, ActivityAction.DraftCreated, runId,
+            $"re-registered from failed spec {failedSpecId}", ct);
+
+        // 원본 아카이브
+        return await ArchiveFailedSpecAsync(failedSpec, runId, ct);
+    }
+
+    private async Task<bool> ArchiveFailedSpecAsync(Spec spec, string runId, CancellationToken ct)
+    {
+        var assignments = await ((IAssignmentStore)_store).LoadBySpecAsync(spec.Id, ct);
+        var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
+        var success = await EvaluateAndApply(spec, FlowEvent.SpecArchived, ActorKind.Runner,
+            assignments, reviewRequests, runId, ct);
+
+        if (success)
+        {
+            await _store.ArchiveAsync(spec.Id, ct);
+        }
+        return success;
     }
 
     private async Task ProcessTimeouts(
@@ -306,15 +464,14 @@ public sealed class FlowRunner
 
         // Agent 호출
         var recentActivity = await ((IActivityStore)_store).LoadRecentAsync(spec.Id, 20, ct);
-        var openReviewRequests = (await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct))
-            .Where(r => r.Status == ReviewRequestStatus.Open).ToList();
+        var allReviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
 
         var input = new AgentInput
         {
             Spec = spec,
             Assignment = currentAssignment,
             RecentActivity = recentActivity,
-            OpenReviewRequests = openReviewRequests,
+            ReviewRequests = allReviewRequests,
             ProjectId = spec.ProjectId,
             RunId = runId,
             CurrentVersion = spec.Version
@@ -364,7 +521,8 @@ public sealed class FlowRunner
 
                 var actorKind = AgentRoleToActorKind(assignment.AgentRole);
                 return await EvaluateAndApply(spec, proposedEvent, actorKind,
-                    updatedAssignments, reviewRequests, runId, ct);
+                    updatedAssignments, reviewRequests, runId, ct,
+                    output.ProposedReviewRequest);
             }
 
             case AgentResult.RetryableFailure:
@@ -440,7 +598,8 @@ public sealed class FlowRunner
         Spec spec, FlowEvent ev, ActorKind actor,
         IReadOnlyList<Assignment> assignments,
         IReadOnlyList<ReviewRequest> reviewRequests,
-        string runId, CancellationToken ct)
+        string runId, CancellationToken ct,
+        ProposedReviewRequest? proposedReviewRequest = null)
     {
         var previousState = spec.State;
         var previousProcessingStatus = spec.ProcessingStatus;
@@ -474,10 +633,17 @@ public sealed class FlowRunner
             spec.UpdatedAt = _time.GetUtcNow();
         }
 
+        // Enrich side effects with ProposedReviewRequest from agent
+        var sideEffects = ruleOutput.SideEffects;
+        if (proposedReviewRequest != null)
+        {
+            sideEffects = EnrichCreateReviewRequestEffects(sideEffects, proposedReviewRequest);
+        }
+
         // Execute side effects
         var executor = new SideEffectExecutor(_store, _config, _time);
         var sideEffectResult = await executor.ExecuteAsync(
-            ruleOutput.SideEffects, spec, runId, ct);
+            sideEffects, spec, runId, ct);
 
         // Save spec (CAS 1x) — expectedVersion is the pre-mutation version
         var expectedVersion = (ruleOutput.Mutation?.NewVersion ?? spec.Version) - 1;
@@ -619,5 +785,32 @@ public sealed class FlowRunner
                 spec.RetryCounters.ReworkLoopCount++;
                 break;
         }
+    }
+
+    /// <summary>
+    /// CreateReviewRequest side effect에 agent의 ProposedReviewRequest 정보를 병합한다.
+    /// </summary>
+    private static IReadOnlyList<SideEffect> EnrichCreateReviewRequestEffects(
+        IReadOnlyList<SideEffect> effects, ProposedReviewRequest proposed)
+    {
+        var result = new List<SideEffect>(effects.Count);
+        foreach (var effect in effects)
+        {
+            if (effect.Kind == SideEffectKind.CreateReviewRequest)
+            {
+                result.Add(SideEffect.CreateReviewRequest(
+                    effect.Reason ?? "",
+                    effect.SpecId,
+                    proposed.Questions ?? effect.Questions,
+                    effect.DeadlineSeconds,
+                    proposed.Options ?? effect.ReviewRequestOptions,
+                    proposed.Summary ?? effect.ReviewRequestSummary));
+            }
+            else
+            {
+                result.Add(effect);
+            }
+        }
+        return result;
     }
 }

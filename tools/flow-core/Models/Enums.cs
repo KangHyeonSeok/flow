@@ -11,7 +11,8 @@ public enum FlowState
     Review,             // 검토
     Active,             // 활성
     Failed,             // 실패
-    Completed           // 완료
+    Completed,          // 완료
+    Archived            // 보관
 }
 
 /// <summary>처리 상태</summary>
@@ -52,7 +53,8 @@ public enum FlowEvent
     AssignmentTimedOut,
     AssignmentResumed,
     ReviewRequestTimedOut,
-    RollbackRequested
+    RollbackRequested,
+    SpecArchived
 }
 
 /// <summary>위험도</summary>

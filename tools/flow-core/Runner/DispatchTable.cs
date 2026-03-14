@@ -130,7 +130,7 @@ public static class DispatchTable
     /// <summary>dispatch에서 제외할 spec인지 확인한다.</summary>
     public static bool ShouldExclude(Spec spec, TimeProvider time)
     {
-        if (spec.State is FlowState.Failed or FlowState.Completed)
+        if (spec.State is FlowState.Failed or FlowState.Completed or FlowState.Archived)
             return true;
         if (spec.ProcessingStatus is ProcessingStatus.OnHold or ProcessingStatus.Error)
             return true;

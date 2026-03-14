@@ -28,6 +28,7 @@ public enum ActivityAction
     AssignmentResumed,
     ReviewRequestTimedOut,
     RollbackRequested,
+    SpecArchived,
 
     // 로그 전용 값 — side effect / 상태 변경
     SpecActivated,
@@ -35,6 +36,7 @@ public enum ActivityAction
     AssignmentCancelled,
     AssignmentFailed,
     ReviewRequestClosed,
+    ReviewRequestSuperseded,
     CounterReset,
     ManualOverride,
 

@@ -26,6 +26,7 @@ public sealed class Spec
     public IReadOnlyList<string> TestIds { get; set; } = [];
     public IReadOnlyList<TestDefinition>? Tests { get; set; }
     public RetryCounters RetryCounters { get; set; } = new();
+    public string? DerivedFrom { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; }

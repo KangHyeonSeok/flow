@@ -104,12 +104,29 @@ public sealed class SideEffectExecutor
                         CreatedBy = "runner",
                         CreatedAt = _time.GetUtcNow(),
                         Reason = effect.Reason,
+                        Summary = effect.ReviewRequestSummary,
+                        Questions = effect.Questions,
+                        Options = effect.ReviewRequestOptions,
                         Status = ReviewRequestStatus.Open,
                         DeadlineAt = _time.GetUtcNow().AddSeconds(_config.DefaultReviewDeadlineSeconds)
                     };
                     await ((IReviewRequestStore)_store).SaveAsync(rr, ct);
                     spec.ReviewRequestIds = spec.ReviewRequestIds.Append(rrId).ToList();
                     createdReviewRequestIds.Add(rrId);
+                    break;
+                }
+                case SideEffectKind.SupersedeReviewRequest:
+                {
+                    if (effect.TargetReviewRequestId is { } targetId)
+                    {
+                        var rr = await ((IReviewRequestStore)_store).LoadAsync(spec.Id, targetId, ct);
+                        if (rr != null && rr.Status == ReviewRequestStatus.Open)
+                        {
+                            rr.Status = ReviewRequestStatus.Superseded;
+                            rr.Resolution = effect.Description ?? "superseded by new review request";
+                            await ((IReviewRequestStore)_store).SaveAsync(rr, ct);
+                        }
+                    }
                     break;
                 }
                 case SideEffectKind.CloseReviewRequest:
