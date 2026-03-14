@@ -54,7 +54,15 @@ public static class StoreFactory
             MaxSpecsPerCycle = 0
         };
 
-        var runner = new FlowRunner(store, agents, config);
+        // worktree provisioner: backend config가 있을 때만 (CLI agent 활성 시)
+        IWorktreeProvisioner? worktreeProvisioner = null;
+        if (backendConfig != null)
+        {
+            var projectRoot = Directory.GetCurrentDirectory();
+            worktreeProvisioner = new GitWorktreeProvisioner(projectRoot, flowHome);
+        }
+
+        var runner = new FlowRunner(store, agents, config, worktreeProvisioner: worktreeProvisioner);
         return (store, runner);
     }
 

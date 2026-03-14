@@ -7,4 +7,5 @@ public sealed class RunnerConfig
     public int DefaultTimeoutSeconds { get; init; } = 3600;
     public int DefaultReviewDeadlineSeconds { get; init; } = 86400;
     public int RetryBackoffBaseSeconds { get; init; } = 60;
+    public int MaxRetries { get; init; } = 3;
 }

@@ -180,6 +180,27 @@ public sealed class PromptBuilder
             - 기존 스타일 유지
             - 불필요한 리팩터링 금지
             - 커밋은 하지 않음
+
+            # Evidence 보고 형식
+
+            구현 완료 후 변경된 파일과 테스트 결과를 evidenceRefs로 보고하세요:
+
+            ```json
+            {
+              "proposedEvent": "implementationSubmitted",
+              "summary": "AC를 만족하도록 구현했습니다.",
+              "proposedReviewRequest": null,
+              "evidenceRefs": [
+                { "kind": "source", "relativePath": "src/Foo.cs", "summary": "핵심 로직 구현" },
+                { "kind": "test", "relativePath": "tests/FooTests.cs", "summary": "AC-1 검증 테스트" },
+                { "kind": "testResult", "relativePath": "test-output.log", "summary": "전체 테스트 통과" }
+              ]
+            }
+            ```
+
+            evidenceRefs의 kind 값: source, test, testResult, config, doc
+            relativePath는 작업 디렉토리(worktree) 기준 상대 경로입니다.
+            runner가 evidence manifest에 이 경로를 기록합니다.
             """;
     }
 
@@ -205,6 +226,26 @@ public sealed class PromptBuilder
             - 필요할 때만 범위를 넓히세요.
             - 통과하면 `testValidationPassed`를 제안하세요.
             - 부족하거나 실패하면 `testValidationRejected`와 구체적 사유를 반환하세요.
+
+            # Evidence 보고 형식
+
+            검증 결과를 evidenceRefs로 보고하세요:
+
+            ```json
+            {
+              "proposedEvent": "testValidationPassed",
+              "summary": "모든 AC에 대한 테스트가 통과했습니다.",
+              "proposedReviewRequest": null,
+              "evidenceRefs": [
+                { "kind": "testResult", "relativePath": "test-output.log", "summary": "테스트 실행 결과" },
+                { "kind": "test", "relativePath": "tests/FooTests.cs", "summary": "AC-1 검증 테스트 확인" }
+              ]
+            }
+            ```
+
+            evidenceRefs의 kind 값: source, test, testResult, config, doc
+            relativePath는 작업 디렉토리(worktree) 기준 상대 경로입니다.
+            runner가 evidence manifest에 이 경로를 기록합니다.
             """;
     }
 

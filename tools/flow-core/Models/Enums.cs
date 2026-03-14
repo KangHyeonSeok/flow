@@ -54,7 +54,8 @@ public enum FlowEvent
     AssignmentResumed,
     ReviewRequestTimedOut,
     RollbackRequested,
-    SpecArchived
+    SpecArchived,
+    ExecutionFailed
 }
 
 /// <summary>위험도</summary>

@@ -19,6 +19,8 @@ public sealed class RetryCounters
     public int UserReviewLoopCount { get; set; }
     public int ReworkLoopCount { get; set; }
     public int ArchitectReviewLoopCount { get; set; }
+    public int ImplementationRetryCount { get; set; }
+    public int TestValidationRetryCount { get; set; }
 
     /// <summary>재시도 backoff: 이 시각 이전에는 dispatch 대상에서 제외</summary>
     public DateTimeOffset? RetryNotBefore { get; set; }
@@ -28,6 +30,8 @@ public sealed class RetryCounters
         UserReviewLoopCount = UserReviewLoopCount,
         ReworkLoopCount = ReworkLoopCount,
         ArchitectReviewLoopCount = ArchitectReviewLoopCount,
+        ImplementationRetryCount = ImplementationRetryCount,
+        TestValidationRetryCount = TestValidationRetryCount,
         RetryNotBefore = RetryNotBefore
     };
 }

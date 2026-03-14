@@ -38,6 +38,7 @@ public static class RuleEvaluator
         { FlowEvent.AssignmentResumed,                   [ActorKind.Runner, ActorKind.SpecManager] },
         { FlowEvent.ReviewRequestTimedOut,               [ActorKind.Runner] },
         { FlowEvent.SpecArchived,                        [ActorKind.Runner] },
+        { FlowEvent.ExecutionFailed,                     [ActorKind.Runner] },
     };
 
     public static RuleOutput Evaluate(RuleInput input)
@@ -103,6 +104,9 @@ public static class RuleEvaluator
             // timeout/resume
             FlowEvent.AssignmentTimedOut => EvalAssignmentTimedOut(input),
             FlowEvent.AssignmentResumed => EvalAssignmentResumed(input),
+
+            // execution failure (agent crash, timeout, provisioning failure)
+            FlowEvent.ExecutionFailed => EvalExecutionFailed(input),
 
             // archive
             FlowEvent.SpecArchived => EvalSpecArchived(input),
@@ -536,6 +540,26 @@ public static class RuleEvaluator
         {
             effects.AddRange(BuildCloseOpenReviewRequestEffects(input, "cancel requested"));
         }
+
+        return AcceptPhaseTransition(input.Spec, FlowState.Failed, null, effects);
+    }
+
+    /// <summary>
+    /// agent 실행 실패 (backend crash, timeout, provisioning failure 등).
+    /// CancelRequested와 달리 사용자 의도가 아닌 시스템 실행 오류를 표현한다.
+    /// 허용 상태: ArchitectureReview, Implementation, TestValidation, Review.
+    /// </summary>
+    private static RuleOutput EvalExecutionFailed(RuleInput input)
+    {
+        var state = input.Spec.State;
+
+        if (state is not (FlowState.ArchitectureReview or FlowState.Implementation
+            or FlowState.TestValidation or FlowState.Review))
+            return RuleOutput.Reject(RejectionReason.ForbiddenTransition,
+                [SideEffect.Log($"execution_failed not applicable in state {state}")]);
+
+        var effects = new List<SideEffect> { SideEffect.Log("execution failed — agent crash or infra error") };
+        effects.AddRange(BuildFailActiveAssignmentEffects(input, "execution failed"));
 
         return AcceptPhaseTransition(input.Spec, FlowState.Failed, null, effects);
     }

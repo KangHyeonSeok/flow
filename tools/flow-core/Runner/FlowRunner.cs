@@ -17,18 +17,21 @@ public sealed class FlowRunner
     private readonly RunnerConfig _config;
     private readonly TimeProvider _time;
     private readonly ReviewResponseSubmitter _submitter;
+    private readonly IWorktreeProvisioner? _worktreeProvisioner;
 
     public FlowRunner(
         IFlowStore store,
         IEnumerable<IAgentAdapter> agents,
         RunnerConfig config,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        IWorktreeProvisioner? worktreeProvisioner = null)
     {
         _store = store;
         _agents = agents.ToDictionary(a => a.Role);
         _config = config;
         _time = time ?? TimeProvider.System;
         _submitter = new ReviewResponseSubmitter(store);
+        _worktreeProvisioner = worktreeProvisioner;
     }
 
     /// <summary>한 번의 cycle을 실행한다. 처리한 spec 수를 반환한다.</summary>
@@ -524,6 +527,43 @@ public sealed class FlowRunner
             }
         }
 
+        // Worktree provisioning: Implementation/TestValidation은 worktree 필요
+        if (_worktreeProvisioner != null
+            && currentAssignment.Type is AssignmentType.Implementation or AssignmentType.TestValidation
+            && currentAssignment.Worktree == null)
+        {
+            var provisionResult = await _worktreeProvisioner.CreateAsync(spec.Id, ct);
+            if (!provisionResult.Success)
+            {
+                await LogActivity(spec, ActivityAction.AgentCompleted, runId,
+                    $"worktree provisioning failed for {currentAssignment.Type}", ct, currentAssignment.Id);
+                currentAssignment.Status = AssignmentStatus.Failed;
+                currentAssignment.FinishedAt = _time.GetUtcNow();
+                currentAssignment.ResultSummary = "worktree provisioning failed";
+                await ((IAssignmentStore)_store).SaveAsync(currentAssignment, ct);
+                return false;
+            }
+
+            // Assignment.Worktree는 init-only → 새 객체 생성
+            currentAssignment = new Assignment
+            {
+                Id = currentAssignment.Id,
+                SpecId = currentAssignment.SpecId,
+                AgentRole = currentAssignment.AgentRole,
+                Type = currentAssignment.Type,
+                Status = currentAssignment.Status,
+                StartedAt = currentAssignment.StartedAt,
+                TimeoutSeconds = currentAssignment.TimeoutSeconds,
+                Worktree = new AssignmentWorktree
+                {
+                    Id = provisionResult.WorktreeId ?? FlowId.New("wt"),
+                    Path = provisionResult.Path!,
+                    Branch = provisionResult.Branch
+                }
+            };
+            await ((IAssignmentStore)_store).SaveAsync(currentAssignment, ct);
+        }
+
         // Agent 호출
         var recentActivity = await ((IActivityStore)_store).LoadRecentAsync(spec.Id, 20, ct);
         var allReviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
@@ -629,12 +669,14 @@ public sealed class FlowRunner
 
                 // retry 처리: RuleEvaluator를 우회하여 직접 spec 업데이트
                 var retryCount = GetRetryCount(spec);
-                if (retryCount >= 3) // MaxRetryCount
+                if (retryCount >= _config.MaxRetries)
                 {
-                    // terminal failure로 전환
+                    // retry 초과 → execution failure로 전환
                     var updatedAssignments = await ((IAssignmentStore)_store).LoadBySpecAsync(spec.Id, ct);
                     var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
-                    return await EvaluateAndApply(spec, FlowEvent.SpecValidationFailed, ActorKind.SpecValidator,
+
+                    return await EvaluateAndApply(spec,
+                        GetTerminalFailureEvent(spec), GetTerminalFailureActor(spec),
                         updatedAssignments, reviewRequests, runId, ct);
                 }
 
@@ -666,15 +708,8 @@ public sealed class FlowRunner
                 var updatedAssignments = await ((IAssignmentStore)_store).LoadBySpecAsync(spec.Id, ct);
                 var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
 
-                // Review 상태에서만 SpecValidationFailed 사용, 그 외는 CancelRequested로 처리
-                var failEvent = spec.State == FlowState.Review
-                    ? FlowEvent.SpecValidationFailed
-                    : FlowEvent.CancelRequested;
-                var failActor = spec.State == FlowState.Review
-                    ? ActorKind.SpecValidator
-                    : ActorKind.User;
-
-                return await EvaluateAndApply(spec, failEvent, failActor,
+                return await EvaluateAndApply(spec,
+                    GetTerminalFailureEvent(spec), GetTerminalFailureActor(spec),
                     updatedAssignments, reviewRequests, runId, ct);
             }
 
@@ -760,6 +795,16 @@ public sealed class FlowRunner
         foreach (var activityEvent in sideEffectResult.ActivityEvents)
         {
             try { await ((IActivityStore)_store).AppendAsync(activityEvent, ct); }
+            catch { /* best-effort */ }
+        }
+
+        // Worktree cleanup: spec이 종료 상태로 전이되면 worktree를 정리
+        if (_worktreeProvisioner != null
+            && spec.State is FlowState.Failed or FlowState.Completed or FlowState.Active or FlowState.Archived
+            && previousState is FlowState.ArchitectureReview or FlowState.Implementation
+                or FlowState.TestValidation or FlowState.Review)
+        {
+            try { await _worktreeProvisioner.CleanupAsync(spec.Id, ct); }
             catch { /* best-effort */ }
         }
 
@@ -889,6 +934,8 @@ public sealed class FlowRunner
     private static int GetRetryCount(Spec spec) => spec.State switch
     {
         FlowState.ArchitectureReview => spec.RetryCounters.ArchitectReviewLoopCount,
+        FlowState.Implementation => spec.RetryCounters.ImplementationRetryCount,
+        FlowState.TestValidation => spec.RetryCounters.TestValidationRetryCount,
         FlowState.Review => spec.RetryCounters.ReworkLoopCount,
         _ => spec.RetryCounters.ReworkLoopCount
     };
@@ -900,11 +947,29 @@ public sealed class FlowRunner
             case FlowState.ArchitectureReview:
                 spec.RetryCounters.ArchitectReviewLoopCount++;
                 break;
+            case FlowState.Implementation:
+                spec.RetryCounters.ImplementationRetryCount++;
+                break;
+            case FlowState.TestValidation:
+                spec.RetryCounters.TestValidationRetryCount++;
+                break;
             default:
                 spec.RetryCounters.ReworkLoopCount++;
                 break;
         }
     }
+
+    /// <summary>
+    /// 실행 실패(retry 초과, TerminalFailure)에 사용할 이벤트를 결정한다.
+    /// Review → SpecValidationFailed (기존 도메인 이벤트), 그 외 → ExecutionFailed (시스템 실행 오류).
+    /// </summary>
+    private static FlowEvent GetTerminalFailureEvent(Spec spec) => spec.State == FlowState.Review
+        ? FlowEvent.SpecValidationFailed
+        : FlowEvent.ExecutionFailed;
+
+    private static ActorKind GetTerminalFailureActor(Spec spec) => spec.State == FlowState.Review
+        ? ActorKind.SpecValidator
+        : ActorKind.Runner;
 
     /// <summary>
     /// CreateReviewRequest side effect에 agent의 ProposedReviewRequest 정보를 병합한다.
