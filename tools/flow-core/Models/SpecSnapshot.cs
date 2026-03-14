@@ -8,6 +8,7 @@ public sealed class SpecSnapshot
     public required FlowState State { get; set; }
     public required ProcessingStatus ProcessingStatus { get; set; }
     public RiskLevel RiskLevel { get; init; } = RiskLevel.Low;
+    public IReadOnlyList<string> DependsOn { get; init; } = [];
     public int Version { get; set; }
     public RetryCounters RetryCounters { get; set; } = new();
 }
