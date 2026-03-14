@@ -257,6 +257,51 @@ public sealed class FileFlowStore : IFlowStore
         return events;
     }
 
+    // ── IEvidenceStore ──
+
+    private string EvidenceDir(string specId, string runId) =>
+        Path.Combine(SpecDir(specId), "evidence", runId);
+    private string ManifestFile(string specId, string runId) =>
+        Path.Combine(EvidenceDir(specId, runId), "manifest.json");
+
+    public string GetEvidenceDir(string specId, string runId) =>
+        EvidenceDir(specId, runId);
+
+    async Task IEvidenceStore.SaveManifestAsync(EvidenceManifest manifest, CancellationToken ct)
+    {
+        var path = ManifestFile(manifest.SpecId, manifest.RunId);
+        var json = JsonSerializer.Serialize(manifest, FlowJsonOptions.Default);
+        await AtomicWriteAsync(path, json, ct);
+    }
+
+    async Task<EvidenceManifest?> IEvidenceStore.LoadManifestAsync(string specId, string runId, CancellationToken ct)
+    {
+        var path = ManifestFile(specId, runId);
+        if (!File.Exists(path)) return null;
+        var json = await File.ReadAllTextAsync(path, ct);
+        return JsonSerializer.Deserialize<EvidenceManifest>(json, FlowJsonOptions.Default);
+    }
+
+    async Task<IReadOnlyList<EvidenceManifest>> IEvidenceStore.LoadBySpecAsync(string specId, CancellationToken ct)
+    {
+        var evidenceRoot = Path.Combine(SpecDir(specId), "evidence");
+        if (!Directory.Exists(evidenceRoot)) return [];
+
+        var manifests = new List<EvidenceManifest>();
+        foreach (var dir in Directory.GetDirectories(evidenceRoot))
+        {
+            var manifestPath = Path.Combine(dir, "manifest.json");
+            if (!File.Exists(manifestPath)) continue;
+            var json = await File.ReadAllTextAsync(manifestPath, ct);
+            var manifest = JsonSerializer.Deserialize<EvidenceManifest>(json, FlowJsonOptions.Default);
+            if (manifest is not null)
+                manifests.Add(manifest);
+        }
+        // RunId는 랜덤 GUID이므로 CreatedAt 기준 최신순 정렬
+        manifests.Sort((a, b) => b.CreatedAt.CompareTo(a.CreatedAt));
+        return manifests;
+    }
+
     // ── Atomic write ──
 
     private static async Task AtomicWriteAsync(string path, string content, CancellationToken ct)

@@ -653,22 +653,36 @@ Phase 5 범위를 정리하면서 함께 확정한 보조 결정들이다.
 
 ### 6.3 Evidence 저장 계약
 
-**답변**: Evidence는 Phase 5b에서 최소 계약을 도입한다. Phase 5a의 SpecValidator MVP 필수조건은 아니다.
+**답변**: Evidence는 spec 디렉토리 내부에 저장한다. 스펙 파일과 동일 경로 체계를 사용한다.
 
 결정:
-- 저장 경로는 project root 기준 `docs/evidence/<specId>/<runId>/`로 둔다.
-- spec, assignment, review request 같은 runner 상태 파일은 계속 shared flow home(`~/.flow/...`)에 둔다.
-- AgentOutput에는 원본 evidence를 직접 담지 않고, evidence manifest 또는 상대 경로 참조만 담는다.
+- 저장 경로는 spec 디렉토리 내부 `~/.flow/projects/<projectId>/specs/<specId>/evidence/<runId>/`로 둔다.
+- spec, assignment, review request, evidence 모두 같은 spec 디렉토리 트리에 공존한다.
+- AgentOutput에 `EvidenceRefs` 목록을 추가하고, runner가 manifest를 저장한다.
 
 이유:
-- 현재 저장소 구현은 state 파일을 `~/.flow/projects/<projectId>/specs` 아래에 저장한다.
-- 반면 evidence는 사람이 열어보는 산출물이므로 workspace 내부 `docs/evidence`가 더 자연스럽다.
-- SpecValidator MVP는 텍스트 판단 중심이라 evidence 계약 부재가 즉시 blocker는 아니다.
+- evidence를 workspace(`docs/evidence`)에 두면 스펙 파일 경로와 분리되어 관리가 복잡해진다.
+- spec 디렉토리 내부에 두면 archive/delete 시 evidence도 함께 이동·삭제되어 라이프사이클이 일치한다.
+- `FileFlowStore`의 기존 경로 체계(`SpecDir/<specId>/`)를 그대로 확장한다.
 
-Phase 5b 최소 계약 초안:
-- `EvidenceRef { kind, path, summary }` 목록을 AgentOutput 또는 side effect 결과에 추가
-- 경로는 workspace-relative로 기록
-- runner는 existence check만 수행하고, 내용 해석은 하지 않음
+저장 구조:
+```
+~/.flow/projects/<projectId>/specs/<specId>/
+  ├── spec.json
+  ├── assignments/
+  ├── review-requests/
+  ├── activity/
+  └── evidence/
+       └── <runId>/
+            ├── manifest.json        ← EvidenceRef 목록
+            └── (산출물 파일들)
+```
+
+Evidence 계약:
+- `EvidenceRef { Kind, RelativePath, Summary }` 목록을 `AgentOutput.EvidenceRefs`에 추가
+- `RelativePath`는 evidence 디렉토리 기준 상대 경로
+- runner는 manifest 저장 + existence check만 수행하고, 내용 해석은 하지 않음
+- `IEvidenceStore` 인터페이스로 저장/조회를 추상화한다
 
 ### 6.4 flow-cli 마이그레이션 시점
 

@@ -520,9 +520,28 @@ public sealed class FlowRunner
                 var reviewRequests = await ((IReviewRequestStore)_store).LoadBySpecAsync(spec.Id, ct);
 
                 var actorKind = AgentRoleToActorKind(assignment.AgentRole);
-                return await EvaluateAndApply(spec, proposedEvent, actorKind,
+                var committed = await EvaluateAndApply(spec, proposedEvent, actorKind,
                     updatedAssignments, reviewRequests, runId, ct,
                     output.ProposedReviewRequest);
+
+                // Evidence manifest 저장: CAS 커밋 성공 후에만 저장
+                if (committed && output.EvidenceRefs is { Count: > 0 } refs)
+                {
+                    var manifest = new EvidenceManifest
+                    {
+                        SpecId = spec.Id,
+                        RunId = runId,
+                        CreatedAt = _time.GetUtcNow(),
+                        Refs = refs
+                    };
+                    try
+                    {
+                        await ((IEvidenceStore)_store).SaveManifestAsync(manifest, ct);
+                    }
+                    catch { /* best-effort */ }
+                }
+
+                return committed;
             }
 
             case AgentResult.RetryableFailure:

@@ -31,6 +31,7 @@ public sealed class AgentOutput
     public string? Summary { get; init; }
     public string? Message { get; init; }
     public ProposedReviewRequest? ProposedReviewRequest { get; init; }
+    public IReadOnlyList<EvidenceRef>? EvidenceRefs { get; init; }
 }
 
 /// <summary>Agent가 제안하는 ReviewRequest 상세 정보</summary>
