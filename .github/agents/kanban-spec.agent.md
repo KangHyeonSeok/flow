@@ -65,14 +65,14 @@ curl -X POST http://localhost:3000/api/specs \
     "project": "<project-key>",
     "id": "<F-NNN>",
     "title": "<기능명>",
-    "type": "기능",
+    "type": "feature",
     "description": "<목적과 범위>",
-    "status": "초안",
+    "status": "draft",
     "conditions": [
       {
         "id": "<F-NNN-C1>",
         "description": "Given ... When ... Then ...",
-        "status": "초안"
+        "status": "draft"
       }
     ],
     "relatedFiles": ["src/path/to/file.ts"]
@@ -88,12 +88,12 @@ curl -s http://localhost:3000/api/specs/{specId} | python -m json.tool
 
 ### 4. 상태 전환
 
-스펙이 바로 작업 가능한 경우 `대기`로 전환한다.
+스펙이 바로 작업 가능한 경우 `queued`로 전환한다.
 
 ```bash
 curl -X PATCH http://localhost:3000/api/specs/{specId}/status \
   -H "Content-Type: application/json" \
-  -d '{"status": "대기"}'
+  -d '{"status": "queued"}'
 ```
 
 ### 5. 결과 보고
@@ -122,5 +122,5 @@ curl -X PATCH http://localhost:3000/api/specs/{specId}/status \
 
 | type | 설명 | 최종 상태 |
 |------|------|----------|
-| `기능` | 지속적으로 유지되는 기능 스펙. 수락 조건(conditions) 필수. | `활성` → `완료` |
-| `태스크` | 일회성 작업. 수락 조건 불필요. | `완료` |
+| `feature` (기능) | 지속적으로 유지되는 기능 스펙. 수락 조건(conditions) 필수. | `active` → `done` |
+| `task` (태스크) | 일회성 작업. 수락 조건 불필요. | `done` |
