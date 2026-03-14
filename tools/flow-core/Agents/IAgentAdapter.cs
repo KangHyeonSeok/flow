@@ -32,6 +32,9 @@ public sealed class AgentOutput
     public string? Message { get; init; }
     public ProposedReviewRequest? ProposedReviewRequest { get; init; }
     public IReadOnlyList<EvidenceRef>? EvidenceRefs { get; init; }
+
+    /// <summary>Planner 전용: spec 본문 수정/생성 제안</summary>
+    public ProposedSpecDraft? ProposedSpec { get; init; }
 }
 
 /// <summary>Agent가 제안하는 ReviewRequest 상세 정보</summary>

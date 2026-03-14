@@ -76,6 +76,41 @@ public sealed class OutputParser
                     evidenceRefs = validRefs;
             }
 
+            // ProposedSpec 파싱 (Planner 전용)
+            ProposedSpecDraft? proposedSpec = null;
+            if (dto.ProposedSpec is { } psDto)
+            {
+                IReadOnlyList<AcceptanceCriterionDraft>? acDrafts = null;
+                if (psDto.AcceptanceCriteria is { Count: > 0 } acDtos)
+                {
+                    acDrafts = acDtos
+                        .Where(a => !string.IsNullOrWhiteSpace(a.Text))
+                        .Select(a => new AcceptanceCriterionDraft
+                        {
+                            Text = a.Text!,
+                            Testable = a.Testable ?? true,
+                            Notes = a.Notes
+                        }).ToList();
+                }
+
+                proposedSpec = new ProposedSpecDraft
+                {
+                    Title = psDto.Title,
+                    Type = TryParseEnum<SpecType>(psDto.Type),
+                    Problem = psDto.Problem,
+                    Goal = psDto.Goal,
+                    AcceptanceCriteria = acDrafts,
+                    RiskLevel = TryParseEnum<RiskLevel>(psDto.RiskLevel),
+                    DependsOn = psDto.DependsOn
+                };
+            }
+
+            // DraftUpdated/DraftCreated requires ProposedSpec for Planner
+            if ((flowEvent == FlowEvent.DraftUpdated || flowEvent == FlowEvent.DraftCreated)
+                && input.Assignment.Type == AssignmentType.Planning
+                && proposedSpec == null)
+                return null;
+
             return new AgentOutput
             {
                 Result = AgentResult.Success,
@@ -83,7 +118,8 @@ public sealed class OutputParser
                 ProposedEvent = flowEvent,
                 Summary = dto.Summary,
                 ProposedReviewRequest = prr,
-                EvidenceRefs = evidenceRefs
+                EvidenceRefs = evidenceRefs,
+                ProposedSpec = proposedSpec
             };
         }
         catch (JsonException)
@@ -137,6 +173,9 @@ public sealed class OutputParser
         return true;
     }
 
+    private static T? TryParseEnum<T>(string? value) where T : struct, Enum
+        => Enum.TryParse<T>(value, ignoreCase: true, out var result) ? result : null;
+
     // ── 파싱용 내부 DTO ──
 
     private sealed class OutputDto
@@ -145,6 +184,7 @@ public sealed class OutputParser
         public string? Summary { get; set; }
         public ProposedReviewRequestDto? ProposedReviewRequest { get; set; }
         public List<EvidenceRefDto>? EvidenceRefs { get; set; }
+        public ProposedSpecDto? ProposedSpec { get; set; }
     }
 
     private sealed class EvidenceRefDto
@@ -166,5 +206,23 @@ public sealed class OutputParser
         public string? Id { get; set; }
         public string? Label { get; set; }
         public string? Description { get; set; }
+    }
+
+    private sealed class ProposedSpecDto
+    {
+        public string? Title { get; set; }
+        public string? Type { get; set; }
+        public string? Problem { get; set; }
+        public string? Goal { get; set; }
+        public List<AcceptanceCriterionDraftDto>? AcceptanceCriteria { get; set; }
+        public string? RiskLevel { get; set; }
+        public List<string>? DependsOn { get; set; }
+    }
+
+    private sealed class AcceptanceCriterionDraftDto
+    {
+        public string? Text { get; set; }
+        public bool? Testable { get; set; }
+        public string? Notes { get; set; }
     }
 }

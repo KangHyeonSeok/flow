@@ -227,18 +227,26 @@ public sealed class FlowRunner
         plannerAssignment.ResultSummary = output.Summary;
         await ((IAssignmentStore)_store).SaveAsync(plannerAssignment, ct);
 
-        // 새 spec 생성
+        // Planner contract: 재등록 시 ProposedSpec 필수 — 원본 복사 금지
+        if (output.ProposedSpec == null)
+        {
+            await LogActivity(failedSpec, ActivityAction.EventRejected, runId,
+                "Planner returned DraftCreated without ProposedSpec for re-registration — rejected", ct);
+            return false;
+        }
+
+        var proposed = output.ProposedSpec;
         var newSpecId = FlowId.New("spec");
         var newSpec = new Spec
         {
             Id = newSpecId,
             ProjectId = failedSpec.ProjectId,
-            Title = failedSpec.Title,
-            Type = failedSpec.Type,
-            Problem = failedSpec.Problem,
-            Goal = failedSpec.Goal,
+            Title = proposed.Title ?? failedSpec.Title,
+            Type = proposed.Type ?? failedSpec.Type,
+            Problem = proposed.Problem ?? failedSpec.Problem,
+            Goal = proposed.Goal ?? failedSpec.Goal,
             AcceptanceCriteria = failedSpec.AcceptanceCriteria,
-            RiskLevel = failedSpec.RiskLevel,
+            RiskLevel = proposed.RiskLevel ?? failedSpec.RiskLevel,
             DerivedFrom = failedSpecId,
             State = FlowState.Draft,
             ProcessingStatus = ProcessingStatus.Pending,
@@ -246,6 +254,23 @@ public sealed class FlowRunner
             UpdatedAt = _time.GetUtcNow(),
             Version = 1
         };
+
+        if (proposed.AcceptanceCriteria is { Count: > 0 } acDrafts)
+        {
+            newSpec.AcceptanceCriteria = acDrafts.Select(draft => new AcceptanceCriterion
+            {
+                Id = FlowId.New("ac"),
+                Text = draft.Text,
+                Testable = draft.Testable,
+                Notes = draft.Notes
+            }).ToList();
+        }
+
+        if (proposed.DependsOn is { Count: > 0 } deps)
+        {
+            newSpec.Dependencies = new Dependency { DependsOn = deps };
+        }
+
         await _store.SaveAsync(newSpec, 0, ct);
 
         await LogActivity(newSpec, ActivityAction.DraftCreated, runId,
@@ -364,18 +389,55 @@ public sealed class FlowRunner
         if (decision.AgentRole is not { } agentRole) return false;
         if (!_agents.TryGetValue(agentRole, out var agent)) return false;
 
+        // Planning assignment 재사용: DispatchTable이 기존 open Planning assignment를 감지한 경우
+        var isPlanningDispatch = decision.AssignmentType == AssignmentType.Planning
+            && agentRole == AgentRole.Planner;
+
         // 2-pass 대상 판단: ArchitectureReview/Implementation/TestValidation + Pending
-        var is2PassTarget = spec.State is (FlowState.ArchitectureReview
-            or FlowState.Implementation or FlowState.TestValidation)
+        var is2PassTarget = !isPlanningDispatch
+            && spec.State is (FlowState.ArchitectureReview
+                or FlowState.Implementation or FlowState.TestValidation)
             && spec.ProcessingStatus == ProcessingStatus.Pending;
 
         // Draft/Pending: assignment 생성 필요 (RuleEvaluator의 side effect가 아닌 직접 생성)
-        var isDraftPrecheck = spec.State == FlowState.Draft
+        var isDraftPrecheck = !isPlanningDispatch
+            && spec.State == FlowState.Draft
             && spec.ProcessingStatus == ProcessingStatus.Pending;
 
         Assignment currentAssignment;
 
-        if (is2PassTarget)
+        if (isPlanningDispatch)
+        {
+            // 기존 open Planning assignment 재사용
+            currentAssignment = assignments.FirstOrDefault(a =>
+                a.Type == AssignmentType.Planning
+                && a.Status is AssignmentStatus.Queued or AssignmentStatus.Running)!;
+
+            if (currentAssignment == null)
+            {
+                await LogActivity(spec, ActivityAction.EventRejected, runId,
+                    "Planning dispatch but no open Planning assignment found", ct);
+                return false;
+            }
+
+            // Queued → Running 전환 (TimeoutSeconds는 init-only이므로 새 객체 생성)
+            if (currentAssignment.Status == AssignmentStatus.Queued)
+            {
+                currentAssignment = new Assignment
+                {
+                    Id = currentAssignment.Id,
+                    SpecId = currentAssignment.SpecId,
+                    AgentRole = currentAssignment.AgentRole,
+                    Type = currentAssignment.Type,
+                    Status = AssignmentStatus.Running,
+                    StartedAt = _time.GetUtcNow(),
+                    TimeoutSeconds = _config.DefaultTimeoutSeconds,
+                    Worktree = currentAssignment.Worktree
+                };
+                await ((IAssignmentStore)_store).SaveAsync(currentAssignment, ct);
+            }
+        }
+        else if (is2PassTarget)
         {
             // 2-pass: Pending → InProgress
             var success = await EvaluateAndApply(spec, FlowEvent.AssignmentStarted, ActorKind.Runner,
@@ -507,6 +569,19 @@ public sealed class FlowRunner
                     await LogActivity(spec, ActivityAction.EventRejected, runId,
                         $"agent BaseVersion mismatch: agent saw v{output.BaseVersion}, current v{spec.Version}", ct);
                     return false;
+                }
+
+                // Planner contract: DraftUpdated/DraftCreated는 ProposedSpec 필수
+                if (proposedEvent is FlowEvent.DraftUpdated or FlowEvent.DraftCreated
+                    && assignment.Type == AssignmentType.Planning)
+                {
+                    if (output.ProposedSpec == null)
+                    {
+                        await LogActivity(spec, ActivityAction.EventRejected, runId,
+                            $"Planner returned {proposedEvent} without ProposedSpec — rejected", ct);
+                        return false;
+                    }
+                    ApplyProposedSpec(spec, output.ProposedSpec);
                 }
 
                 // assignment를 Completed로 마킹 (RejectIfActiveAssignment 방지)
@@ -773,6 +848,31 @@ public sealed class FlowRunner
             await ((IActivityStore)_store).AppendAsync(evt, ct);
         }
         catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// ProposedSpec을 현재 spec에 반영한다. null 필드는 기존 값을 유지한다.
+    /// AC ID는 runner가 새로 부여한다.
+    /// </summary>
+    private static void ApplyProposedSpec(Spec spec, ProposedSpecDraft proposed)
+    {
+        if (proposed.Title != null) spec.Title = proposed.Title;
+        if (proposed.Type.HasValue) spec.Type = proposed.Type.Value;
+        if (proposed.Problem != null) spec.Problem = proposed.Problem;
+        if (proposed.Goal != null) spec.Goal = proposed.Goal;
+        if (proposed.RiskLevel.HasValue) spec.RiskLevel = proposed.RiskLevel.Value;
+        if (proposed.DependsOn != null) spec.Dependencies = new Dependency { DependsOn = proposed.DependsOn };
+
+        if (proposed.AcceptanceCriteria is { Count: > 0 } acDrafts)
+        {
+            spec.AcceptanceCriteria = acDrafts.Select(draft => new AcceptanceCriterion
+            {
+                Id = FlowId.New("ac"),
+                Text = draft.Text,
+                Testable = draft.Testable,
+                Notes = draft.Notes
+            }).ToList();
+        }
     }
 
     private static ActorKind AgentRoleToActorKind(AgentRole role) => role switch

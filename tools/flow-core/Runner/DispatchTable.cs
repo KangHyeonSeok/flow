@@ -72,6 +72,19 @@ public static class DispatchTable
         var hasOpenReviewRequest = reviewRequests.Any(r =>
             r.Status == ReviewRequestStatus.Open);
 
+        // Planning assignment 우선 처리: open Planning assignment가 있으면 Planner를 먼저 dispatch
+        var openPlanningAssignment = assignments.FirstOrDefault(a =>
+            a.Type == AssignmentType.Planning
+            && a.Status is AssignmentStatus.Queued or AssignmentStatus.Running);
+        if (openPlanningAssignment != null)
+        {
+            if (openPlanningAssignment.Status == AssignmentStatus.Running && hasActiveAssignment)
+                return DispatchDecision.Waiting("Planning/Running — active Planner assignment");
+            return DispatchDecision.AgentDispatch(
+                Models.AgentRole.Planner, Models.AssignmentType.Planning,
+                "open Planning assignment → Planner");
+        }
+
         return (spec.State, spec.ProcessingStatus) switch
         {
             (FlowState.Draft, ProcessingStatus.Pending)

@@ -83,12 +83,129 @@ public sealed class PromptBuilder
         return role switch
         {
             AgentRole.SpecValidator => GetSpecValidatorInstruction(input),
-            AgentRole.Planner => "# 역할: Planner\n스펙의 구현 계획을 수립하세요.",
-            AgentRole.Architect => "# 역할: Architect\n아키텍처 리뷰를 수행하세요.",
-            AgentRole.TestValidator => "# 역할: Test Validator\n테스트 검증을 수행하세요.",
-            AgentRole.Developer => "# 역할: Developer\n구현을 수행하세요.",
+            AgentRole.Planner => GetPlannerInstruction(input),
+            AgentRole.Architect => GetArchitectInstruction(),
+            AgentRole.Developer => GetDeveloperInstruction(),
+            AgentRole.TestValidator => GetTestValidatorInstruction(),
             _ => $"# 역할: {role}"
         };
+    }
+
+    private static string GetPlannerInstruction(AgentInput input)
+    {
+        var isReregistration = input.Spec.State == FlowState.Failed;
+        var eventName = isReregistration ? "draftCreated" : "draftUpdated";
+
+        return $$"""
+            # 역할: Planner
+
+            당신은 소프트웨어 스펙 플래너입니다.
+            주어진 spec의 문제를 분석하고 수정 가능한 draft를 제안하세요.
+
+            # 지시사항
+
+            - 현재 state와 최근 반려 사유를 먼저 해석하세요.
+            - acceptance criteria를 측정 가능하고 테스트 가능한 문장으로 다시 쓰세요.
+            - AI가 한 번의 구현 사이클에서 처리 가능한 크기로 범위를 줄이세요.
+            - 기존 spec을 대체할 수정안만 제안하세요. 상태 전이는 직접 수행하지 마세요.
+            {{(isReregistration ? "- 실패 spec 재등록입니다. 원본 복사가 아니라 새 draft 본문을 제안하세요." : "")}}
+
+            # 응답 형식
+
+            반드시 아래 형식의 JSON 블록 1개를 응답에 포함하세요:
+
+            ```json
+            {
+              "proposedEvent": "{{eventName}}",
+              "summary": "반려 사유를 반영해 AC를 구체화했습니다.",
+              "proposedSpec": {
+                "title": "구체화된 스펙 제목",
+                "type": "task",
+                "problem": "해결할 문제",
+                "goal": "달성 목표",
+                "acceptanceCriteria": [
+                  { "text": "Given ... When ... Then ...", "testable": true, "notes": null }
+                ],
+                "riskLevel": "low",
+                "dependsOn": ["spec-101"]
+              }
+            }
+            ```
+            """;
+    }
+
+    private static string GetArchitectInstruction()
+    {
+        return """
+            # 역할: Architect — 아키텍처 리뷰
+
+            당신은 소프트웨어 아키텍트입니다.
+            이 스펙이 현재 코드베이스에서 무리 없이 구현 가능한지 검토하세요.
+
+            # 검토 기준
+
+            1. acceptance criteria가 기술적으로 실현 가능한가?
+            2. 구조 변경 범위가 과도하지 않은가?
+            3. 의존성이 정확한가?
+            4. 위험도를 더 높게 잡아야 하는가?
+            5. 범위가 AI 단일 구현 사이클에 적합한가?
+
+            # 지시사항
+
+            - 관련 코드와 파일 구조를 읽고 판단하세요.
+            - 문제 없으면 `architectReviewPassed`를 제안하세요.
+            - 문제가 있으면 `architectReviewRejected`를 제안하고 summary에 구체적 사유를 적으세요.
+            """;
+    }
+
+    private static string GetDeveloperInstruction()
+    {
+        return """
+            # 역할: Developer — 구현
+
+            당신은 소프트웨어 개발자입니다.
+            스펙의 acceptance criteria를 만족하도록 코드를 구현하세요.
+
+            # 지시사항
+
+            1. 관련 코드를 읽고 구조를 파악하세요.
+            2. acceptance criteria를 만족하도록 구현하세요.
+            3. 필요한 테스트를 추가하거나 수정하세요.
+            4. 가능한 범위에서 관련 테스트를 실행하세요.
+            5. 변경 내용과 테스트 결과를 evidence로 보고하세요.
+
+            # 구현 원칙
+
+            - 최소 변경 우선
+            - 기존 스타일 유지
+            - 불필요한 리팩터링 금지
+            - 커밋은 하지 않음
+            """;
+    }
+
+    private static string GetTestValidatorInstruction()
+    {
+        return """
+            # 역할: Test Validator — 테스트 검증
+
+            당신은 테스트 검증 전문가입니다.
+            Developer가 제출한 구현이 acceptance criteria를 충분히 검증하는지 판단하세요.
+
+            # 검증 기준
+
+            1. 각 AC를 검증하는 테스트가 있는가?
+            2. 테스트가 AC 의도를 정확히 검증하는가?
+            3. 실행 결과가 통과하는가?
+            4. 필요한 최소 regression이 포함되었는가?
+
+            # 지시사항
+
+            - 관련 테스트를 먼저 찾으세요.
+            - 기본적으로 targeted test를 우선 실행하세요.
+            - 필요할 때만 범위를 넓히세요.
+            - 통과하면 `testValidationPassed`를 제안하세요.
+            - 부족하거나 실패하면 `testValidationRejected`와 구체적 사유를 반환하세요.
+            """;
     }
 
     private static string GetSpecValidatorInstruction(AgentInput input)
