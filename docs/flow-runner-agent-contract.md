@@ -78,9 +78,11 @@ runner는 아래를 직접 판단하지 않는다.
 | 검토 | 검토 | Spec Validator | spec 적합성 검증 |
 | 검토 | 사용자검토 | 없음 | 사용자 응답 대기 |
 | 검토 | 사용자검토 | review timeout rule | deadline 초과 시 실패 또는 기본 정책 적용 |
-| 활성 | 완료 | Spec Manager rule | 완료 처리 가능 여부 계산 |
+| 활성 | 완료 | 사용자 입력 대기 | 사용자가 `spec_completed`를 제출하면 완료 처리 |
 
 설명:
+
+- `cancel_requested`는 `초안`, `대기`, `구현 검토`, `구현`, `테스트 검증`, `검토` 상태에서 사용자 또는 운영 입력으로 발생할 수 있다. runner는 이 이벤트를 수신하면 활성 assignment를 `CancelAssignment`로 종료하고 열린 review request를 `CloseReviewRequest`로 종료한 뒤 `실패` 상태로 전이한다.
 
 - `없음`은 새 agent 호출 없이 timeout 검사 또는 외부 입력 대기를 의미한다.
 - 실제 구현에서는 상태와 처리 상태 외에 assignment 존재 여부도 dispatch에 포함해야 한다.
@@ -259,6 +261,7 @@ retry는 무한 반복하면 안 된다.
 - lock이 어렵다면 `version` 기반 CAS를 사용해야 한다.
 - 가장 안전한 순서는 `lock 획득 -> 최신 spec 로드 -> dispatch -> 저장 -> lock 해제`다.
 - 저장 직전 version이 바뀌었으면 runner는 결과 적용을 거부하고 conflict 로그를 남긴다.
+- version conflict 시 rule evaluator는 `accepted=false, rejectionReason=ConflictError`를 반환한다. runner는 최신 spec을 다시 읽고 이벤트를 재평가해야 한다.
 
 강제 상태 변경이나 삭제 요청이 들어온 경우:
 

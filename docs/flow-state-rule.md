@@ -75,8 +75,8 @@
 - spec_validation_user_review_requested
 - user_review_submitted
 - spec_validation_failed
-- spec_activated
 - spec_completed
+- cancel_requested
 - dependency_blocked
 - dependency_failed
 - dependency_resolved
@@ -132,8 +132,9 @@
 - runner 또는 scheduler: `assignment_started`, `assignment_timed_out`, `assignment_resumed`, `review_request_timed_out`, `dependency_blocked`, `dependency_failed`, `dependency_resolved`
 - Developer: `implementation_submitted`
 - Test Validator: `test_validation_passed`, `test_validation_rejected`
-- 사용자 또는 운영 입력: `user_review_submitted`, `rollback_requested`
-- Spec Manager rule: `spec_activated`, `spec_completed`
+- 사용자 또는 운영 입력: `user_review_submitted`, `rollback_requested`, `cancel_requested`, `spec_completed`
+
+`spec_activated`는 rule evaluator의 입력 이벤트가 아니라 activity log의 `action` 필드에 기록하는 운영 마커다. `spec_validation_passed`가 `검토 -> 활성` 전이를 유발할 때 side effect로 `LogActivity(action: spec_activated)`를 추가한다.
 
 # 5. 상태 전이 규칙표
 
@@ -147,7 +148,9 @@
 | 대기 | assignment_started | risk level이 `low` 또는 Architect 생략 허용 | 구현 | 구현 assignment 시작, 활동 로그 기록 |
 | 대기 | assignment_started | risk level이 `medium` 이상이고 Architect review 필요 | 구현 검토 | Architect review assignment 시작 |
 | 구현 검토 | architect_review_passed | 구조 검토 통과 | 구현 | 구현 assignment 생성, 활동 로그 기록 |
-| 구현 검토 | architect_review_rejected | 구조 검토 미통과 | 구현 검토 | Planner 보완 assignment 생성 |
+| 구현 검토 | architect_review_rejected | 구조 검토 미통과, architectReviewLoopCount ≤ 3 | 구현 검토 | Planner 보완 assignment 생성, architectReviewLoopCount 증가 |
+| 구현 검토 | architect_review_rejected | architectReviewLoopCount > 3 | 실패 | 실패 로그, review request 생성 |
+| 구현 검토 | draft_updated | Planner가 보완 완료 | 구현 검토 | Architect 재검토 assignment 생성 |
 | 구현 | implementation_submitted | Developer 결과 제출 | 테스트 검증 | Test Validator 입력 생성 |
 | 테스트 검증 | test_validation_passed | 테스트 적합성/합격 판정 완료 | 검토 | Spec Validator 입력 생성 |
 | 테스트 검증 | test_validation_rejected | 테스트 부족 또는 실패 | 구현 | 재작업 요청 기록 |
@@ -157,7 +160,13 @@
 | 검토 | spec_validation_failed | 3회 초과 비수렴 또는 terminal failure | 실패 | 실패 로그, 후속 선택지 생성 |
 | 검토 | review_request_timed_out | 사용자검토 중 deadline 초과 | 실패 | review request를 `closed`로 변경, 실패 로그 기록, 후속 선택지 생성 |
 | 활성 | rollback_requested | 사용자 요청 또는 운영상 치명적 이슈 | 검토 | review request 생성, 필요한 경우 재계획 |
-| 활성 | spec_completed | 운영상 완료 처리 가능 | 완료 | 완료 로그 기록 |
+| 활성 | spec_completed | 사용자 명시 승인, processingStatus=완료, 열린 review request 없음 | 완료 | 완료 로그 기록 |
+| 초안 | cancel_requested | 사용자 취소 | 실패 | 활동 로그 기록 |
+| 대기 | cancel_requested | 사용자 취소 | 실패 | 활동 로그 기록 |
+| 구현 검토 | cancel_requested | 사용자 취소 | 실패 | 활성 assignment CancelAssignment, 활동 로그 기록 |
+| 구현 | cancel_requested | 사용자 취소 | 실패 | 활성 assignment CancelAssignment, worktree 해제, 활동 로그 기록 |
+| 테스트 검증 | cancel_requested | 사용자 취소 | 실패 | 활성 assignment CancelAssignment, 활동 로그 기록 |
+| 검토 | cancel_requested | 사용자 취소 | 실패 | 열린 review request CloseReviewRequest, 활동 로그 기록 |
 | 모든 상태 | dependency_blocked | upstream blocker 미해결 | 현재 상태 유지 | 처리 상태 `보류`, 활동 로그 기록 |
 | 모든 상태 | dependency_failed | upstream blocker 최종 실패 | 현재 상태 유지 | 처리 상태 `보류`, review request 생성 |
 | 모든 상태 | dependency_resolved | upstream blocker 해소 | 현재 상태 유지 | 처리 상태 `대기` 또는 `검토` 재계산 |
@@ -179,6 +188,9 @@
 - `구현 -> 완료`
 - `테스트 검증 -> 완료`
 - `실패 -> 완료`
+- `활성 -> cancel_requested` (활성은 rollback_requested 사용)
+- `실패 -> cancel_requested`
+- `완료 -> cancel_requested`
 - `사용자 응답만으로 상태 직접 변경`
 - `Developer 결과만으로 상태 직접 변경`
 
@@ -203,23 +215,59 @@
 | 사용자검토 | review_request_timed_out | deadline 초과 | 실패 | runner |
 | 모든 처리 상태 | dependency_blocked | upstream blocker 미해결 | 보류 | Spec Manager |
 | 모든 처리 상태 | dependency_failed | upstream blocker 최종 실패 | 보류 | Spec Manager |
-| 보류 | dependency_resolved | blocker 해소 | 대기 | Spec Manager |
+| 보류 | dependency_resolved | blocker 해소, state≠검토 | 대기 | Spec Manager |
+| 보류 | dependency_resolved | blocker 해소, state=검토 | 검토 | Spec Manager |
 | 실패 | assignment_resumed | 명시적 재시도 승인 | 대기 | Spec Manager |
+| 모든 처리 상태 | cancel_requested | 사용자 취소 | 실패 | Spec Manager |
 
 ## 6.2 처리 상태 반복 규칙
 
-- `검토 -> 사용자검토 -> 검토` 루프는 최대 3회까지 허용한다.
-- `검토 -> 대기(재작업) -> 처리중 -> 검토` 루프도 최대 3회까지 허용한다.
-- 두 루프의 횟수는 독립적으로 카운트한다.
-- 어느 쪽이든 3회 초과 시 `spec_validation_failed`를 발생시키고 `실패`로 전환한다.
+- `검토 -> 사용자검토 -> 검토` 루프는 최대 3회까지 허용한다 (`retryCounters.userReviewLoopCount`).
+- `검토 -> 대기(재작업) -> 처리중 -> 검토` 루프도 최대 3회까지 허용한다 (`retryCounters.reworkLoopCount`).
+- `구현 검토 -> architect_review_rejected -> 구현 검토` 루프도 최대 3회까지 허용한다 (`retryCounters.architectReviewLoopCount`).
+- 세 루프의 횟수는 독립적으로 카운트한다.
+- 어느 카운터든 3을 초과하면 해당 이벤트를 거부하고 `spec_validation_failed`로 대체하여 `실패`로 전환한다.
+- `spec_validation_passed` 수용 시 `userReviewLoopCount`와 `reworkLoopCount`를 0으로 리셋한다.
+- `architect_review_passed` 수용 시 `architectReviewLoopCount`를 0으로 리셋한다.
+- forward phase 전환 시 모든 카운터를 0으로 리셋한다.
+- backward phase 전환 시 카운터를 유지한다.
 - `실패` 전환 시 review request 또는 활동 로그에 실패 사유와 후속 선택지를 남긴다.
 - `보류`는 외부 의존성, 정책 대기, 환경 문제처럼 현재 spec 자체 노력만으로 진행할 수 없는 경우에 사용한다.
 
-처리 상태는 phase 전환과 함께 재설정되는 경우가 있다.
+카운터는 `spec.json`의 `retryCounters` 필드에 저장한다. 모든 값이 0이면 저장 시 생략 가능하다.
 
-- `구현 검토 -> 구현`으로 상태가 바뀌면 처리 상태는 새 phase 시작을 의미하는 `대기`로 돌아간다.
-- `구현 -> 테스트 검증`으로 상태가 바뀌면 처리 상태는 Test Validator 대기를 의미하는 `대기`로 돌아간다.
-- `테스트 검증 -> 검토`로 상태가 바뀌면 처리 상태는 Spec Validator 입력 준비를 의미하는 `검토`가 된다.
+## 6.3 phase 전환 시 처리 상태 초기값
+
+phase 전환이 발생하면 처리 상태는 아래 표에 따라 재설정된다.
+
+| 전환 | 다음 processingStatus | 이유 |
+| --- | --- | --- |
+| `초안 -> 대기` | `대기` | assignment 대기 상태 |
+| `대기 -> 구현 검토` | `대기` | Architect assignment 대기 |
+| `대기 -> 구현` | `대기` | Developer assignment 대기 |
+| `구현 검토 -> 구현` | `대기` | 새 phase 시작 |
+| `구현 -> 테스트 검증` | `대기` | Test Validator 대기 |
+| `테스트 검증 -> 검토` | `검토` | Spec Validator 입력 준비 |
+| `테스트 검증 -> 구현` (재작업) | `대기` | 재구현 대기 |
+| `검토 -> 구현` (재작업) | `대기` | 재구현 대기 |
+| `검토 -> 활성` | `완료` | 검증 완료 후 운영 진입 |
+| `검토 -> 실패` | `실패` | terminal failure |
+| `활성 -> 완료` | `완료` | 최종 완료 |
+| `활성 -> 검토` (rollback) | `검토` | Spec Validator 재검토 시작 |
+| `* -> 실패` (cancel_requested) | `실패` | 사용자 취소 |
+
+forward 전환: `초안->대기`, `대기->구현 검토`, `대기->구현`, `구현 검토->구현`, `구현->테스트 검증`, `테스트 검증->검토`, `검토->활성`, `활성->완료`
+
+backward 전환: `테스트 검증->구현`, `검토->구현`, `활성->검토`
+
+## 6.4 규칙 적용 우선순위
+
+하나의 이벤트가 상태 전이표(5.1)와 처리 상태 전이표(6.1) 양쪽에 해당할 수 있다. 이때 적용 규칙은 아래와 같다.
+
+- phase 전환이 없는 이벤트: 처리 상태 전이표(6.1)를 그대로 적용한다.
+- phase 전환이 있는 이벤트: phase 전환 초기값 표(6.3)가 processingStatus를 결정하고, 처리 상태 전이표(6.1)는 무시한다.
+
+예: `assignment_started`가 `대기 -> 구현` phase 전환을 유발하면, processingStatus는 phase 전환 초기값 표에 따라 `대기`가 된다. runner는 직후 별도 루프에서 해당 spec을 다시 평가하고, `state=구현, processingStatus=대기`인 spec에 대해 processingStatus를 `처리중`으로 전환한다.
 
 # 7. dependency cascade 규칙
 
@@ -274,14 +322,19 @@
 1. 정상 경로: `초안 -> 대기 -> 구현 -> 테스트 검증 -> 검토 -> 활성 -> 완료`
 2. AC 프리패스 반려: `초안 -> 초안`
 3. 테스트 부적합: `테스트 검증 -> 구현`
-4. Architect 반려 후 Planner 보완 assignment 생성: `구현 검토 -> 구현 검토`
-5. review request 루프: `검토 -> 사용자검토 -> 검토 -> 활성 -> 완료`
-6. review request 3회 초과: `검토 -> 실패`
-7. 재작업 루프 3회 초과: `검토 -> 대기 -> 처리중 -> 검토` 반복 후 `실패`
-8. dependency cascade: downstream `보류` 및 in-flight assignment `cancelled`
-9. assignment timeout: `처리중 -> 실패`
-10. review request deadline 초과: `사용자검토 -> 실패`
-11. 활성 상태 rollback: `활성 -> 검토`
+4. Architect 반려 후 Planner 보완 및 재검토: `구현 검토 -> draft_updated -> 구현 검토`
+5. Architect 반려 3회 초과: `구현 검토 -> 실패`
+6. review request 루프: `검토 -> 사용자검토 -> 검토 -> 활성 -> 완료`
+7. review request 3회 초과: `검토 -> 실패`
+8. 재작업 루프 3회 초과: `검토 -> 대기 -> 처리중 -> 검토` 반복 후 `실패`
+9. dependency cascade: downstream `보류` 및 in-flight assignment `cancelled`
+10. 보류 복원: `보류 -> dependency_resolved -> 대기` (state≠검토), `보류 -> 검토` (state=검토)
+11. assignment timeout: `처리중 -> 실패`
+12. review request deadline 초과: `사용자검토 -> 실패`
+13. 활성 상태 rollback: `활성 -> 검토`
+14. 중간 상태 취소: `cancel_requested -> 실패` (초안~검토)
+15. version conflict: baseVersion 불일치 시 이벤트 거부
+16. phase 전환 시 processingStatus 초기값 검증
 
 # 11. 구현 메모
 

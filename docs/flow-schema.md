@@ -57,6 +57,11 @@
       "status": "not-run"
     }
   ],
+  "retryCounters": {
+    "userReviewLoopCount": 0,
+    "reworkLoopCount": 0,
+    "architectReviewLoopCount": 0
+  },
   "createdAt": "2026-03-14T10:00:00Z",
   "updatedAt": "2026-03-14T10:10:00Z",
   "version": 1
@@ -80,6 +85,7 @@
 - `reviewRequestIds`: review request 참조 목록
 - `testIds`: 연결된 테스트 식별자 목록. 빠른 조회용 인덱스이며, 실제 AC 연결은 test의 `acIds` 또는 AC의 `relatedTestIds`로 표현한다.
 - `tests`: test 객체 배열. 각 test의 정의와 상태를 spec.json 안에 inline으로 저장한다.
+- `retryCounters`: 반복 제한 카운터. `userReviewLoopCount`(사용자검토 루프), `reworkLoopCount`(재작업 루프), `architectReviewLoopCount`(Architect 반려 루프). 모든 값이 0이면 저장 시 생략 가능.
 - `createdAt`, `updatedAt`: 타임스탬프
 - `version`: optimistic concurrency 제어용 버전
 
@@ -108,6 +114,7 @@
 - `dependencies.blocks`
 - `reviewRequestIds`
 - `testIds`
+- `retryCounters` (모든 값이 0인 경우)
 
 # 3. acceptance criterion
 
@@ -405,6 +412,15 @@ activity event는 replay, audit, debug 기준 데이터다. 따라서 상태 전
 - `result`: `success | retryable-failure | terminal-failure | no-op`
 
 `baseVersion`은 agent가 어떤 spec 버전을 기준으로 작업했는지 나타낸다. Spec Manager는 제출 시점의 현재 `spec.version`과 `baseVersion`이 다르면 충돌로 판단하고 자동 적용을 거부할 수 있어야 한다.
+
+version conflict 시 rule evaluator는 아래를 반환한다:
+
+- `accepted = false`
+- `rejectionReason = ConflictError`
+- `mutation = null`
+- `sideEffects = [LogActivity]`
+
+conflict는 시스템 오류가 아니라 상태 전이 거부다. caller는 최신 spec을 다시 읽고 이벤트를 재평가해야 한다.
 
 # 11. 구현 메모
 
