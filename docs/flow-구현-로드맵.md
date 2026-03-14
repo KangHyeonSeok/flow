@@ -215,28 +215,37 @@
 
 구현 범위:
 
-- spec 편집기와 viewer
-- review request inbox
-- kanban board
-- activity timeline viewer
-- assignment 상태 화면
+- 통합 spec workspace view
+- collapsed row + expanded notebook-style 상세 섹션
+- document / kanban / review-only / failure-hold projection mode
+- section 단위 저장 API와 optimistic concurrency 처리
+- review request 응답, evidence 추가, 구현 요청 같은 action tray
+- assignment, dependency, activity, tests/evidence lazy loading
+- context panel과 dependency mini graph
 
 필수 테스트:
 
 - 주요 API integration test
+- projection mode별 동일 데이터 정렬/필터 검증
+- section save baseVersion 충돌 처리 test
 - review request 응답 API test
+- action request가 event proposal로만 변환되는지 검증
 - spec edit/save round-trip test
+- lazy loading section API test
 - runner가 생성한 데이터를 UI가 정상 렌더링하는지 검증
 
 완료 기준:
 
-- 사용자는 webservice만으로 spec 조회, 편집, review request 응답을 수행할 수 있다.
-- UI는 core rule을 우회하지 않는다.
+- 사용자는 한 workspace 안에서 spec 조회, section 편집, review request 응답, evidence 확인, 실행 요청을 모두 처리할 수 있다.
+- 칸반과 검토 요청함은 별도 제품이 아니라 같은 spec stream의 projection으로 동작한다.
+- UI action은 직접 상태를 바꾸지 않고 항상 event proposal 또는 command request를 통해 core API로 전달된다.
+- 대규모 spec 집합에서도 collapsed first + lazy loading으로 초기 로딩 비용이 통제된다.
 
 내 의견:
 
 - webservice는 thin layer로 두는 편이 낫다.
 - 상태 변경과 review 판단은 모두 core API를 통하게 해야 한다.
+- 이 단계의 중심은 화면 수를 늘리는 것이 아니라, spec 문서/운영/검토/테스트를 하나의 notebook-like workspace로 통합하는 것이다.
 
 ## 2.7 7단계: Docker packaging
 
