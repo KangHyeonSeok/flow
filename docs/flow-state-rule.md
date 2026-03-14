@@ -1,0 +1,272 @@
+# Flow State Rule
+
+이 문서는 Flow의 상태 전이 규칙을 구현 가능한 수준으로 고정하기 위한 문서다. 목적은 설명이 아니라 테스트 가능한 규칙표를 만드는 데 있다.
+
+# 1. 목표
+
+- 상태 전이 규칙을 deterministic하게 정의한다.
+- 상태와 처리 상태를 분리한다.
+- 누가 무엇을 바꿀 수 있는지 고정한다.
+- runner와 rule evaluator가 같은 규칙을 사용하게 만든다.
+- 테스트 코드의 입력 표로 바로 사용할 수 있게 만든다.
+
+이 문서는 FSM과 workflow를 혼합해서 쓰되, 의미 충돌이 없도록 아래 원칙을 따른다.
+
+- 비즈니스 상태는 "지금 어떤 단계에 있는가"를 나타낸다.
+- 처리 상태는 "그 단계의 실행과 검증이 어디까지 왔는가"를 나타낸다.
+- 실행 이벤트가 실제 단계 진입을 의미할 때만 비즈니스 상태를 바꾼다.
+
+# 2. 공통 원칙
+
+- 스펙 상태는 Spec Manager만 변경할 수 있다.
+- 처리 상태는 Spec Validator가 검증 관점에서 변경할 수 있다.
+- 다른 Agent는 상태 변경 요청에 필요한 결과와 근거만 남긴다.
+- 사용자와 webservice는 review request 응답만 기록하고 상태를 직접 바꾸지 않는다.
+- 상태 전이는 항상 활동 로그와 함께 기록한다.
+
+# 3. 용어
+
+## 3.1 상태
+
+상태는 비즈니스 흐름상의 현재 단계를 나타낸다.
+
+허용 값:
+
+- 초안
+- 대기
+- 구현 검토
+- 구현
+- 테스트 검증
+- 검토
+- 활성
+- 실패
+- 완료
+
+## 3.2 처리 상태
+
+처리 상태는 현재 단계에서 담당자의 작업, 검증, 사용자 검토가 어디까지 왔는지 나타낸다.
+
+허용 값:
+
+- 대기
+- 처리중
+- 검토
+- 사용자검토
+- 완료
+- 실패
+- 보류
+
+## 3.3 이벤트
+
+상태 전이는 이벤트 기반으로 계산한다. 초기 구현에서는 아래 이벤트만 고정하면 충분하다.
+
+- draft_created
+- ac_precheck_passed
+- ac_precheck_rejected
+- architect_review_passed
+- architect_review_rejected
+- assignment_started
+- implementation_submitted
+- test_validation_passed
+- test_validation_rejected
+- spec_validation_passed
+- spec_validation_rework_requested
+- spec_validation_user_review_requested
+- user_review_submitted
+- spec_validation_failed
+- spec_activated
+- spec_completed
+- dependency_blocked
+- dependency_failed
+- dependency_resolved
+- assignment_timed_out
+- assignment_resumed
+- rollback_requested
+
+# 4. 책임 경계
+
+## 4.1 Planner
+
+- `초안` 상태의 spec을 만든다.
+- acceptance criteria와 scope를 제안한다.
+- 상태를 직접 변경하지 않는다.
+
+## 4.2 Architect
+
+- acceptance criteria의 기술적 구현 가능성과 아키텍처 영향을 검토한다.
+- `구현 검토` 단계에서 구조 검토를 수행한다.
+- 상태를 직접 변경하지 않는다.
+
+## 4.3 Developer
+
+- 구현과 테스트 실행 결과를 제출한다.
+- 상태를 직접 변경하지 않는다.
+
+## 4.4 Test Validator
+
+- 테스트의 적합성과 합격 여부를 판정한다.
+- 상태를 직접 변경하지 않는다.
+
+## 4.5 Spec Validator
+
+- 처리 상태를 검증 관점에서 제어한다.
+- Planner 초안의 acceptance criteria와 필수 필드의 형식적 완결성을 검토한다.
+- review request 생성 여부를 판정한다.
+- 재작업, 사용자검토, 실패를 판정한다.
+
+## 4.6 Spec Manager
+
+- 상태 변경의 유일한 권한자다.
+- 처리 상태와 이벤트를 보고 기계적으로 상태를 이동시킨다.
+- dependency cascade, timeout recovery 같은 운영 규칙을 적용한다.
+
+## 4.7 이벤트 발생 주체
+
+이벤트는 아래처럼 발생 주체를 고정한다.
+
+- Planner: `draft_created`
+- Spec Validator: `ac_precheck_passed`, `ac_precheck_rejected`, `spec_validation_passed`, `spec_validation_rework_requested`, `spec_validation_user_review_requested`, `spec_validation_failed`
+- Architect: `architect_review_passed`, `architect_review_rejected`
+- runner 또는 scheduler: `assignment_started`, `assignment_timed_out`, `assignment_resumed`, `dependency_blocked`, `dependency_failed`, `dependency_resolved`
+- Developer: `implementation_submitted`
+- Test Validator: `test_validation_passed`, `test_validation_rejected`
+- 사용자 또는 운영 입력: `user_review_submitted`, `rollback_requested`
+- Spec Manager rule: `spec_activated`, `spec_completed`
+
+# 5. 상태 전이 규칙표
+
+## 5.1 상태 전이 표
+
+| 현재 상태 | 입력 이벤트 | 선행 조건 | 다음 상태 | 부수 효과 |
+| --- | --- | --- | --- | --- |
+| 초안 | ac_precheck_passed | AC 테스트 가능 | 대기 | 활동 로그 기록 |
+| 초안 | ac_precheck_rejected | AC 모호 또는 검증 불가 | 초안 | Planner 보완 요청 생성 |
+| 대기 | assignment_started | risk level이 `low` 또는 Architect 생략 허용 | 구현 | 구현 assignment 시작, 활동 로그 기록 |
+| 대기 | assignment_started | risk level이 `medium` 이상이고 Architect review 필요 | 구현 검토 | Architect review assignment 시작 |
+| 대기 | architect_review_rejected | risk level이 `medium` 이상이고 Architect 보완 필요 | 구현 검토 | Planner 보완 assignment 생성 |
+| 구현 검토 | architect_review_passed | 구조 검토 통과 | 구현 | 구현 assignment 생성, 활동 로그 기록 |
+| 구현 검토 | architect_review_rejected | 구조 검토 미통과 | 구현 검토 | Planner 보완 assignment 생성 |
+| 구현 | implementation_submitted | Developer 결과 제출 | 테스트 검증 | Test Validator 입력 생성 |
+| 테스트 검증 | test_validation_passed | 테스트 적합성/합격 판정 완료 | 검토 | Spec Validator 입력 생성 |
+| 테스트 검증 | test_validation_rejected | 테스트 부족 또는 실패 | 구현 | 재작업 요청 기록 |
+| 검토 | spec_validation_passed | Spec Validator 완료 판정 | 활성 | 상태 전이 로그 기록 |
+| 검토 | spec_validation_rework_requested | 재작업 필요 | 구현 | 재작업 assignment 재큐잉 |
+| 검토 | spec_validation_user_review_requested | 사용자 판단 필요 | 검토 | review request 생성 |
+| 검토 | spec_validation_failed | 3회 초과 비수렴 또는 terminal failure | 실패 | 실패 로그, 후속 선택지 생성 |
+| 활성 | rollback_requested | 사용자 요청 또는 운영상 치명적 이슈 | 검토 | review request 생성, 필요한 경우 재계획 |
+| 활성 | spec_completed | 운영상 완료 처리 가능 | 완료 | 완료 로그 기록 |
+| 모든 상태 | dependency_blocked | upstream blocker 미해결 | 현재 상태 유지 | 처리 상태 `보류`, 활동 로그 기록 |
+| 모든 상태 | dependency_failed | upstream blocker 최종 실패 | 현재 상태 유지 | 처리 상태 `보류`, review request 생성 |
+| 모든 상태 | dependency_resolved | upstream blocker 해소 | 현재 상태 유지 | 처리 상태 `대기` 또는 `검토` 재계산 |
+
+설명:
+
+- `대기 -> assignment_started -> 구현`은 실제 구현 착수를 의미한다. 구현이 시작됐는데 상태가 여전히 `대기`인 모순을 피하기 위해 상태를 함께 이동시킨다.
+- `검토 -> spec_validation_user_review_requested`도 상태는 `검토`에 머무르고 처리 상태만 `사용자검토`로 이동한다.
+- `활성 -> rollback_requested -> 검토`는 운영 중 역방향 수정 루프를 허용하기 위한 안전장치다.
+- `활성 -> 완료`는 서비스 특성에 따라 생략 가능하지만, 현재 문서에서는 명시적 완료 단계를 유지한다.
+
+## 5.2 상태 금지 규칙
+
+아래 전이는 금지한다.
+
+- `초안 -> 구현`
+- `초안 -> 테스트 검증`
+- `대기 -> 완료`
+- `구현 -> 완료`
+- `테스트 검증 -> 완료`
+- `실패 -> 완료`
+- `사용자 응답만으로 상태 직접 변경`
+- `Developer 결과만으로 상태 직접 변경`
+
+# 6. 처리 상태 규칙표
+
+## 6.1 처리 상태 전이 표
+
+| 현재 처리 상태 | 입력 이벤트 | 선행 조건 | 다음 처리 상태 | 결정 주체 |
+| --- | --- | --- | --- | --- |
+| 대기 | assignment_started | assignment 생성 및 lock 확보 | 처리중 | runner |
+| 처리중 | implementation_submitted | 담당자 작업 제출 | 검토 | runner |
+| 처리중 | assignment_timed_out | heartbeat 초과 | 실패 | Spec Manager |
+| 검토 | spec_validation_passed | 검증 적합 | 완료 | Spec Validator |
+| 검토 | spec_validation_rework_requested | 재작업 필요 | 대기 | Spec Validator |
+| 검토 | spec_validation_user_review_requested | 사용자 판단 필요 | 사용자검토 | Spec Validator |
+| 검토 | spec_validation_failed | terminal failure 판정 | 실패 | Spec Validator |
+| 사용자검토 | user_review_submitted | 유효한 사용자 응답 수신 | 검토 | runner |
+| 모든 처리 상태 | dependency_blocked | upstream blocker 미해결 | 보류 | Spec Manager |
+| 모든 처리 상태 | dependency_failed | upstream blocker 최종 실패 | 보류 | Spec Manager |
+| 보류 | dependency_resolved | blocker 해소 | 대기 | Spec Manager |
+| 실패 | assignment_resumed | 명시적 재시도 승인 | 대기 | Spec Manager |
+
+## 6.2 처리 상태 반복 규칙
+
+- `검토 -> 사용자검토 -> 검토` 루프는 최대 3회까지 허용한다.
+- 3회 초과 시 `spec_validation_failed`를 발생시키고 `실패`로 전환한다.
+- `실패` 전환 시 review request 또는 활동 로그에 실패 사유와 후속 선택지를 남긴다.
+- `보류`는 외부 의존성, 정책 대기, 환경 문제처럼 현재 spec 자체 노력만으로 진행할 수 없는 경우에 사용한다.
+
+# 7. dependency cascade 규칙
+
+## 7.1 전파 대상
+
+- blocker spec이 미해결 상태면 downstream spec에 `dependency_blocked`를 전파할 수 있다.
+- blocker spec이 최종 `실패`가 되면 `depends on`으로 연결된 downstream spec에 `dependency_failed`를 전파한다.
+- downstream spec의 처리 상태가 아래 중 하나면 cascade 대상이다.
+  - 대기
+  - 처리중
+  - 검토
+  - 사용자검토
+
+## 7.2 전파 결과
+
+- 비즈니스 상태는 유지한다.
+- 처리 상태를 `보류`로 변경한다.
+- 처리중인 assignment가 있으면 `cancelled`로 종료하고 관련 worktree lock을 해제한다.
+- 활동 로그에 `dependency_blocked` 또는 `dependency_failed` event를 남긴다.
+- Planner와 사용자에게 review request를 생성한다.
+
+## 7.3 전파 제외
+
+- downstream spec이 이미 `완료`이면 전파하지 않는다.
+- downstream spec이 이미 `실패`이면 중복 전파하지 않는다.
+
+# 8. timeout recovery 규칙
+
+## 8.1 stale 판단 기준
+
+- assignment가 `running` 상태다.
+- 현재 시각이 `lastHeartbeatAt + timeoutSeconds`를 초과했다.
+- 또는 `timeoutAt`을 초과했다.
+
+## 8.2 stale 처리 결과
+
+- assignment를 `failed`로 마감한다.
+- 관련 spec lock, agent lock, worktree lock을 해제한다.
+- 활동 로그에 `assignment_timed_out` event를 기록한다.
+- 필요 시 Planner 또는 사용자 review request를 생성한다.
+
+# 9. activity log 원칙
+
+- 모든 상태 전이와 처리 상태 전이는 반드시 activity log를 남긴다.
+- review request 생성, assignment 생성, assignment 취소, timeout recovery 같은 부수 효과도 별도 event로 남긴다.
+- optional인 것은 review request 생성 여부이지, activity log 기록 여부가 아니다.
+
+# 10. 테스트 우선순위
+
+초기 구현에서 반드시 먼저 만들어야 하는 테스트는 아래다.
+
+1. 정상 경로: `초안 -> 대기 -> 구현 -> 테스트 검증 -> 검토 -> 활성 -> 완료`
+2. AC 프리패스 반려: `초안 -> 초안`
+3. 테스트 부적합: `테스트 검증 -> 구현`
+4. Architect 반려 후 Planner 보완 assignment 생성: `대기 또는 구현 검토 -> 구현 검토`
+5. review request 루프: `검토 -> 사용자검토 -> 검토 -> 활성 -> 완료`
+6. review request 3회 초과: `검토 -> 실패`
+7. dependency cascade: downstream `보류` 및 in-flight assignment `cancelled`
+8. assignment timeout: `처리중 -> 실패`
+9. 활성 상태 rollback: `활성 -> 검토`
+
+# 11. 구현 메모
+
+- 상태 전이 함수는 I/O 없이 계산만 수행하는 것이 좋다.
+- side effect는 별도 목록으로 반환하고 runner가 실행하는 편이 좋다.
+- table-driven test 데이터는 이 문서의 표와 동일한 구조를 유지하는 편이 좋다.
