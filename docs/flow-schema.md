@@ -48,6 +48,15 @@
   "assignments": ["asg-001"],
   "reviewRequestIds": [],
   "testIds": ["test-001"],
+  "tests": [
+    {
+      "id": "test-001",
+      "type": "unit",
+      "title": "비활성 버튼 스타일 검증",
+      "acIds": ["ac-001"],
+      "status": "not-run"
+    }
+  ],
   "createdAt": "2026-03-14T10:00:00Z",
   "updatedAt": "2026-03-14T10:10:00Z",
   "version": 1
@@ -70,6 +79,7 @@
 - `assignments`: 현재 또는 과거 assignment 참조 목록
 - `reviewRequestIds`: review request 참조 목록
 - `testIds`: 연결된 테스트 식별자 목록. 빠른 조회용 인덱스이며, 실제 AC 연결은 test의 `acIds` 또는 AC의 `relatedTestIds`로 표현한다.
+- `tests`: test 객체 배열. 각 test의 정의와 상태를 spec.json 안에 inline으로 저장한다.
 - `createdAt`, `updatedAt`: 타임스탬프
 - `version`: optimistic concurrency 제어용 버전
 
@@ -79,8 +89,15 @@
 
 - `state`는 현재 spec이 어느 phase에 있는지를 나타낸다.
 - `processingStatus`는 그 phase 안에서 실행, 검증, 사용자 검토가 어느 단계에 있는지를 나타낸다.
-- `state=구현`이면 `processingStatus`는 일반적으로 `대기 | 처리중 | 검토 | 실패 | 보류` 중 하나다.
-- `state=검토`이면 `processingStatus`는 일반적으로 `검토 | 사용자검토 | 완료 | 실패 | 보류` 중 하나다.
+- `state=초안`이면 `processingStatus`는 `대기 | 처리중 | 보류` 중 하나다.
+- `state=대기`이면 `processingStatus`는 `대기 | 보류` 중 하나다.
+- `state=구현 검토`이면 `processingStatus`는 `대기 | 처리중 | 실패 | 보류` 중 하나다.
+- `state=구현`이면 `processingStatus`는 `대기 | 처리중 | 검토 | 실패 | 보류` 중 하나다.
+- `state=테스트 검증`이면 `processingStatus`는 `대기 | 처리중 | 검토 | 실패 | 보류` 중 하나다.
+- `state=검토`이면 `processingStatus`는 `검토 | 사용자검토 | 완료 | 실패 | 보류` 중 하나다.
+- `state=활성`이면 `processingStatus`는 `완료` 중 하나다.
+- `state=실패`이면 `processingStatus`는 `실패` 중 하나다.
+- `state=완료`이면 `processingStatus`는 `완료` 중 하나다.
 - `processingStatus`만 바뀌고 `state`는 유지될 수 있지만, phase 자체가 바뀌는 이벤트는 항상 `state` 변경으로 반영해야 한다.
 
 ## 2.4 비워도 되는 필드
@@ -118,6 +135,8 @@
 # 4. test
 
 test는 AC와의 연결이 명시되어야 한다. top-level `testIds`만으로는 어떤 테스트가 어떤 AC를 검증하는지 알 수 없기 때문이다.
+
+test 객체는 `spec.json`의 `tests` 배열에 inline으로 저장한다. `testIds`는 빠른 조회용 인덱스이고, 실제 test 정의는 같은 파일 안에 있어야 한다.
 
 ```json
 {
@@ -363,12 +382,11 @@ activity event는 replay, audit, debug 기준 데이터다. 따라서 상태 전
 {
   "result": "success",
   "baseVersion": 1,
-  "proposedEvents": [
-    {
-      "type": "implementation_submitted",
-      "summary": "버튼 스타일 수정 완료"
-    }
-  ],
+  "proposedEvent": {
+    "type": "implementation_submitted",
+    "summary": "버튼 스타일 수정 완료",
+    "payload": {}
+  },
   "artifacts": [],
   "evidence": [],
   "message": "implementation finished"
@@ -379,7 +397,7 @@ activity event는 replay, audit, debug 기준 데이터다. 따라서 상태 전
 
 - `result`
 - `baseVersion`
-- `proposedEvents`
+- `proposedEvent`
 - `message`
 
 허용 값:

@@ -68,7 +68,7 @@ runner는 아래를 직접 판단하지 않는다.
 
 | 상태 | 처리 상태 | 우선 호출 대상 | 설명 |
 | --- | --- | --- | --- |
-| 초안 | 대기 | Architect 또는 AC precheck rule | AC 테스트 가능성 프리패스 |
+| 초안 | 대기 | Spec Validator (AC precheck) | AC 테스트 가능성 프리패스 |
 | 대기 | 대기 | Architect 또는 Developer assignment rule | risk level에 따라 구현 검토 또는 구현 시작 |
 | 대기 | 처리중 | 없음 | 이 조합은 허용하지 않는 방향으로 간다. 실제 구현 착수는 `구현 + 처리중`이어야 한다. |
 | 구현 검토 | 대기 | Architect | 구조 검토 |
@@ -160,8 +160,6 @@ runner는 아래를 직접 판단하지 않는다.
 
 ## 6.2 Architect
 
-- `ac_precheck_passed`
-- `ac_precheck_rejected`
 - `architect_review_passed`
 - `architect_review_rejected`
 
@@ -176,6 +174,8 @@ runner는 아래를 직접 판단하지 않는다.
 
 ## 6.5 Spec Validator
 
+- `ac_precheck_passed`
+- `ac_precheck_rejected`
 - `spec_validation_passed`
 - `spec_validation_rework_requested`
 - `spec_validation_user_review_requested`

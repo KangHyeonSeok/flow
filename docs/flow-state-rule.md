@@ -61,6 +61,7 @@
 상태 전이는 이벤트 기반으로 계산한다. 초기 구현에서는 아래 이벤트만 고정하면 충분하다.
 
 - draft_created
+- draft_updated
 - ac_precheck_passed
 - ac_precheck_rejected
 - architect_review_passed
@@ -81,6 +82,7 @@
 - dependency_resolved
 - assignment_timed_out
 - assignment_resumed
+- review_request_timed_out
 - rollback_requested
 
 # 4. 책임 경계
@@ -124,10 +126,10 @@
 
 이벤트는 아래처럼 발생 주체를 고정한다.
 
-- Planner: `draft_created`
+- Planner: `draft_created`, `draft_updated`
 - Spec Validator: `ac_precheck_passed`, `ac_precheck_rejected`, `spec_validation_passed`, `spec_validation_rework_requested`, `spec_validation_user_review_requested`, `spec_validation_failed`
 - Architect: `architect_review_passed`, `architect_review_rejected`
-- runner 또는 scheduler: `assignment_started`, `assignment_timed_out`, `assignment_resumed`, `dependency_blocked`, `dependency_failed`, `dependency_resolved`
+- runner 또는 scheduler: `assignment_started`, `assignment_timed_out`, `assignment_resumed`, `review_request_timed_out`, `dependency_blocked`, `dependency_failed`, `dependency_resolved`
 - Developer: `implementation_submitted`
 - Test Validator: `test_validation_passed`, `test_validation_rejected`
 - 사용자 또는 운영 입력: `user_review_submitted`, `rollback_requested`
@@ -139,11 +141,11 @@
 
 | 현재 상태 | 입력 이벤트 | 선행 조건 | 다음 상태 | 부수 효과 |
 | --- | --- | --- | --- | --- |
+| 초안 | draft_updated | Planner가 초안을 수정 | 초안 | 활동 로그 기록, AC precheck 재수행 대상 |
 | 초안 | ac_precheck_passed | AC 테스트 가능 | 대기 | 활동 로그 기록 |
 | 초안 | ac_precheck_rejected | AC 모호 또는 검증 불가 | 초안 | Planner 보완 요청 생성 |
 | 대기 | assignment_started | risk level이 `low` 또는 Architect 생략 허용 | 구현 | 구현 assignment 시작, 활동 로그 기록 |
 | 대기 | assignment_started | risk level이 `medium` 이상이고 Architect review 필요 | 구현 검토 | Architect review assignment 시작 |
-| 대기 | architect_review_rejected | risk level이 `medium` 이상이고 Architect 보완 필요 | 구현 검토 | Planner 보완 assignment 생성 |
 | 구현 검토 | architect_review_passed | 구조 검토 통과 | 구현 | 구현 assignment 생성, 활동 로그 기록 |
 | 구현 검토 | architect_review_rejected | 구조 검토 미통과 | 구현 검토 | Planner 보완 assignment 생성 |
 | 구현 | implementation_submitted | Developer 결과 제출 | 테스트 검증 | Test Validator 입력 생성 |
@@ -153,6 +155,7 @@
 | 검토 | spec_validation_rework_requested | 재작업 필요 | 구현 | 재작업 assignment 재큐잉 |
 | 검토 | spec_validation_user_review_requested | 사용자 판단 필요 | 검토 | review request 생성 |
 | 검토 | spec_validation_failed | 3회 초과 비수렴 또는 terminal failure | 실패 | 실패 로그, 후속 선택지 생성 |
+| 검토 | review_request_timed_out | 사용자검토 중 deadline 초과 | 실패 | review request를 `closed`로 변경, 실패 로그 기록, 후속 선택지 생성 |
 | 활성 | rollback_requested | 사용자 요청 또는 운영상 치명적 이슈 | 검토 | review request 생성, 필요한 경우 재계획 |
 | 활성 | spec_completed | 운영상 완료 처리 가능 | 완료 | 완료 로그 기록 |
 | 모든 상태 | dependency_blocked | upstream blocker 미해결 | 현재 상태 유지 | 처리 상태 `보류`, 활동 로그 기록 |
@@ -186,13 +189,18 @@
 | 현재 처리 상태 | 입력 이벤트 | 선행 조건 | 다음 처리 상태 | 결정 주체 |
 | --- | --- | --- | --- | --- |
 | 대기 | assignment_started | assignment 생성 및 lock 확보 | 처리중 | runner |
-| 처리중 | implementation_submitted | 담당자 작업 제출 | 검토 | runner |
+| 처리중 | architect_review_passed | Architect 구조 검토 통과 (구현 검토 상태) | 대기 | runner |
+| 처리중 | architect_review_rejected | Architect 구조 검토 미통과 (구현 검토 상태) | 대기 | runner |
+| 처리중 | implementation_submitted | 담당자 작업 제출 (구현 상태) | 대기 | runner |
 | 처리중 | assignment_timed_out | heartbeat 초과 | 실패 | Spec Manager |
+| 처리중 | test_validation_passed | Test Validator 합격 판정 (테스트 검증 상태) | 검토 | runner |
+| 처리중 | test_validation_rejected | Test Validator 재작업 판정 (테스트 검증 상태) | 대기 | runner |
 | 검토 | spec_validation_passed | 검증 적합 | 완료 | Spec Validator |
 | 검토 | spec_validation_rework_requested | 재작업 필요 | 대기 | Spec Validator |
 | 검토 | spec_validation_user_review_requested | 사용자 판단 필요 | 사용자검토 | Spec Validator |
 | 검토 | spec_validation_failed | terminal failure 판정 | 실패 | Spec Validator |
 | 사용자검토 | user_review_submitted | 유효한 사용자 응답 수신 | 검토 | runner |
+| 사용자검토 | review_request_timed_out | deadline 초과 | 실패 | runner |
 | 모든 처리 상태 | dependency_blocked | upstream blocker 미해결 | 보류 | Spec Manager |
 | 모든 처리 상태 | dependency_failed | upstream blocker 최종 실패 | 보류 | Spec Manager |
 | 보류 | dependency_resolved | blocker 해소 | 대기 | Spec Manager |
@@ -201,9 +209,17 @@
 ## 6.2 처리 상태 반복 규칙
 
 - `검토 -> 사용자검토 -> 검토` 루프는 최대 3회까지 허용한다.
-- 3회 초과 시 `spec_validation_failed`를 발생시키고 `실패`로 전환한다.
+- `검토 -> 대기(재작업) -> 처리중 -> 검토` 루프도 최대 3회까지 허용한다.
+- 두 루프의 횟수는 독립적으로 카운트한다.
+- 어느 쪽이든 3회 초과 시 `spec_validation_failed`를 발생시키고 `실패`로 전환한다.
 - `실패` 전환 시 review request 또는 활동 로그에 실패 사유와 후속 선택지를 남긴다.
 - `보류`는 외부 의존성, 정책 대기, 환경 문제처럼 현재 spec 자체 노력만으로 진행할 수 없는 경우에 사용한다.
+
+처리 상태는 phase 전환과 함께 재설정되는 경우가 있다.
+
+- `구현 검토 -> 구현`으로 상태가 바뀌면 처리 상태는 새 phase 시작을 의미하는 `대기`로 돌아간다.
+- `구현 -> 테스트 검증`으로 상태가 바뀌면 처리 상태는 Test Validator 대기를 의미하는 `대기`로 돌아간다.
+- `테스트 검증 -> 검토`로 상태가 바뀌면 처리 상태는 Spec Validator 입력 준비를 의미하는 `검토`가 된다.
 
 # 7. dependency cascade 규칙
 
@@ -258,12 +274,14 @@
 1. 정상 경로: `초안 -> 대기 -> 구현 -> 테스트 검증 -> 검토 -> 활성 -> 완료`
 2. AC 프리패스 반려: `초안 -> 초안`
 3. 테스트 부적합: `테스트 검증 -> 구현`
-4. Architect 반려 후 Planner 보완 assignment 생성: `대기 또는 구현 검토 -> 구현 검토`
+4. Architect 반려 후 Planner 보완 assignment 생성: `구현 검토 -> 구현 검토`
 5. review request 루프: `검토 -> 사용자검토 -> 검토 -> 활성 -> 완료`
 6. review request 3회 초과: `검토 -> 실패`
-7. dependency cascade: downstream `보류` 및 in-flight assignment `cancelled`
-8. assignment timeout: `처리중 -> 실패`
-9. 활성 상태 rollback: `활성 -> 검토`
+7. 재작업 루프 3회 초과: `검토 -> 대기 -> 처리중 -> 검토` 반복 후 `실패`
+8. dependency cascade: downstream `보류` 및 in-flight assignment `cancelled`
+9. assignment timeout: `처리중 -> 실패`
+10. review request deadline 초과: `사용자검토 -> 실패`
+11. 활성 상태 rollback: `활성 -> 검토`
 
 # 11. 구현 메모
 
