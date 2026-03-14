@@ -45,3 +45,4 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 /tools/flow-core.tests/bin
 /tools/flow-core.tests/obj
 /tools/flow-core/obj
+/tools/flow-core/bin

@@ -113,6 +113,8 @@
 
 이 단계의 목적은 agent 품질이 아니라 orchestration 정확성 검증이다.
 
+구현 전에 별도 의사결정이 필요하면 `flow-phase3-runner-decisions.md`를 기준 문서로 삼는 편이 좋다.
+
 구현 범위:
 
 - runner loop
