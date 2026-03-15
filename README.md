@@ -156,14 +156,12 @@ Slack 같은 외부 채널은 별도 상태 전이 규칙을 갖지 않는다. r
 ## 저장소 구성
 
 - `docs`: 운영 정책, 상태 규칙, 아키텍처 문서
-- `tools/flow-cli`: 주 CLI 구현
 - `tools/flow-core`: 공용 도메인, 상태 규칙, 저장/runner contract
-- `tools/flow-cli.Tests`: CLI 및 runner 테스트
+- `tools/flow-core.tests`: core 테스트
 - `tools/e2e-test`: Python 기반 E2E 러너
 - `tools/capture-cli`: 캡처 도구
 - `tools/embed`: 임베딩 보조 도구
-- `tools/flow-ext`: VS Code 확장
-- `tools/flow-kanban`: webservice/kanban 관련 구현 자산
+- `tools/flow-console`: TUI 클라이언트
 
 ## 운영 원칙
 
@@ -175,8 +173,8 @@ Slack 같은 외부 채널은 별도 상태 전이 규칙을 갖지 않는다. r
 
 ## 관련 스크립트
 
-- `build-flow.ps1`: Flow CLI 빌드
-- `build-flow.sh`: Flow CLI 빌드 (macOS/Linux)
+- `build-embed.ps1` / `build-embed.sh`: embed 도구 빌드
+- `build-capture.ps1` / `build-capture.sh`: capture-cli 빌드
 - `build-capture.ps1`: 캡처 도구 빌드
 - `build-capture.sh`: 캡처 도구 빌드 (win-x64 대상)
 - `build-embed.ps1`: 임베딩 도구 빌드

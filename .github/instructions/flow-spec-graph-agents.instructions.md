@@ -46,7 +46,7 @@ applyTo: ".github/agents/**"
 | `parent` | 선택 | `"F-001"` |
 | `dependencies` | 선택 | `["F-005", "F-008"]` |
 | `conditions` | feature 필수 | Given-When-Then 형식 수락 조건 배열 |
-| `codeRefs` | 선택 | `["tools/flow-cli/Services/Foo.cs#L10-L20"]` |
+| `codeRefs` | 선택 | `["tools/flow-core/Services/Foo.cs#L10-L20"]` |
 
 ## nodeType 구분
 

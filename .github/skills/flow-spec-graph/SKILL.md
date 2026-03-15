@@ -96,11 +96,11 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
       "nodeType": "condition",
       "description": "Given-When-Then 형식 수락 조건",
       "status": "verified",
-      "codeRefs": ["tools/flow-cli/Services/SpecStore.cs#L63-L75"],
+      "codeRefs": ["tools/flow-core/Services/SpecStore.cs"],
       "evidence": []
     }
   ],
-  "codeRefs": ["tools/flow-cli/Commands/SpecCommand.cs"],
+  "codeRefs": ["tools/flow-core/Services/SpecStore.cs"],
   "tags": ["spec", "graph"]
 }
 ```
@@ -117,10 +117,9 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
 
 ```bash
 # 보안 검토 task 생성
-./flow.ps1 spec-create --id F-099 --title "현시스템 OWASP Top10 보안 취약점 검토" --status draft
-# F-099.json의 nodeType을 "task"로 수동 수정
-# 검토 완료 후 새 스펙 F-100 생성, F-099는 done으로 종료
-./flow.ps1 spec-update F-099 --status done
+# task 타입 스펙 생성 예시
+# F-099.json의 nodeType을 "task"로 설정
+# 검토 완료 후 done으로 종료
 ```
 
 ## 스펙 파일 위치
@@ -130,6 +129,3 @@ JSON 기반 기능 스펙 관리 및 의존성 그래프 분석 시스템.
 - 백업: `docs/specs/.backup/{timestamp}/`
 - 그래프 캐시: `docs/specs/.spec-cache/graph.json`
 
-## VS Code 확장
-
-`flow-ext` 패키지가 VS Code에서 스펙 트리뷰 + Cytoscape.js 그래프 시각화를 제공한다.

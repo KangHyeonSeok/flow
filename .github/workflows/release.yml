@@ -29,11 +29,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
       - name: Bump VERSION
         id: bump
         run: |
@@ -61,35 +56,6 @@ jobs:
         run: |
           cp VERSION .flow/version.txt
 
-      - name: Build Flow CLI (single-file, multi-platform)
-        run: |
-          VER=${{ steps.bump.outputs.version }}
-          CSPROJ=tools/flow-cli/flow-cli.csproj
-          PROPS="-p:Version=$VER -p:AssemblyVersion=$VER -p:FileVersion=$VER"
-
-          dotnet publish $CSPROJ -c Release -r win-x64    --self-contained -o build-win       $PROPS
-          dotnet publish $CSPROJ -c Release -r linux-x64  --self-contained -o build-linux     $PROPS
-          dotnet publish $CSPROJ -c Release -r osx-arm64  --self-contained -o build-osx-arm64 $PROPS
-          dotnet publish $CSPROJ -c Release -r osx-x64    --self-contained -o build-osx-x64   $PROPS
-
-      - name: Build Flow Extension (.vsix)
-        run: |
-          cd tools/flow-ext
-          # package.json 버전 동기화
-          node -e "
-            const fs = require('fs');
-            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-            pkg.version = '${{ steps.bump.outputs.version }}';
-            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-          "
-          npm ci
-          npm run build
-          # LICENSE 복사
-          cp ../../LICENSE ./LICENSE 2>/dev/null || true
-          npx vsce package --no-dependencies --allow-missing-repository
-          # .vsix 파일을 프로젝트 루트로 이동
-          mv *.vsix ../../flow-ext-${{ steps.bump.outputs.version }}.vsix
-
       - name: Create zip archive
         run: |
           mkdir -p temp-release/.flow/bin
@@ -103,20 +69,7 @@ jobs:
           rm -rf temp-release/.flow/review
           rm -f  temp-release/.flow/runner.pid
           rm -f  temp-release/.flow/spec-state.json
-          rm -f  temp-release/.flow/flow-ext.reload.signal
           echo '{}' > temp-release/.flow/config.json
-
-          # Flow CLI 단일 파일 바이너리
-          cp build-win/flow.exe        temp-release/.flow/bin/flow.exe
-          cp build-linux/flow          temp-release/.flow/bin/flow-linux
-          cp build-osx-arm64/flow      temp-release/.flow/bin/flow-osx-arm64
-          cp build-osx-x64/flow        temp-release/.flow/bin/flow-osx-x64
-          chmod +x temp-release/.flow/bin/flow-linux
-          chmod +x temp-release/.flow/bin/flow-osx-arm64
-          chmod +x temp-release/.flow/bin/flow-osx-x64
-
-          # VS Code 확장 (.vsix)
-          cp flow-ext-${{ steps.bump.outputs.version }}.vsix temp-release/.flow/
 
           # E2E 테스트
           cp -r tools/e2e-test temp-release/.flow/e2e-test
@@ -136,13 +89,8 @@ jobs:
             fi
           done
 
-          # 래퍼 스크립트
-          cp flow.ps1 temp-release/
-          cp flow temp-release/
-          chmod +x temp-release/flow
-
           cd temp-release
-          zip -r ../flow.zip .flow/ .github/ flow.ps1 flow
+          zip -r ../flow.zip .flow/ .github/
           cd ..
           rm -rf temp-release
 
@@ -166,9 +114,6 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
             ```
 
-            > VS Code 확장은 설치 스크립트가 자동으로 설치합니다.
-            > 수동 설치: 위 Assets에서 `flow-ext-*.vsix` 다운로드 → VS Code Extensions 탭 → `Install from VSIX...`
-
             ### 업데이트 방법
 
             **Windows:**
@@ -182,8 +127,6 @@ jobs:
             ```
 
             ### 포함된 구성 요소
-            - `flow.exe` / `flow-linux` / `flow-osx-arm64` / `flow-osx-x64` — Flow CLI
-            - `flow-ext-*.vsix` — VS Code 확장 (스펙 트리뷰, 칸반, 그래프)
             - `.github/skills/flow-spec-graph` — 스펙 그래프 관리 스킬
             - `.github/skills/flow-spec-create` — 스펙 생성 마법사 스킬
             - `.github/skills/flow-build` — 빌드 통합 스킬
@@ -194,6 +137,5 @@ jobs:
 
           files: |
             flow.zip
-            flow-ext-${{ steps.bump.outputs.version }}.vsix
           draft: false
           prerelease: false

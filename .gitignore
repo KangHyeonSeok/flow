@@ -48,3 +48,5 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 /tools/flow-core/bin
 /tools/flow-console/bin
 /tools/flow-console/obj
+/tools/flow/obj
+/tools/flow/bin
