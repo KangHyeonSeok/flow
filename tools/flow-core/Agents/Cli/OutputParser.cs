@@ -16,12 +16,11 @@ public sealed class OutputParser
     {
         if (!response.Success)
         {
-            var stopReason = response.StopReason;
+            // timeout이든 exit code 에러든 재시도 가능하게 처리.
+            // TerminalFailure는 파싱 후 도메인 로직에서만 결정한다.
             return new AgentOutput
             {
-                Result = stopReason == CliStopReason.Timeout
-                    ? AgentResult.RetryableFailure
-                    : AgentResult.TerminalFailure,
+                Result = AgentResult.RetryableFailure,
                 BaseVersion = input.CurrentVersion,
                 Message = response.ErrorMessage ?? "backend failure"
             };

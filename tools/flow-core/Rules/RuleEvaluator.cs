@@ -547,14 +547,13 @@ public static class RuleEvaluator
     /// <summary>
     /// agent 실행 실패 (backend crash, timeout, provisioning failure 등).
     /// CancelRequested와 달리 사용자 의도가 아닌 시스템 실행 오류를 표현한다.
-    /// 허용 상태: ArchitectureReview, Implementation, TestValidation, Review.
+    /// 허용 상태: Draft, Queued, ArchitectureReview, Implementation, TestValidation, Review.
     /// </summary>
     private static RuleOutput EvalExecutionFailed(RuleInput input)
     {
         var state = input.Spec.State;
 
-        if (state is not (FlowState.ArchitectureReview or FlowState.Implementation
-            or FlowState.TestValidation or FlowState.Review))
+        if (state is FlowState.Completed or FlowState.Failed or FlowState.Archived or FlowState.Active)
             return RuleOutput.Reject(RejectionReason.ForbiddenTransition,
                 [SideEffect.Log($"execution_failed not applicable in state {state}")]);
 

@@ -102,7 +102,7 @@ public class CliSpecValidatorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_BackendFailure_ReturnsTerminalFailure()
+    public async Task ExecuteAsync_BackendFailure_ReturnsRetryableFailure()
     {
         var backend = new FakeBackend(new CliResponse
         {
@@ -116,7 +116,7 @@ public class CliSpecValidatorTests
 
         var output = await validator.ExecuteAsync(CreateInput());
 
-        output.Result.Should().Be(AgentResult.TerminalFailure);
+        output.Result.Should().Be(AgentResult.RetryableFailure);
     }
 
     [Fact]

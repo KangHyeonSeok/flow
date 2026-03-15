@@ -66,6 +66,15 @@ public sealed class ClaudeCliBackend : ICliBackend
         psi.Environment.Remove("CLAUDECODE");
         psi.Environment.Remove("CLAUDE_CODE");
 
+        // Windows: CLAUDE_CODE_GIT_BASH_PATH 자동 탐지
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && !psi.Environment.ContainsKey("CLAUDE_CODE_GIT_BASH_PATH"))
+        {
+            var gitBashPath = FindGitBash();
+            if (gitBashPath != null)
+                psi.Environment["CLAUDE_CODE_GIT_BASH_PATH"] = gitBashPath;
+        }
+
         Process process;
         try
         {
@@ -238,7 +247,7 @@ public sealed class ClaudeCliBackend : ICliBackend
 
     private static void AddClaudeArgs(List<string> args, CliBackendOptions options)
     {
-        args.AddRange(["-p", "--output-format", "stream-json", "--dangerously-skip-permissions"]);
+        args.AddRange(["-p", "--output-format", "stream-json", "--verbose", "--dangerously-skip-permissions"]);
 
         if (options.AllowedTools is { Count: > 0 } tools)
         {
@@ -251,6 +260,54 @@ public sealed class ClaudeCliBackend : ICliBackend
     {
         const int maxLen = 500;
         return stderr.Length <= maxLen ? stderr.Trim() : stderr[..maxLen].Trim() + "…";
+    }
+
+    private static string? FindGitBash()
+    {
+        string[] candidates =
+        [
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "bin", "bash.exe"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Git", "bin", "bash.exe"),
+        ];
+
+        foreach (var path in candidates)
+        {
+            if (File.Exists(path)) return path;
+        }
+
+        // PATH에서 git.exe를 찾아서 상대 경로로 bash.exe 탐지
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "where",
+                Arguments = "git",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                var output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit();
+                foreach (var line in output.Split('\n'))
+                {
+                    var gitPath = line.Trim();
+                    if (string.IsNullOrEmpty(gitPath)) continue;
+                    // git.exe → ../bin/bash.exe
+                    var gitDir = Path.GetDirectoryName(Path.GetDirectoryName(gitPath));
+                    if (gitDir != null)
+                    {
+                        var bashPath = Path.Combine(gitDir, "bin", "bash.exe");
+                        if (File.Exists(bashPath)) return bashPath;
+                    }
+                }
+            }
+        }
+        catch { /* best-effort */ }
+
+        return null;
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

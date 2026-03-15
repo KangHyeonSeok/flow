@@ -82,7 +82,7 @@ public class OutputParserTests
     }
 
     [Fact]
-    public void Parse_FailedResponse_ReturnsTerminalFailure()
+    public void Parse_FailedResponse_ReturnsRetryableFailure_ForError()
     {
         var response = new CliResponse
         {
@@ -95,7 +95,7 @@ public class OutputParserTests
         var output = Parser.Parse(response, CreateInput());
 
         output.Should().NotBeNull();
-        output!.Result.Should().Be(AgentResult.TerminalFailure);
+        output!.Result.Should().Be(AgentResult.RetryableFailure);
         output.Message.Should().Contain("exit code 1");
     }
 

@@ -1,0 +1,18 @@
+{
+  "backends": {
+    "claude-cli": {
+      "command": "claude",
+      "idleTimeoutSeconds": 300,
+      "hardTimeoutSeconds": 1800,
+      "maxRetries": 2,
+      "allowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+    }
+  },
+  "agentBackends": {
+    "planner":       { "backend": "claude-cli" },
+    "architect":     { "backend": "claude-cli" },
+    "developer":     { "backend": "claude-cli" },
+    "testValidator": { "backend": "claude-cli" },
+    "specValidator": { "backend": "claude-cli" }
+  }
+}

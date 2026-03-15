@@ -105,6 +105,25 @@ flow runner status
 | 없음 | 더미 에이전트 (테스트용, 즉시 통과) |
 | 있음 | CLI 에이전트 (Claude/Copilot 백엔드) |
 
+템플릿 파일을 복사해서 설정한다:
+
+```bash
+cp tools/flow/backend-config.template.json ~/.flow/backend-config.json
+```
+
+지원 백엔드:
+
+| 백엔드 ID | 명령어 | 설명 |
+|-----------|--------|------|
+| `claude-cli` | `claude` | Claude Code CLI |
+| `copilot-acp` | `acp` | Copilot ACP 프로토콜 |
+
+역할별로 다른 백엔드를 매핑할 수 있다. 상세 설정은 `backend-config.template.json` 참조.
+
+## TODO
+
+- [ ] `flow init` 명령 추가: 프로젝트 초기화 시 `backend-config.template.json`을 `~/.flow/backend-config.json`으로 복사
+
 ## 저장 경로
 
 ```
