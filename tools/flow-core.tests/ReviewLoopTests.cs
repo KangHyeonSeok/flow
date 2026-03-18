@@ -36,7 +36,7 @@ public class ReviewLoopTests : IDisposable
             new DummySpecValidator(),
             new DummyArchitect(),
             new DummyDeveloper(),
-            new DummyTestValidator(),
+            new DummyTestGenerator(),
             new DummyPlanner()
         },
         _config, _time);
@@ -558,7 +558,7 @@ public class ReviewLoopTests : IDisposable
                 new DummySpecValidator(),
                 new DummyArchitect(),
                 new DummyDeveloper(),
-                new DummyTestValidator()
+                new DummyTestGenerator()
                 // NO DummyPlanner
             },
             _config, _time);

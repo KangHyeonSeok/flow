@@ -3,16 +3,16 @@ using FlowCore.Models;
 
 namespace FlowCore.Agents.Cli;
 
-/// <summary>CLI 백엔드 기반 TestValidator IAgentAdapter 구현 (worktree 필수)</summary>
-public sealed class CliTestValidator : IAgentAdapter
+/// <summary>CLI 백엔드 기반 TestGenerator IAgentAdapter 구현 (worktree 필수, 파일 생성 가능)</summary>
+public sealed class CliTestGenerator : IAgentAdapter
 {
     private readonly BackendRegistry _registry;
     private readonly PromptBuilder _promptBuilder;
     private readonly OutputParser _outputParser;
 
-    public AgentRole Role => AgentRole.TestValidator;
+    public AgentRole Role => AgentRole.TestGenerator;
 
-    public CliTestValidator(
+    public CliTestGenerator(
         BackendRegistry registry,
         PromptBuilder promptBuilder,
         OutputParser outputParser)
@@ -24,36 +24,35 @@ public sealed class CliTestValidator : IAgentAdapter
 
     public async Task<AgentOutput> ExecuteAsync(AgentInput input, CancellationToken ct = default)
     {
-        // TestValidator는 worktree 없이 실행 불가
         if (input.Assignment.Worktree?.Path == null)
         {
             return new AgentOutput
             {
                 Result = AgentResult.TerminalFailure,
                 BaseVersion = input.CurrentVersion,
-                Message = "TestValidator requires a worktree but none was assigned"
+                Message = "TestGenerator requires a worktree but none was assigned"
             };
         }
 
-        var backend = _registry.GetBackend(AgentRole.TestValidator);
+        var backend = _registry.GetBackend(AgentRole.TestGenerator);
         if (backend == null)
         {
             return new AgentOutput
             {
                 Result = AgentResult.TerminalFailure,
                 BaseVersion = input.CurrentVersion,
-                Message = "no backend configured for TestValidator"
+                Message = "no backend configured for TestGenerator"
             };
         }
 
-        var definition = _registry.GetDefinition(AgentRole.TestValidator);
-        var prompt = _promptBuilder.BuildPrompt(input, AgentRole.TestValidator);
+        var definition = _registry.GetDefinition(AgentRole.TestGenerator);
+        var prompt = _promptBuilder.BuildPrompt(input, AgentRole.TestGenerator);
 
         var options = new CliBackendOptions
         {
             WorkingDirectory = input.Assignment.Worktree.Path,
-            AllowFileEdits = false,
-            AllowedTools = definition?.AllowedTools ?? ["Read", "Glob", "Grep", "Bash"],
+            AllowFileEdits = true,
+            AllowedTools = definition?.AllowedTools ?? ["Read", "Glob", "Grep", "Bash", "Write", "Edit"],
             IdleTimeout = TimeSpan.FromSeconds(definition?.IdleTimeoutSeconds ?? 300),
             HardTimeout = TimeSpan.FromSeconds(definition?.HardTimeoutSeconds ?? 900)
         };

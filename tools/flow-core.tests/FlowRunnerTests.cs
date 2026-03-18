@@ -39,7 +39,7 @@ public class FlowRunnerTests : IDisposable
             new DummySpecValidator(),
             new DummyArchitect(),
             new DummyDeveloper(),
-            new DummyTestValidator(),
+            new DummyTestGenerator(),
             new DummyPlanner()
         };
         return new FlowRunner(_store, agents, _config, _time);
@@ -71,8 +71,8 @@ public class FlowRunnerTests : IDisposable
 
         var updated = await _store.LoadAsync("test-2pass");
         // After 2-pass + architect agent: should have moved past ArchitectureReview
-        // DummyArchitect returns Passed, so it should be at Implementation/Pending
-        updated!.State.Should().Be(FlowState.Implementation);
+        // DummyArchitect returns Passed, so it should be at TestGeneration/Pending
+        updated!.State.Should().Be(FlowState.TestGeneration);
         updated.ProcessingStatus.Should().Be(ProcessingStatus.Pending);
     }
 
@@ -92,7 +92,7 @@ public class FlowRunnerTests : IDisposable
 
         var updated = await _store.LoadAsync("test-draft");
         // AcPrecheckPassed → Queued/Pending, then rule-only AssignmentStarted → Implementation/Pending
-        // Then 2-pass + Developer → TestValidation/Pending... etc
+        // Then 2-pass + Developer → Review/Pending... etc
         // At minimum it should be past Draft
         updated!.State.Should().NotBe(FlowState.Draft);
     }

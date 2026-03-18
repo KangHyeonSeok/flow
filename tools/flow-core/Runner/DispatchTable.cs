@@ -51,8 +51,8 @@ public static class DispatchTable
     private static readonly Dictionary<FlowState, int> StateProgress = new()
     {
         { FlowState.Review, 6 },
-        { FlowState.TestValidation, 5 },
-        { FlowState.Implementation, 4 },
+        { FlowState.Implementation, 5 },
+        { FlowState.TestGeneration, 4 },
         { FlowState.ArchitectureReview, 3 },
         { FlowState.Queued, 2 },
         { FlowState.Draft, 1 },
@@ -99,7 +99,7 @@ public static class DispatchTable
 
             (FlowState.Queued, ProcessingStatus.Pending)
                 => DispatchDecision.RuleOnly(FlowEvent.AssignmentStarted,
-                    "Queued/Pending (Low) → Implementation"),
+                    "Queued/Pending (Low) → TestGeneration"),
 
             (FlowState.ArchitectureReview, ProcessingStatus.Pending)
                 => DispatchDecision.AgentDispatch(
@@ -117,13 +117,13 @@ public static class DispatchTable
             (FlowState.Implementation, ProcessingStatus.InProgress) when hasActiveAssignment
                 => DispatchDecision.Waiting("Implementation/InProgress — active assignment"),
 
-            (FlowState.TestValidation, ProcessingStatus.Pending)
+            (FlowState.TestGeneration, ProcessingStatus.Pending)
                 => DispatchDecision.AgentDispatch(
-                    Models.AgentRole.TestValidator, Models.AssignmentType.TestValidation,
-                    "TestValidation/Pending → TestValidator"),
+                    Models.AgentRole.TestGenerator, Models.AssignmentType.TestGeneration,
+                    "TestGeneration/Pending → TestGenerator"),
 
-            (FlowState.TestValidation, ProcessingStatus.InProgress) when hasActiveAssignment
-                => DispatchDecision.Waiting("TestValidation/InProgress — active assignment"),
+            (FlowState.TestGeneration, ProcessingStatus.InProgress) when hasActiveAssignment
+                => DispatchDecision.Waiting("TestGeneration/InProgress — active assignment"),
 
             (FlowState.Review, ProcessingStatus.InReview)
                 => DispatchDecision.AgentDispatch(

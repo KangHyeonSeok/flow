@@ -22,16 +22,16 @@ public class RuleEvaluatorStateTransitionTests
             && e.AgentRole == AgentRole.Planner);
     }
 
-    // ── 테스트 3: 테스트 부적합 ──
+    // ── 테스트 3: 테스트 생성 거부 ──
 
     [Fact]
-    public void TestValidationRejected_BackToImplementation()
+    public void TestGenerationRejected_BackToDraft()
     {
-        var spec = CreateSpec(FlowState.TestValidation, ProcessingStatus.InProgress);
-        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.TestValidationRejected));
+        var spec = CreateSpec(FlowState.TestGeneration, ProcessingStatus.InProgress);
+        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.TestGenerationRejected));
 
         result.Accepted.Should().BeTrue();
-        result.Mutation!.NewState.Should().Be(FlowState.Implementation);
+        result.Mutation!.NewState.Should().Be(FlowState.Draft);
         result.Mutation.NewProcessingStatus.Should().Be(ProcessingStatus.Pending);
     }
 

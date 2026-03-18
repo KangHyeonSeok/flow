@@ -18,13 +18,15 @@ public sealed class FlowRunner
     private readonly TimeProvider _time;
     private readonly ReviewResponseSubmitter _submitter;
     private readonly IWorktreeProvisioner? _worktreeProvisioner;
+    private readonly IRunnerObserver _observer;
 
     public FlowRunner(
         IFlowStore store,
         IEnumerable<IAgentAdapter> agents,
         RunnerConfig config,
         TimeProvider? time = null,
-        IWorktreeProvisioner? worktreeProvisioner = null)
+        IWorktreeProvisioner? worktreeProvisioner = null,
+        IRunnerObserver? observer = null)
     {
         _store = store;
         _agents = agents.ToDictionary(a => a.Role);
@@ -32,6 +34,7 @@ public sealed class FlowRunner
         _time = time ?? TimeProvider.System;
         _submitter = new ReviewResponseSubmitter(store);
         _worktreeProvisioner = worktreeProvisioner;
+        _observer = observer ?? NullRunnerObserver.Instance;
     }
 
     /// <summary>한 번의 cycle을 실행한다. 처리한 spec 수를 반환한다.</summary>
@@ -70,6 +73,7 @@ public sealed class FlowRunner
         var sorted = DispatchTable.SortBacklog(candidates, assignmentsBySpec, _time);
 
         // 4. spec별 처리
+        _observer.OnCycleStart(runId, sorted.Count);
         var processed = 0;
         foreach (var spec in sorted.Take(_config.MaxSpecsPerCycle))
         {
@@ -80,6 +84,7 @@ public sealed class FlowRunner
             if (decision.Kind == DispatchKind.Wait)
                 continue;
 
+            _observer.OnSpecDispatched(spec.Id, spec.Title, decision.Reason ?? "dispatch decided");
             await LogActivity(spec, ActivityAction.SpecSelected, runId,
                 "spec selected for processing", ct);
             await LogActivity(spec, ActivityAction.DispatchDecided, runId,
@@ -96,6 +101,7 @@ public sealed class FlowRunner
                 processed++;
         }
 
+        _observer.OnCycleEnd(runId, processed);
         return processed;
     }
 
@@ -396,10 +402,10 @@ public sealed class FlowRunner
         var isPlanningDispatch = decision.AssignmentType == AssignmentType.Planning
             && agentRole == AgentRole.Planner;
 
-        // 2-pass 대상 판단: ArchitectureReview/Implementation/TestValidation + Pending
+        // 2-pass 대상 판단: ArchitectureReview/TestGeneration/Implementation + Pending
         var is2PassTarget = !isPlanningDispatch
             && spec.State is (FlowState.ArchitectureReview
-                or FlowState.Implementation or FlowState.TestValidation)
+                or FlowState.Implementation or FlowState.TestGeneration)
             && spec.ProcessingStatus == ProcessingStatus.Pending;
 
         // Draft/Pending: assignment 생성 필요 (RuleEvaluator의 side effect가 아닌 직접 생성)
@@ -456,6 +462,12 @@ public sealed class FlowRunner
             if (currentAssignment == null)
             {
                 // 2-pass 후 Running assignment가 없으면 생성
+                // Rework 등 반복 시 이전 worktree 상속
+                var prevWorktree = assignments
+                    .Where(a => a.Worktree != null)
+                    .OrderByDescending(a => a.FinishedAt ?? a.StartedAt)
+                    .FirstOrDefault()?.Worktree;
+
                 var asgId = FlowId.New("asg");
                 currentAssignment = new Assignment
                 {
@@ -465,7 +477,8 @@ public sealed class FlowRunner
                     Type = decision.AssignmentType!.Value,
                     Status = AssignmentStatus.Running,
                     StartedAt = _time.GetUtcNow(),
-                    TimeoutSeconds = _config.DefaultTimeoutSeconds
+                    TimeoutSeconds = _config.DefaultTimeoutSeconds,
+                    Worktree = prevWorktree
                 };
                 await ((IAssignmentStore)_store).SaveAsync(currentAssignment, ct);
                 spec.Assignments = spec.Assignments.Append(asgId).ToList();
@@ -507,6 +520,12 @@ public sealed class FlowRunner
             if (currentAssignment == null)
             {
                 // assignment가 없으면 생성
+                // Review 등 후속 단계는 이전 assignment의 worktree를 상속
+                var previousWorktree = assignments
+                    .Where(a => a.Worktree != null)
+                    .OrderByDescending(a => a.FinishedAt ?? a.StartedAt)
+                    .FirstOrDefault()?.Worktree;
+
                 var asgId = FlowId.New("asg");
                 currentAssignment = new Assignment
                 {
@@ -516,7 +535,8 @@ public sealed class FlowRunner
                     Type = decision.AssignmentType!.Value,
                     Status = AssignmentStatus.Running,
                     StartedAt = _time.GetUtcNow(),
-                    TimeoutSeconds = _config.DefaultTimeoutSeconds
+                    TimeoutSeconds = _config.DefaultTimeoutSeconds,
+                    Worktree = previousWorktree
                 };
                 await ((IAssignmentStore)_store).SaveAsync(currentAssignment, ct);
                 spec.Assignments = spec.Assignments.Append(asgId).ToList();
@@ -527,9 +547,9 @@ public sealed class FlowRunner
             }
         }
 
-        // Worktree provisioning: Implementation/TestValidation은 worktree 필요
+        // Worktree provisioning: TestGeneration/Implementation은 worktree 필요
         if (_worktreeProvisioner != null
-            && currentAssignment.Type is AssignmentType.Implementation or AssignmentType.TestValidation
+            && currentAssignment.Type is AssignmentType.Implementation or AssignmentType.TestGeneration
             && currentAssignment.Worktree == null)
         {
             var provisionResult = await _worktreeProvisioner.CreateAsync(spec.Id, ct);
@@ -579,11 +599,13 @@ public sealed class FlowRunner
             CurrentVersion = spec.Version
         };
 
+        _observer.OnAgentStarted(spec.Id, agentRole.ToString(), currentAssignment.Id);
         await LogActivity(spec, ActivityAction.AgentInvoked, runId,
             $"invoking {agentRole}", ct, currentAssignment.Id);
 
         var output = await agent.ExecuteAsync(input, ct);
 
+        _observer.OnAgentCompleted(spec.Id, agentRole.ToString(), output.Result.ToString(), output.Summary);
         await LogActivity(spec, ActivityAction.AgentCompleted, runId,
             $"{agentRole} completed: {output.Result}", ct, currentAssignment.Id);
 
@@ -622,6 +644,19 @@ public sealed class FlowRunner
                         return false;
                     }
                     ApplyProposedSpec(spec, output.ProposedSpec);
+                }
+
+                // Worktree auto-commit: TestGenerator/Developer 완료 후 변경사항 커밋
+                if (_worktreeProvisioner != null
+                    && assignment.Type is AssignmentType.TestGeneration or AssignmentType.Implementation
+                    && assignment.Worktree?.Path != null)
+                {
+                    try
+                    {
+                        var commitMsg = $"[flow] {spec.Id}: {output.Summary ?? "implementation submitted"}";
+                        await _worktreeProvisioner.CommitChangesAsync(spec.Id, commitMsg, ct);
+                    }
+                    catch { /* best-effort */ }
                 }
 
                 // assignment를 Completed로 마킹 (RejectIfActiveAssignment 방지)
@@ -789,6 +824,12 @@ public sealed class FlowRunner
         }
 
         // Log activity (best-effort)
+        if (spec.State != previousState)
+        {
+            _observer.OnStateTransition(spec.Id,
+                $"{previousState}/{previousProcessingStatus}",
+                $"{spec.State}/{spec.ProcessingStatus}");
+        }
         await LogActivity(spec, ActivityAction.StateTransitionCommitted, runId,
             $"{ev} → {spec.State}/{spec.ProcessingStatus}", ct);
 
@@ -802,7 +843,7 @@ public sealed class FlowRunner
         if (_worktreeProvisioner != null
             && spec.State is FlowState.Failed or FlowState.Completed or FlowState.Active or FlowState.Archived
             && previousState is FlowState.ArchitectureReview or FlowState.Implementation
-                or FlowState.TestValidation or FlowState.Review)
+                or FlowState.TestGeneration or FlowState.Review)
         {
             try { await _worktreeProvisioner.CleanupAsync(spec.Id, ct); }
             catch { /* best-effort */ }
@@ -925,7 +966,7 @@ public sealed class FlowRunner
         AgentRole.Planner => ActorKind.Planner,
         AgentRole.Architect => ActorKind.Architect,
         AgentRole.Developer => ActorKind.Developer,
-        AgentRole.TestValidator => ActorKind.TestValidator,
+        AgentRole.TestGenerator => ActorKind.TestGenerator,
         AgentRole.SpecValidator => ActorKind.SpecValidator,
         AgentRole.SpecManager => ActorKind.SpecManager,
         _ => ActorKind.Runner
@@ -935,7 +976,7 @@ public sealed class FlowRunner
     {
         FlowState.ArchitectureReview => spec.RetryCounters.ArchitectReviewLoopCount,
         FlowState.Implementation => spec.RetryCounters.ImplementationRetryCount,
-        FlowState.TestValidation => spec.RetryCounters.TestValidationRetryCount,
+        FlowState.TestGeneration => spec.RetryCounters.TestGenerationRetryCount,
         FlowState.Review => spec.RetryCounters.ReworkLoopCount,
         _ => spec.RetryCounters.ReworkLoopCount
     };
@@ -950,8 +991,8 @@ public sealed class FlowRunner
             case FlowState.Implementation:
                 spec.RetryCounters.ImplementationRetryCount++;
                 break;
-            case FlowState.TestValidation:
-                spec.RetryCounters.TestValidationRetryCount++;
+            case FlowState.TestGeneration:
+                spec.RetryCounters.TestGenerationRetryCount++;
                 break;
             default:
                 spec.RetryCounters.ReworkLoopCount++;

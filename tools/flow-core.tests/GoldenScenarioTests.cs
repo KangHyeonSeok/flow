@@ -37,7 +37,7 @@ public class GoldenScenarioTests : IDisposable
             new DummySpecValidator(),
             new DummyArchitect(),
             new DummyDeveloper(),
-            new DummyTestValidator(),
+            new DummyTestGenerator(),
             new DummyPlanner()
         },
         _config, _time);
@@ -57,7 +57,7 @@ public class GoldenScenarioTests : IDisposable
     public async Task GoldenScenario_HappyPath()
     {
         // fixture-happy-path: Draft/Pending, Low risk
-        // Expected: Draft → Queued → Implementation → TestValidation → Review → Active
+        // Expected: Draft → Queued → TestGeneration → Implementation → Review → Active
         var spec = new Spec
         {
             Id = "fixture-happy-path", ProjectId = "fixture-project",
@@ -85,35 +85,35 @@ public class GoldenScenarioTests : IDisposable
             .ToList();
 
         // Happy path full sequence including 2-pass AssignmentStarted:
-        //   AcPrecheckPassed → AssignmentStarted (Queued→Impl/Pending) →
+        //   AcPrecheckPassed → AssignmentStarted (Queued→TestGen/Pending) →
+        //   AssignmentStarted (TestGen Pending→InProgress) → TestGenerationCompleted →
         //   AssignmentStarted (Impl Pending→InProgress) → ImplementationSubmitted →
-        //   AssignmentStarted (TestVal Pending→InProgress) → TestValidationPassed →
         //   SpecValidationPassed
         committedActions.Should().HaveCount(7);
 
         // Verify ordered sequence: key phase transitions appear in correct order
         var acIdx = committedActions.FindIndex(m => m.Contains("AcPrecheckPassed"));
-        var implStartIdx = committedActions.FindIndex(m => m.Contains("AssignmentStarted") && m.Contains("Implementation/Pending"));
+        var testGenStartIdx = committedActions.FindIndex(m => m.Contains("AssignmentStarted") && m.Contains("TestGeneration/Pending"));
+        var testGenInProgressIdx = committedActions.FindIndex(m => m.Contains("AssignmentStarted") && m.Contains("TestGeneration/InProgress"));
+        var testGenPassIdx = committedActions.FindIndex(m => m.Contains("TestGenerationCompleted"));
         var implInProgressIdx = committedActions.FindIndex(m => m.Contains("AssignmentStarted") && m.Contains("Implementation/InProgress"));
         var implSubmitIdx = committedActions.FindIndex(m => m.Contains("ImplementationSubmitted"));
-        var testStartIdx = committedActions.FindIndex(m => m.Contains("AssignmentStarted") && m.Contains("TestValidation/InProgress"));
-        var testPassIdx = committedActions.FindIndex(m => m.Contains("TestValidationPassed"));
         var specPassIdx = committedActions.FindIndex(m => m.Contains("SpecValidationPassed"));
 
         acIdx.Should().BeGreaterOrEqualTo(0);
-        acIdx.Should().BeLessThan(implStartIdx);
-        implStartIdx.Should().BeLessThan(implInProgressIdx);
+        acIdx.Should().BeLessThan(testGenStartIdx);
+        testGenStartIdx.Should().BeLessThan(testGenInProgressIdx);
+        testGenInProgressIdx.Should().BeLessThan(testGenPassIdx);
+        testGenPassIdx.Should().BeLessThan(implInProgressIdx);
         implInProgressIdx.Should().BeLessThan(implSubmitIdx);
-        implSubmitIdx.Should().BeLessThan(testStartIdx);
-        testStartIdx.Should().BeLessThan(testPassIdx);
-        testPassIdx.Should().BeLessThan(specPassIdx);
+        implSubmitIdx.Should().BeLessThan(specPassIdx);
     }
 
     [Fact]
     public async Task GoldenScenario_ArchitectReview()
     {
         // fixture-architect-review: Draft/Pending, Medium risk
-        // Expected: Draft → Queued → ArchitectureReview → Implementation → TestValidation → Review → Active
+        // Expected: Draft → Queued → ArchitectureReview → TestGeneration → Implementation → Review → Active
         var spec = new Spec
         {
             Id = "fixture-architect-review", ProjectId = "fixture-project",
@@ -137,7 +137,7 @@ public class GoldenScenarioTests : IDisposable
         committedMessages.Should().Contain(m => m.Contains("AcPrecheckPassed"));
         committedMessages.Should().Contain(m => m.Contains("ArchitectReviewPassed"));
         committedMessages.Should().Contain(m => m.Contains("ImplementationSubmitted"));
-        committedMessages.Should().Contain(m => m.Contains("TestValidationPassed"));
+        committedMessages.Should().Contain(m => m.Contains("TestGenerationCompleted"));
         committedMessages.Should().Contain(m => m.Contains("SpecValidationPassed"));
 
         // ArchitectReviewPassed must come before ImplementationSubmitted
@@ -330,7 +330,7 @@ public class GoldenScenarioTests : IDisposable
                 badAgent,
                 new DummyArchitect(),
                 new DummyDeveloper(),
-                new DummyTestValidator(),
+                new DummyTestGenerator(),
                 new DummyPlanner()
             },
             _config, _time);

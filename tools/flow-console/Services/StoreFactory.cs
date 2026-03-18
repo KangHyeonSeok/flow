@@ -32,7 +32,7 @@ public static class StoreFactory
                 new CliPlanner(registry, promptBuilder, outputParser),
                 new CliArchitect(registry, promptBuilder, outputParser),
                 new CliDeveloper(registry, promptBuilder, outputParser),
-                new CliTestValidator(registry, promptBuilder, outputParser),
+                new CliTestGenerator(registry, promptBuilder, outputParser),
                 new CliSpecValidator(registry, promptBuilder, outputParser)
             ];
         }
@@ -43,7 +43,7 @@ public static class StoreFactory
                 new DummyPlanner(),
                 new DummyArchitect(),
                 new DummyDeveloper(),
-                new DummyTestValidator(),
+                new DummyTestGenerator(),
                 new DummySpecValidator()
             ];
         }

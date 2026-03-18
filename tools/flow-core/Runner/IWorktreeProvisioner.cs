@@ -4,7 +4,7 @@ namespace FlowCore.Runner;
 
 /// <summary>
 /// Worktree lifecycle 추상화.
-/// Implementation/TestValidation assignment에 격리된 작업 디렉토리를 제공한다.
+/// TestGeneration/Implementation assignment에 격리된 작업 디렉토리를 제공한다.
 /// flow-cli의 GitWorktreeService를 이 인터페이스의 구현체로 감싸는 방향.
 /// </summary>
 public interface IWorktreeProvisioner
@@ -14,6 +14,9 @@ public interface IWorktreeProvisioner
 
     /// <summary>specId에 해당하는 worktree를 정리한다. best-effort.</summary>
     Task CleanupAsync(string specId, CancellationToken ct = default);
+
+    /// <summary>worktree의 변경사항을 커밋한다. 변경사항이 없으면 false를 반환한다.</summary>
+    Task<bool> CommitChangesAsync(string specId, string message, CancellationToken ct = default);
 }
 
 /// <summary>Worktree provisioning 결과</summary>

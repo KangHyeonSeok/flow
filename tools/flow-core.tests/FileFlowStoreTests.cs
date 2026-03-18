@@ -166,7 +166,7 @@ public class FileFlowStoreTests : IDisposable
         var asg2 = new Assignment
         {
             Id = "asg-002", SpecId = "spec-001",
-            AgentRole = AgentRole.TestValidator, Type = AssignmentType.TestValidation
+            AgentRole = AgentRole.TestGenerator, Type = AssignmentType.TestGeneration
         };
         await store.SaveAsync(asg1);
         await store.SaveAsync(asg2);

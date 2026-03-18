@@ -15,7 +15,7 @@ public class RuleEvaluatorCancelAndConflictTests
     [InlineData(FlowState.Queued)]
     [InlineData(FlowState.ArchitectureReview)]
     [InlineData(FlowState.Implementation)]
-    [InlineData(FlowState.TestValidation)]
+    [InlineData(FlowState.TestGeneration)]
     [InlineData(FlowState.Review)]
     public void CancelRequested_MidState_GoesToFailed(FlowState state)
     {
@@ -98,20 +98,20 @@ public class RuleEvaluatorCancelAndConflictTests
     }
 
     [Fact]
-    public void PhaseTransition_QueuedToImplementation_PendingStatus()
+    public void PhaseTransition_QueuedToTestGeneration_PendingStatus()
     {
         var spec = CreateSpec(FlowState.Queued, ProcessingStatus.Pending, RiskLevel.Low);
         var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.AssignmentStarted));
 
-        result.Mutation!.NewState.Should().Be(FlowState.Implementation);
+        result.Mutation!.NewState.Should().Be(FlowState.TestGeneration);
         result.Mutation.NewProcessingStatus.Should().Be(ProcessingStatus.Pending);
     }
 
     [Fact]
-    public void PhaseTransition_TestValidationToReview_InReviewStatus()
+    public void PhaseTransition_ImplementationToReview_InReviewStatus()
     {
-        var spec = CreateSpec(FlowState.TestValidation, ProcessingStatus.InProgress);
-        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.TestValidationPassed));
+        var spec = CreateSpec(FlowState.Implementation, ProcessingStatus.InProgress);
+        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.ImplementationSubmitted));
 
         result.Mutation!.NewState.Should().Be(FlowState.Review);
         result.Mutation.NewProcessingStatus.Should().Be(ProcessingStatus.InReview);
@@ -181,10 +181,10 @@ public class RuleEvaluatorCancelAndConflictTests
     public void BackwardTransition_RetainsCounters()
     {
         var counters = new RetryCounters { ReworkLoopCount = 2 };
-        var spec = CreateSpec(FlowState.TestValidation, ProcessingStatus.InProgress, retryCounters: counters);
-        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.TestValidationRejected));
+        var spec = CreateSpec(FlowState.TestGeneration, ProcessingStatus.InProgress, retryCounters: counters);
+        var result = RuleEvaluator.Evaluate(CreateInput(spec, FlowEvent.TestGenerationRejected));
 
-        result.Mutation!.NewState.Should().Be(FlowState.Implementation);
+        result.Mutation!.NewState.Should().Be(FlowState.Draft);
         result.Mutation.NewRetryCounters!.ReworkLoopCount.Should().Be(2);
     }
 
@@ -222,7 +222,7 @@ public class RuleEvaluatorForbiddenTransitionTests
 {
     [Theory]
     [InlineData(FlowState.Draft, FlowEvent.ImplementationSubmitted)]
-    [InlineData(FlowState.Draft, FlowEvent.TestValidationPassed)]
+    [InlineData(FlowState.Draft, FlowEvent.TestGenerationCompleted)]
     [InlineData(FlowState.Draft, FlowEvent.SpecValidationPassed)]
     [InlineData(FlowState.Queued, FlowEvent.ImplementationSubmitted)]
     [InlineData(FlowState.Queued, FlowEvent.SpecCompleted)]

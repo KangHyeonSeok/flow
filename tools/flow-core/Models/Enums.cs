@@ -7,7 +7,7 @@ public enum FlowState
     Queued,             // 대기
     ArchitectureReview, // 구현 검토
     Implementation,     // 구현
-    TestValidation,     // 테스트 검증
+    TestGeneration,     // BDD 테스트 생성
     Review,             // 검토
     Active,             // 활성
     Failed,             // 실패
@@ -38,8 +38,8 @@ public enum FlowEvent
     ArchitectReviewRejected,
     AssignmentStarted,
     ImplementationSubmitted,
-    TestValidationPassed,
-    TestValidationRejected,
+    TestGenerationCompleted,
+    TestGenerationRejected,
     SpecValidationPassed,
     SpecValidationReworkRequested,
     SpecValidationUserReviewRequested,
@@ -73,7 +73,7 @@ public enum AgentRole
     Planner,
     Architect,
     Developer,
-    TestValidator,
+    TestGenerator,
     SpecValidator,
     SpecManager
 }
@@ -85,7 +85,7 @@ public enum AssignmentType
     AcPrecheck,
     ArchitectureReview,
     Implementation,
-    TestValidation,
+    TestGeneration,
     SpecValidation,
     StateTransition
 }

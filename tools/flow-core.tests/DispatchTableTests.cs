@@ -83,12 +83,12 @@ public class DispatchTableTests
     }
 
     [Fact]
-    public void TestValidation_Pending_DispatchesTestValidator()
+    public void TestGeneration_Pending_DispatchesTestGenerator()
     {
-        var spec = MakeSpec(state: FlowState.TestValidation);
+        var spec = MakeSpec(state: FlowState.TestGeneration);
         var decision = DispatchTable.Decide(spec, [], []);
         decision.Kind.Should().Be(DispatchKind.Agent);
-        decision.AgentRole.Should().Be(AgentRole.TestValidator);
+        decision.AgentRole.Should().Be(AgentRole.TestGenerator);
     }
 
     [Fact]

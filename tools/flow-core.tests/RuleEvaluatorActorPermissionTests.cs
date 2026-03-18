@@ -18,7 +18,7 @@ public class RuleEvaluatorActorPermissionTests
     [InlineData(FlowEvent.ArchitectReviewPassed, ActorKind.SpecValidator)]
     [InlineData(FlowEvent.ImplementationSubmitted, ActorKind.Architect)]
     [InlineData(FlowEvent.ImplementationSubmitted, ActorKind.Runner)]
-    [InlineData(FlowEvent.TestValidationPassed, ActorKind.Developer)]
+    [InlineData(FlowEvent.TestGenerationCompleted, ActorKind.Developer)]
     [InlineData(FlowEvent.SpecValidationPassed, ActorKind.Architect)]
     [InlineData(FlowEvent.UserReviewSubmitted, ActorKind.SpecValidator)]
     [InlineData(FlowEvent.SpecCompleted, ActorKind.Runner)]

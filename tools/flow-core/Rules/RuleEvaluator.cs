@@ -21,8 +21,8 @@ public static class RuleEvaluator
         { FlowEvent.ArchitectReviewRejected,             [ActorKind.Architect] },
         { FlowEvent.AssignmentStarted,                   [ActorKind.Runner] },
         { FlowEvent.ImplementationSubmitted,             [ActorKind.Developer] },
-        { FlowEvent.TestValidationPassed,                [ActorKind.TestValidator] },
-        { FlowEvent.TestValidationRejected,              [ActorKind.TestValidator] },
+        { FlowEvent.TestGenerationCompleted,              [ActorKind.TestGenerator] },
+        { FlowEvent.TestGenerationRejected,              [ActorKind.TestGenerator] },
         { FlowEvent.SpecValidationPassed,                [ActorKind.SpecValidator] },
         { FlowEvent.SpecValidationReworkRequested,       [ActorKind.SpecValidator] },
         { FlowEvent.SpecValidationUserReviewRequested,   [ActorKind.SpecValidator] },
@@ -77,9 +77,9 @@ public static class RuleEvaluator
             // 구현 단계
             FlowEvent.ImplementationSubmitted => EvalImplementationSubmitted(input),
 
-            // 테스트 검증 단계
-            FlowEvent.TestValidationPassed => EvalTestValidationPassed(input),
-            FlowEvent.TestValidationRejected => EvalTestValidationRejected(input),
+            // BDD 테스트 생성 단계
+            FlowEvent.TestGenerationCompleted => EvalTestGenerationCompleted(input),
+            FlowEvent.TestGenerationRejected => EvalTestGenerationRejected(input),
 
             // 검토 단계
             FlowEvent.SpecValidationPassed => EvalSpecValidationPassed(input),
@@ -245,17 +245,17 @@ public static class RuleEvaluator
             else
             {
                 var counters = ResetAllCounters();
-                return AcceptPhaseTransition(spec, FlowState.Implementation, counters,
+                return AcceptPhaseTransition(spec, FlowState.TestGeneration, counters,
                     [
-                        SideEffect.Log("implementation assignment started"),
-                        SideEffect.CreateAssignment(Models.AgentRole.Developer,
-                            Models.AssignmentType.Implementation, spec.Id)
+                        SideEffect.Log("test generation assignment started"),
+                        SideEffect.CreateAssignment(Models.AgentRole.TestGenerator,
+                            Models.AssignmentType.TestGeneration, spec.Id)
                     ]);
             }
         }
 
-        // 구현/테스트 검증/구현 검토에서의 assignment_started는 processingStatus만 변경
-        if (spec.State is FlowState.Implementation or FlowState.TestValidation
+        // 구현/테스트 생성/구현 검토에서의 assignment_started는 processingStatus만 변경
+        if (spec.State is FlowState.Implementation or FlowState.TestGeneration
             or FlowState.ArchitectureReview)
         {
             if (spec.ProcessingStatus != ProcessingStatus.Pending)
@@ -281,11 +281,11 @@ public static class RuleEvaluator
         if (reject != null) return reject;
 
         var counters = ResetAllCounters();
-        return AcceptPhaseTransition(input.Spec, FlowState.Implementation, counters,
+        return AcceptPhaseTransition(input.Spec, FlowState.TestGeneration, counters,
             [
                 SideEffect.Log("architect review passed"),
-                SideEffect.CreateAssignment(Models.AgentRole.Developer,
-                    Models.AssignmentType.Implementation, input.Spec.Id, "구현 assignment 생성")
+                SideEffect.CreateAssignment(Models.AgentRole.TestGenerator,
+                    Models.AssignmentType.TestGeneration, input.Spec.Id, "BDD 테스트 생성 assignment")
             ]);
     }
 
@@ -326,47 +326,47 @@ public static class RuleEvaluator
         if (reject != null) return reject;
 
         var counters = ResetAllCounters();
-        return AcceptPhaseTransition(input.Spec, FlowState.TestValidation, counters,
+        return AcceptPhaseTransition(input.Spec, FlowState.Review, counters,
             [
                 SideEffect.Log("implementation submitted"),
-                SideEffect.CreateAssignment(Models.AgentRole.TestValidator,
-                    Models.AssignmentType.TestValidation, input.Spec.Id, "Test Validator 입력 생성")
+                SideEffect.CreateAssignment(Models.AgentRole.SpecValidator,
+                    Models.AssignmentType.SpecValidation, input.Spec.Id, "Spec Validator 입력 생성")
             ]);
     }
 
-    // ── 테스트 검증 ──
+    // ── BDD 테스트 생성 ──
 
-    private static RuleOutput EvalTestValidationPassed(RuleInput input)
+    private static RuleOutput EvalTestGenerationCompleted(RuleInput input)
     {
-        if (input.Spec.State != FlowState.TestValidation)
+        if (input.Spec.State != FlowState.TestGeneration)
             return RejectState(input.Spec.State, input.Event);
 
         var reject = RejectIfActiveAssignment(input);
         if (reject != null) return reject;
 
         var counters = ResetAllCounters();
-        return AcceptPhaseTransition(input.Spec, FlowState.Review, counters,
+        return AcceptPhaseTransition(input.Spec, FlowState.Implementation, counters,
             [
-                SideEffect.Log("test validation passed"),
-                SideEffect.CreateAssignment(Models.AgentRole.SpecValidator,
-                    Models.AssignmentType.SpecValidation, input.Spec.Id, "Spec Validator 입력 생성")
+                SideEffect.Log("BDD test generation completed"),
+                SideEffect.CreateAssignment(Models.AgentRole.Developer,
+                    Models.AssignmentType.Implementation, input.Spec.Id, "구현 assignment 생성")
             ]);
     }
 
-    private static RuleOutput EvalTestValidationRejected(RuleInput input)
+    private static RuleOutput EvalTestGenerationRejected(RuleInput input)
     {
-        if (input.Spec.State != FlowState.TestValidation)
+        if (input.Spec.State != FlowState.TestGeneration)
             return RejectState(input.Spec.State, input.Event);
 
         var reject = RejectIfActiveAssignment(input);
         if (reject != null) return reject;
 
-        // backward transition → counters 유지
-        return AcceptPhaseTransition(input.Spec, FlowState.Implementation, null,
+        // AC가 테스트 불가 → Draft로 되돌려 Planner가 AC 재작성
+        return AcceptPhaseTransition(input.Spec, FlowState.Draft, null,
             [
-                SideEffect.Log("test validation rejected, rework required"),
-                SideEffect.CreateAssignment(Models.AgentRole.Developer,
-                    Models.AssignmentType.Implementation, input.Spec.Id, "재작업 요청")
+                SideEffect.Log("test generation rejected, AC rewrite required"),
+                SideEffect.CreateAssignment(Models.AgentRole.Planner,
+                    Models.AssignmentType.Planning, input.Spec.Id, "AC 재작성 요청 — BDD 테스트 생성 불가")
             ]);
     }
 
@@ -530,7 +530,7 @@ public static class RuleEvaluator
         var effects = new List<SideEffect> { SideEffect.Log("cancel requested") };
 
         // 활성 assignment 취소 (대상 ID 포함)
-        if (state is FlowState.ArchitectureReview or FlowState.Implementation or FlowState.TestValidation)
+        if (state is FlowState.ArchitectureReview or FlowState.Implementation or FlowState.TestGeneration)
         {
             effects.AddRange(BuildCancelActiveAssignmentEffects(input));
         }
@@ -547,7 +547,7 @@ public static class RuleEvaluator
     /// <summary>
     /// agent 실행 실패 (backend crash, timeout, provisioning failure 등).
     /// CancelRequested와 달리 사용자 의도가 아닌 시스템 실행 오류를 표현한다.
-    /// 허용 상태: Draft, Queued, ArchitectureReview, Implementation, TestValidation, Review.
+    /// 허용 상태: Draft, Queued, ArchitectureReview, TestGeneration, Implementation, Review.
     /// </summary>
     private static RuleOutput EvalExecutionFailed(RuleInput input)
     {
@@ -652,11 +652,11 @@ public static class RuleEvaluator
     {
         { (FlowState.Draft, FlowState.Queued), ProcessingStatus.Pending },
         { (FlowState.Queued, FlowState.ArchitectureReview), ProcessingStatus.Pending },
-        { (FlowState.Queued, FlowState.Implementation), ProcessingStatus.Pending },
-        { (FlowState.ArchitectureReview, FlowState.Implementation), ProcessingStatus.Pending },
-        { (FlowState.Implementation, FlowState.TestValidation), ProcessingStatus.Pending },
-        { (FlowState.TestValidation, FlowState.Review), ProcessingStatus.InReview },
-        { (FlowState.TestValidation, FlowState.Implementation), ProcessingStatus.Pending },
+        { (FlowState.Queued, FlowState.TestGeneration), ProcessingStatus.Pending },
+        { (FlowState.ArchitectureReview, FlowState.TestGeneration), ProcessingStatus.Pending },
+        { (FlowState.TestGeneration, FlowState.Implementation), ProcessingStatus.Pending },
+        { (FlowState.TestGeneration, FlowState.Draft), ProcessingStatus.Pending },
+        { (FlowState.Implementation, FlowState.Review), ProcessingStatus.InReview },
         { (FlowState.Review, FlowState.Implementation), ProcessingStatus.Pending },
         { (FlowState.Review, FlowState.Active), ProcessingStatus.Done },
         { (FlowState.Review, FlowState.Failed), ProcessingStatus.Error },
@@ -666,13 +666,13 @@ public static class RuleEvaluator
         { (FlowState.Queued, FlowState.Failed), ProcessingStatus.Error },
         { (FlowState.ArchitectureReview, FlowState.Failed), ProcessingStatus.Error },
         { (FlowState.Implementation, FlowState.Failed), ProcessingStatus.Error },
-        { (FlowState.TestValidation, FlowState.Failed), ProcessingStatus.Error },
+        { (FlowState.TestGeneration, FlowState.Failed), ProcessingStatus.Error },
         { (FlowState.Failed, FlowState.Archived), ProcessingStatus.Done },
     };
 
     private static bool IsForwardTransition(FlowState from, FlowState to)
     {
-        if (from == FlowState.TestValidation && to == FlowState.Implementation) return false;
+        if (from == FlowState.TestGeneration && to == FlowState.Draft) return false;
         if (from == FlowState.Review && to == FlowState.Implementation) return false;
         if (from == FlowState.Active && to == FlowState.Review) return false;
         return true;

@@ -84,6 +84,26 @@ public sealed class GitWorktreeProvisioner : IWorktreeProvisioner
         };
     }
 
+    public async Task<bool> CommitChangesAsync(string specId, string message, CancellationToken ct = default)
+    {
+        var worktreePath = Path.Combine(_worktreeBaseDir, specId);
+        if (!Directory.Exists(worktreePath))
+            return false;
+
+        // 변경사항 확인
+        var statusResult = await RunGitAsync("status --porcelain", worktreePath, ct);
+        if (!statusResult.Success || string.IsNullOrWhiteSpace(statusResult.Output))
+            return false;
+
+        // 모든 변경사항 스테이징
+        var addResult = await RunGitAsync("add -A", worktreePath, ct);
+        if (!addResult.Success) return false;
+
+        // 커밋
+        var commitResult = await RunGitAsync($"commit -m \"{message}\"", worktreePath, ct);
+        return commitResult.Success;
+    }
+
     public async Task CleanupAsync(string specId, CancellationToken ct = default)
     {
         var branchName = $"runner/{specId}";

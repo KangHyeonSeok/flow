@@ -161,7 +161,7 @@ public class EvidenceCasConflictTests : IDisposable
                 cliValidator,
                 new DummyArchitect(),
                 new DummyDeveloper(),
-                new DummyTestValidator(),
+                new DummyTestGenerator(),
                 new DummyPlanner()
             },
             _config, _time);

@@ -2,10 +2,9 @@ using FlowCore.Models;
 
 namespace FlowCore.Agents.Dummy;
 
-/// <summary>TestValidator 더미 agent: 항상 TestValidationPassed</summary>
-public sealed class DummyTestValidator : IAgentAdapter
+public sealed class DummyTestGenerator : IAgentAdapter
 {
-    public AgentRole Role => AgentRole.TestValidator;
+    public AgentRole Role => AgentRole.TestGenerator;
 
     public Task<AgentOutput> ExecuteAsync(AgentInput input, CancellationToken ct = default)
     {
@@ -13,8 +12,8 @@ public sealed class DummyTestValidator : IAgentAdapter
         {
             Result = AgentResult.Success,
             BaseVersion = input.CurrentVersion,
-            ProposedEvent = FlowEvent.TestValidationPassed,
-            Summary = "DummyTestValidator → TestValidationPassed"
+            ProposedEvent = FlowEvent.TestGenerationCompleted,
+            Summary = "DummyTestGenerator → TestGenerationCompleted"
         });
     }
 }

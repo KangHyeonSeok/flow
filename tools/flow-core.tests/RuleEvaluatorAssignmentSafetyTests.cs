@@ -64,14 +64,14 @@ public class RuleEvaluatorAssignmentSafetyTests
     }
 
     [Fact]
-    public void TestValidationPassed_WithRunningAssignment_Rejected()
+    public void TestGenerationCompleted_WithRunningAssignment_Rejected()
     {
-        var spec = CreateSpec(FlowState.TestValidation, ProcessingStatus.InProgress);
+        var spec = CreateSpec(FlowState.TestGeneration, ProcessingStatus.InProgress);
         var assignment = CreateAssignment(status: AssignmentStatus.Running,
-            role: AgentRole.TestValidator, type: AssignmentType.TestValidation);
+            role: AgentRole.TestGenerator, type: AssignmentType.TestGeneration);
 
         var result = RuleEvaluator.Evaluate(
-            CreateInput(spec, FlowEvent.TestValidationPassed, assignments: [assignment]));
+            CreateInput(spec, FlowEvent.TestGenerationCompleted, assignments: [assignment]));
 
         result.Accepted.Should().BeFalse();
         result.RejectionReason.Should().Be(RejectionReason.ActiveAssignmentExists);

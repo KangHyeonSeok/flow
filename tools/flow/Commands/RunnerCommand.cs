@@ -60,7 +60,8 @@ internal static class RunnerCommand
         if (HasBackendConfig(flowHome))
             worktree = new GitWorktreeProvisioner(projectRoot, flowHome);
 
-        var runner = new FlowRunner(store, agents, config, worktreeProvisioner: worktree);
+        var observer = once ? null : new ConsoleRunnerObserver();
+        var runner = new FlowRunner(store, agents, config, worktreeProvisioner: worktree, observer: observer);
 
         if (once)
         {
@@ -177,7 +178,7 @@ internal static class RunnerCommand
                 new CliPlanner(registry, promptBuilder, outputParser),
                 new CliArchitect(registry, promptBuilder, outputParser),
                 new CliDeveloper(registry, promptBuilder, outputParser),
-                new CliTestValidator(registry, promptBuilder, outputParser),
+                new CliTestGenerator(registry, promptBuilder, outputParser),
                 new CliSpecValidator(registry, promptBuilder, outputParser)
             ];
         }
@@ -187,7 +188,7 @@ internal static class RunnerCommand
             new DummyPlanner(),
             new DummyArchitect(),
             new DummyDeveloper(),
-            new DummyTestValidator(),
+            new DummyTestGenerator(),
             new DummySpecValidator()
         ];
     }

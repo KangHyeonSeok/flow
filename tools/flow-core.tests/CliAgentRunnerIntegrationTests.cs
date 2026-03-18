@@ -98,7 +98,7 @@ public class CliAgentRunnerIntegrationTests : IDisposable
                 CreateCliValidator(specValidatorBackend),
                 new DummyArchitect(),
                 new DummyDeveloper(),
-                new DummyTestValidator(),
+                new DummyTestGenerator(),
                 new DummyPlanner()
             },
             _config, _time);
@@ -295,7 +295,7 @@ public class CliAgentRunnerIntegrationTests : IDisposable
     public async Task MultiCycle_DraftToActive_CliSpecValidatorEndToEnd()
     {
         // Draft → (AC precheck) → Queued → ArchitectureReview → Implementation →
-        // TestValidation → Review → (spec validation) → Active
+        // TestGeneration → Implementation → Review → (spec validation) → Active
         // CliSpecValidator가 Draft와 Review 두 단계 모두에서 동작하는지 검증
         var spec = new Spec
         {
@@ -324,7 +324,7 @@ public class CliAgentRunnerIntegrationTests : IDisposable
         afterPrecheck!.State.Should().Be(FlowState.Queued);
 
         // 중간 단계: Queued → ArchReview → Impl → TestVal → Review
-        // (DummyArchitect, DummyDeveloper, DummyTestValidator가 처리)
+        // (DummyArchitect, DummyDeveloper, DummyTestGenerator가 처리)
         for (int i = 0; i < 8; i++)
         {
             await runner1.RunOnceAsync();

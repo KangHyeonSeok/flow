@@ -114,7 +114,7 @@ public sealed class SpecListScreen
         (FlowState.Review, ProcessingStatus.UserReview) => 0,
         (FlowState.Failed, _) => 1,
         (FlowState.Review, _) => 2,
-        (FlowState.TestValidation, _) => 3,
+        (FlowState.TestGeneration, _) => 3,
         (FlowState.Implementation, _) => 4,
         (FlowState.ArchitectureReview, _) => 5,
         (FlowState.Queued, _) => 6,
@@ -128,7 +128,7 @@ public sealed class SpecListScreen
     private static string ColorizeState(FlowState state) => state switch
     {
         FlowState.Completed or FlowState.Active => $"[green]{state}[/]",
-        FlowState.Review or FlowState.TestValidation or FlowState.ArchitectureReview => $"[yellow]{state}[/]",
+        FlowState.Review or FlowState.TestGeneration or FlowState.ArchitectureReview => $"[yellow]{state}[/]",
         FlowState.Failed => $"[red]{state}[/]",
         FlowState.Implementation => $"[blue]{state}[/]",
         FlowState.Draft or FlowState.Archived => $"[dim]{state}[/]",

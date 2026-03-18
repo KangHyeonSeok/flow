@@ -6,7 +6,7 @@ public enum ActorKind
     Planner,
     Architect,
     Developer,
-    TestValidator,
+    TestGenerator,
     SpecValidator,
     SpecManager,
     Runner,
