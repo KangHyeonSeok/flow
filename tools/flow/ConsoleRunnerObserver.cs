@@ -54,5 +54,6 @@ internal sealed class ConsoleRunnerObserver : IRunnerObserver
         Console.ForegroundColor = color;
         Console.WriteLine(message);
         Console.ForegroundColor = prev;
+        Console.Out.Flush();
     }
 }

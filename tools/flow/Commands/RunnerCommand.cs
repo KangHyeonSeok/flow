@@ -60,7 +60,7 @@ internal static class RunnerCommand
         if (HasBackendConfig(flowHome))
             worktree = new GitWorktreeProvisioner(projectRoot, flowHome);
 
-        var observer = once ? null : new ConsoleRunnerObserver();
+        var observer = new ConsoleRunnerObserver();
         var runner = new FlowRunner(store, agents, config, worktreeProvisioner: worktree, observer: observer);
 
         if (once)
