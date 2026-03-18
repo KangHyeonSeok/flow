@@ -12,7 +12,7 @@
     "planner":       { "backend": "claude-cli" },
     "architect":     { "backend": "claude-cli" },
     "developer":     { "backend": "claude-cli" },
-    "testValidator": { "backend": "claude-cli" },
+    "testGenerator": { "backend": "claude-cli" },
     "specValidator": { "backend": "claude-cli" }
   }
 }
