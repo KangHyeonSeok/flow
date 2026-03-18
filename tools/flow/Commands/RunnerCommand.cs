@@ -48,6 +48,9 @@ internal static class RunnerCommand
         }
 
         var once = opts.Flag("once");
+        var drain = opts.Flag("drain");
+        var targetSpec = opts.Get("spec");
+        var logFile = opts.Get("log-file");
         var flowHome = Environment.GetEnvironmentVariable("FLOW_HOME")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".flow");
 
@@ -60,14 +63,34 @@ internal static class RunnerCommand
         if (HasBackendConfig(flowHome))
             worktree = new GitWorktreeProvisioner(projectRoot, flowHome);
 
-        var observer = new ConsoleRunnerObserver();
+        IRunnerObserver observer = new ConsoleRunnerObserver();
+        if (logFile != null)
+            observer = new CompositeRunnerObserver(observer, new FileRunnerObserver(logFile));
+
         var runner = new FlowRunner(store, agents, config, worktreeProvisioner: worktree, observer: observer);
+
+        // --once --drain --spec <id>: drain until terminal
+        if (drain)
+        {
+            if (targetSpec == null)
+            {
+                Console.WriteLine("--drain requires --spec <specId>");
+                return 1;
+            }
+            Console.WriteLine($"Draining spec '{targetSpec}' in project '{projectId}'...");
+            var cycles = await runner.RunDrainAsync(targetSpec);
+            var finalSpec = await store.LoadAsync(targetSpec);
+            Console.WriteLine($"Drain complete after {cycles} cycle(s). Final state: {finalSpec?.State}/{finalSpec?.ProcessingStatus}");
+            if (observer is IDisposable d1) d1.Dispose();
+            return 0;
+        }
 
         if (once)
         {
             Console.WriteLine($"Running single cycle for project '{projectId}'...");
             var count = await runner.RunOnceAsync();
             Console.WriteLine($"Processed {count} spec(s).");
+            if (observer is IDisposable d2) d2.Dispose();
             return 0;
         }
 
@@ -95,6 +118,7 @@ internal static class RunnerCommand
         finally
         {
             CleanupPidFile();
+            if (observer is IDisposable d3) d3.Dispose();
             Console.WriteLine("Runner stopped.");
         }
 

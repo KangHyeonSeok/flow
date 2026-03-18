@@ -108,9 +108,26 @@ public sealed class FlowRunner
     /// <summary>daemon 모드: RunOnce를 주기적으로 반복한다.</summary>
     public async Task RunDaemonAsync(CancellationToken ct)
     {
+        int totalCycles = 0, totalProcessed = 0, totalErrors = 0;
+
         while (!ct.IsCancellationRequested)
         {
-            await RunOnceAsync(ct);
+            try
+            {
+                var count = await RunOnceAsync(ct);
+                totalCycles++;
+                totalProcessed += count;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                totalErrors++;
+                _observer.OnDaemonError(ex);
+            }
+
             try
             {
                 await Task.Delay(TimeSpan.FromSeconds(_config.PollIntervalSeconds), _time, ct);
@@ -120,6 +137,72 @@ public sealed class FlowRunner
                 break;
             }
         }
+
+        _observer.OnDaemonStopped(totalCycles, totalProcessed, totalErrors);
+    }
+
+    /// <summary>
+    /// 대상 spec이 터미널 상태(Active/Failed/Completed/Archived)에 도달하거나
+    /// 진행이 없을 때까지 cycle을 반복한다.
+    /// </summary>
+    public async Task<int> RunDrainAsync(string specId, CancellationToken ct = default)
+    {
+        int cycles = 0;
+        const int drainDelaySeconds = 2;
+
+        while (!ct.IsCancellationRequested)
+        {
+            var spec = await _store.LoadAsync(specId, ct);
+            if (spec == null)
+            {
+                _observer.OnError(specId, "spec not found");
+                break;
+            }
+
+            if (spec.State is FlowState.Active or FlowState.Failed
+                or FlowState.Completed or FlowState.Archived)
+                break;
+
+            var prevState = spec.State;
+            var prevStatus = spec.ProcessingStatus;
+
+            int processed;
+            try
+            {
+                processed = await RunOnceAsync(ct);
+            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex)
+            {
+                _observer.OnDaemonError(ex);
+                break;
+            }
+
+            cycles++;
+
+            // 재로드 후 진행 여부 확인
+            spec = await _store.LoadAsync(specId, ct);
+            if (spec == null) break;
+
+            if (spec.State is FlowState.Active or FlowState.Failed
+                or FlowState.Completed or FlowState.Archived)
+                break;
+
+            // 상태 변화가 없고 처리된 것도 없으면 stall
+            if (spec.State == prevState && spec.ProcessingStatus == prevStatus && processed == 0)
+            {
+                _observer.OnError(specId, $"no progress — stalled at {spec.State}/{spec.ProcessingStatus}");
+                break;
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(drainDelaySeconds), _time, ct);
+            }
+            catch (OperationCanceledException) { break; }
+        }
+
+        return cycles;
     }
 
     /// <summary>사용자 ReviewRequest 응답을 제출하고 후속 처리를 수행한다.</summary>

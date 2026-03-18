@@ -13,6 +13,8 @@ public interface IRunnerObserver
     void OnAgentCompleted(string specId, string agentRole, string result, string? summary);
     void OnStateTransition(string specId, string fromState, string toState);
     void OnError(string specId, string message);
+    void OnDaemonError(Exception ex) { }
+    void OnDaemonStopped(int totalCycles, int totalProcessed, int totalErrors) { }
 }
 
 /// <summary>아무것도 출력하지 않는 기본 구현.</summary>

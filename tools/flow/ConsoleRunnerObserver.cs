@@ -45,6 +45,17 @@ internal sealed class ConsoleRunnerObserver : IRunnerObserver
         Write($"[error] {specId}: {message}", ConsoleColor.Red);
     }
 
+    public void OnDaemonError(Exception ex)
+    {
+        Write($"[daemon-error] {ex.GetType().Name}: {ex.Message}", ConsoleColor.Red);
+    }
+
+    public void OnDaemonStopped(int totalCycles, int totalProcessed, int totalErrors)
+    {
+        Write($"[daemon] stopped — cycles: {totalCycles}, processed: {totalProcessed}, errors: {totalErrors}",
+            totalErrors > 0 ? ConsoleColor.Yellow : ConsoleColor.DarkGray);
+    }
+
     private static void Write(string message, ConsoleColor color)
     {
         var timestamp = DateTime.Now.ToString("HH:mm:ss");

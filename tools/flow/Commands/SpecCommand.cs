@@ -65,6 +65,17 @@ internal static class SpecCommand
             Version = 1
         };
 
+        var acTexts = opts.GetAll("ac");
+        if (acTexts.Count > 0)
+        {
+            spec.AcceptanceCriteria = acTexts.Select((text, i) => new AcceptanceCriterion
+            {
+                Id = $"AC-{i + 1:D3}",
+                Text = text,
+                Testable = true
+            }).ToList();
+        }
+
         var result = await store.SaveAsync(spec, 0);
         if (!result.IsSuccess)
         {
