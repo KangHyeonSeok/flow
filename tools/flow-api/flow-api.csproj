@@ -12,4 +12,9 @@
     <ProjectReference Include="..\flow-core\flow-core.csproj" />
   </ItemGroup>
 
+  <!-- flow-web 빌드 출력을 wwwroot로 포함 -->
+  <ItemGroup>
+    <Content Include="..\flow-web\dist\**" CopyToOutputDirectory="PreserveNewest" LinkBase="wwwroot" Condition="Exists('..\flow-web\dist')" />
+  </ItemGroup>
+
 </Project>

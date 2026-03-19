@@ -50,3 +50,11 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 /tools/flow-console/obj
 /tools/flow/obj
 /tools/flow/bin
+/tools/flow-api/bin
+/tools/flow-api/obj
+/tools/flow-api/wwwroot
+/tools/flow-api.tests/bin
+/tools/flow-api.tests/obj
+/tools/flow-web/node_modules
+/tools/flow-web/dist
+/.claude
