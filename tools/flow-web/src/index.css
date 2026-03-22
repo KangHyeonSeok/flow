@@ -3,16 +3,31 @@
 :root {
   --color-primary: #3b82f6;
   --color-primary-hover: #2563eb;
-  --color-bg: #0f172a;
-  --color-bg-card: #1e293b;
-  --color-bg-card-hover: #334155;
-  --color-border: #334155;
-  --color-text: #f1f5f9;
-  --color-text-muted: #94a3b8;
+  --color-bg: #0A111F;
+  --color-bg-elevated: #0f172a;
+  --color-bg-card: #141d2f;
+  --color-bg-card-hover: #1c2840;
+  --color-bg-input: #0d1525;
+  --color-border: #1e2d45;
+  --color-border-subtle: #162035;
+  --color-text: #e2e8f0;
+  --color-text-muted: #64748b;
+  --color-text-bright: #f8fafc;
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
   --color-info: #06b6d4;
+
+  /* Cell accent colors */
+  --cell-overview: #3b82f6;
+  --cell-dependencies: #a855f7;
+  --cell-ac: #22c55e;
+  --cell-bdd: #f97316;
+  --cell-scenarios: #14b8a6;
+  --cell-status: #ef4444;
+  --cell-activity: #64748b;
+  --cell-review: #eab308;
+  --cell-evidence: #06b6d4;
 }
 
 body {
@@ -28,4 +43,20 @@ a {
 }
 a:hover {
   color: var(--color-primary-hover);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
 }

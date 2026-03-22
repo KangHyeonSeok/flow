@@ -1,28 +1,38 @@
 import { Outlet, Link, useParams } from 'react-router-dom'
-import { Activity } from 'lucide-react'
+import { Activity, ChevronRight } from 'lucide-react'
+import { Sidebar } from '@/components/Sidebar'
 
 export function Layout() {
-  const { projectId } = useParams()
+  const { projectId, specId } = useParams()
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="border-b border-[var(--color-border)] px-6 py-3 flex items-center gap-4">
-        <Link to="/" className="flex items-center gap-2 text-lg font-semibold text-[var(--color-text)]">
-          <Activity className="w-5 h-5 text-[var(--color-primary)]" />
+    <div className="h-screen flex flex-col">
+      <header className="border-b border-[var(--color-border)] px-4 py-2.5 flex items-center gap-2 bg-[var(--color-bg)] flex-shrink-0">
+        <Link to="/" className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-bright)]">
+          <Activity className="w-4 h-4 text-[var(--color-primary)]" />
           Flow
         </Link>
         {projectId && (
           <>
-            <span className="text-[var(--color-text-muted)]">/</span>
-            <Link to={`/projects/${projectId}`} className="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
+            <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
+            <Link to={`/projects/${projectId}`} className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
               {projectId}
             </Link>
           </>
         )}
+        {specId && (
+          <>
+            <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
+            <span className="text-xs font-mono text-[var(--color-text-muted)]">{specId}</span>
+          </>
+        )}
       </header>
-      <main className="flex-1 p-6">
-        <Outlet />
-      </main>
+      <div className="flex flex-1 overflow-hidden">
+        {projectId && <Sidebar />}
+        <main data-spec-scroll-root className="flex-1 overflow-y-auto p-6 scroll-smooth">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

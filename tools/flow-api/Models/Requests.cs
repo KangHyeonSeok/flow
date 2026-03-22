@@ -25,6 +25,10 @@ public sealed record SubmitEventRequest(
     string Event,
     int Version);
 
+public sealed record SubmitValidationRequest(
+    int Version,
+    string? Outcome = null);
+
 public sealed record SubmitReviewResponseRequest(
     string Type,
     string? SelectedOptionId = null,

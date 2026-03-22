@@ -5,7 +5,13 @@ import { useProjects } from '@/hooks/useSpecs'
 export function ProjectsPage() {
   const { data: projects, isLoading, error } = useProjects()
 
-  if (isLoading) return <p className="text-[var(--color-text-muted)]">Loading projects...</p>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
   if (error) return <p className="text-[var(--color-danger)]">Failed to load projects</p>
 
   if (!projects?.length) {
@@ -22,7 +28,7 @@ export function ProjectsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Projects</h1>
+      <h1 className="text-xl font-bold mb-6 text-[var(--color-text-bright)]">Projects</h1>
       <div className="grid gap-3 max-w-xl">
         {projects.map((p) => (
           <Link

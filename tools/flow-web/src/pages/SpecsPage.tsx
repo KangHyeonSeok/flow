@@ -38,7 +38,7 @@ export function SpecsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Specs</h1>
+        <h1 className="text-xl font-bold text-[var(--color-text-bright)]">Specs</h1>
         <button
           onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-medium transition-colors"
@@ -51,11 +51,11 @@ export function SpecsPage() {
         <form onSubmit={handleCreate} className="mb-6 p-4 rounded-lg bg-[var(--color-bg-card)] border border-[var(--color-border)]">
           <div className="grid gap-3">
             <input name="title" placeholder="Title" required
-              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-sm" />
+              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm placeholder:text-[var(--color-text-muted)]" />
             <input name="problem" placeholder="Problem (optional)"
-              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-sm" />
+              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm placeholder:text-[var(--color-text-muted)]" />
             <input name="goal" placeholder="Goal (optional)"
-              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text)] text-sm" />
+              className="w-full px-3 py-2 rounded-md bg-[var(--color-bg-input)] border border-[var(--color-border)] text-[var(--color-text)] text-sm placeholder:text-[var(--color-text-muted)]" />
             <div className="flex gap-2">
               <button type="submit" disabled={createMutation.isPending}
                 className="px-4 py-1.5 rounded-md bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-medium disabled:opacity-50">
@@ -87,7 +87,9 @@ export function SpecsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-[var(--color-text-muted)]">Loading...</p>
+        <div className="flex items-center justify-center h-32">
+          <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+        </div>
       ) : !specs?.length ? (
         <div className="text-center py-12">
           <FileText className="w-10 h-10 mx-auto mb-3 text-[var(--color-text-muted)]" />
@@ -99,10 +101,10 @@ export function SpecsPage() {
             <Link
               key={spec.id}
               to={`/projects/${projectId}/specs/${spec.id}`}
-              className="flex items-center gap-4 p-4 rounded-lg bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-hover)] border border-[var(--color-border)] transition-colors"
+              className="flex items-center gap-4 p-3.5 rounded-lg bg-[var(--color-bg-card)] hover:bg-[var(--color-bg-card-hover)] border border-[var(--color-border)] transition-colors"
             >
-              <span className="text-sm font-mono text-[var(--color-text-muted)] w-14">{spec.id}</span>
-              <span className="flex-1 font-medium truncate">{spec.title}</span>
+              <span className="text-xs font-mono text-[var(--color-text-muted)] w-14">{spec.id}</span>
+              <span className="flex-1 font-medium text-sm truncate">{spec.title}</span>
               <StateBadge state={spec.state as FlowState} />
               <StatusBadge status={spec.processingStatus} />
             </Link>

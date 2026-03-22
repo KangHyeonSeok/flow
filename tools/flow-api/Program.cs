@@ -39,6 +39,7 @@ app.MapSpecEndpoints();
 app.MapAssignmentEndpoints();
 app.MapReviewEndpoints();
 app.MapEventEndpoints();
+app.MapValidationEndpoints();
 app.MapActivityEndpoints();
 app.MapEvidenceEndpoints();
 

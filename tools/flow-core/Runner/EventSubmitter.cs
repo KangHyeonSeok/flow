@@ -53,6 +53,12 @@ public sealed class EventSubmitter
             return EventSubmitResult.Rejected(RejectionReason.UnauthorizedActor,
                 $"event {ev} is not allowed for user submission");
 
+        return await SubmitAsActorAsync(specId, ev, expectedVersion, ActorKind.User, ct);
+    }
+
+    public async Task<EventSubmitResult> SubmitAsActorAsync(
+        string specId, FlowEvent ev, int expectedVersion, ActorKind actor, CancellationToken ct = default)
+    {
         var spec = await _store.LoadAsync(specId, ct);
         if (spec == null)
             return EventSubmitResult.NotFound(specId);
@@ -67,7 +73,7 @@ public sealed class EventSubmitter
         {
             Spec = spec.ToSnapshot(),
             Event = ev,
-            Actor = ActorKind.User,
+            Actor = actor,
             Assignments = assignments,
             ReviewRequests = reviewRequests,
             BaseVersion = spec.Version
@@ -112,7 +118,7 @@ public sealed class EventSubmitter
             EventId = FlowId.New("evt"),
             Timestamp = _time.GetUtcNow(),
             SpecId = spec.Id,
-            Actor = "user",
+            Actor = actor.ToString().ToLowerInvariant(),
             Action = ActivityAction.StateTransitionCommitted,
             SourceType = "api",
             BaseVersion = spec.Version,

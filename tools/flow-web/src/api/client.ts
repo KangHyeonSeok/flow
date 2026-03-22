@@ -102,3 +102,13 @@ export const submitEvent = (
     method: 'POST',
     body: JSON.stringify({ event, version }),
   })
+
+export const validateSpec = (
+  projectId: string,
+  specId: string,
+  data: { version: number; outcome?: string },
+) =>
+  request<{ status: string; eventName: string; currentVersion?: number }>(`/projects/${projectId}/specs/${specId}/validate`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })

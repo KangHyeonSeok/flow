@@ -67,6 +67,38 @@ export function useReviewRequests(projectId: string, specId: string) {
   })
 }
 
+export function useSubmitReviewResponse(projectId: string, specId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { rrId: string; type: string; selectedOptionId?: string; comment?: string }) =>
+      api.respondToReview(projectId, specId, data.rrId, {
+        type: data.type,
+        selectedOptionId: data.selectedOptionId,
+        comment: data.comment,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reviewRequests', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['spec', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['activity', projectId, specId] })
+    },
+  })
+}
+
+export function useValidateSpec(projectId: string, specId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { version: number; outcome?: string }) => api.validateSpec(projectId, specId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['specs', projectId] })
+      qc.invalidateQueries({ queryKey: ['spec', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['assignments', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['reviewRequests', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['activity', projectId, specId] })
+      qc.invalidateQueries({ queryKey: ['evidence', projectId, specId] })
+    },
+  })
+}
+
 export function useActivity(projectId: string, specId: string) {
   return useQuery({
     queryKey: ['activity', projectId, specId],
