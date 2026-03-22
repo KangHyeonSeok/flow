@@ -26,7 +26,7 @@ const stateIndicator: Record<string, string> = {
 export function Sidebar() {
   const { projectId, specId } = useParams<{ projectId: string; specId: string }>()
   const [search, setSearch] = useState('')
-  const [activeSectionId, setActiveSectionId] = useState<string>('section-overview')
+  const [activeSectionId, setActiveSectionId] = useState<string>('section-document-summary')
   const { data: specs } = useSpecs(projectId!, undefined)
   const { data: currentSpecDetail } = useSpec(projectId!, specId!)
   const { data: currentReviewRequests } = useReviewRequests(projectId!, specId!)
@@ -47,7 +47,25 @@ export function Sidebar() {
   const failed = filtered?.filter(s => s.state === 'failed' || s.state === 'archived') ?? []
   const openReviewCount = currentReviewRequests?.filter((request) => request.status === 'open').length ?? 0
   const documentSections: DocumentSection[] = currentSpecDetail ? [
-    { id: 'section-overview', label: 'Overview' },
+    { id: 'section-document-summary', label: 'Document Summary' },
+    ...(currentSpecDetail.problem
+      ? [{ id: 'section-problem', label: 'Problem' }]
+      : []),
+    ...(currentSpecDetail.goal
+      ? [{ id: 'section-goal', label: 'Goal' }]
+      : []),
+    ...(currentSpecDetail.context
+      ? [{ id: 'section-context', label: 'Context' }]
+      : []),
+    ...(currentSpecDetail.nonGoals
+      ? [{ id: 'section-non-goals', label: 'Non-Goals' }]
+      : []),
+    ...(currentSpecDetail.implementationNotes
+      ? [{ id: 'section-implementation-notes', label: 'Implementation Notes' }]
+      : []),
+    ...(currentSpecDetail.testPlan
+      ? [{ id: 'section-test-plan', label: 'Test Plan' }]
+      : []),
     ...(currentSpecDetail.dependencies && (currentSpecDetail.dependencies.dependsOn.length > 0 || currentSpecDetail.dependencies.blocks.length > 0)
       ? [{ id: 'section-dependencies', label: 'Dependencies', badge: `${currentSpecDetail.dependencies.dependsOn.length + currentSpecDetail.dependencies.blocks.length}` }]
       : []),
@@ -74,7 +92,7 @@ export function Sidebar() {
 
   useEffect(() => {
     if (!specId || documentSections.length === 0) {
-      setActiveSectionId('section-overview')
+      setActiveSectionId('section-document-summary')
       return
     }
 

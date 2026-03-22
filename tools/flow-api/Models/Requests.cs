@@ -6,7 +6,11 @@ public sealed record CreateSpecRequest(
     string? Problem = null,
     string? Goal = null,
     List<AcRequest>? AcceptanceCriteria = null,
-    string? RiskLevel = null);
+    string? RiskLevel = null,
+    string? Context = null,
+    string? NonGoals = null,
+    string? ImplementationNotes = null,
+    string? TestPlan = null);
 
 public sealed record AcRequest(
     string Text,
@@ -19,7 +23,11 @@ public sealed record UpdateSpecRequest(
     string? Problem = null,
     string? Goal = null,
     List<AcRequest>? AcceptanceCriteria = null,
-    string? RiskLevel = null);
+    string? RiskLevel = null,
+    string? Context = null,
+    string? NonGoals = null,
+    string? ImplementationNotes = null,
+    string? TestPlan = null);
 
 public sealed record SubmitEventRequest(
     string Event,

@@ -85,6 +85,30 @@ public sealed class SpecEndpointsTests : IAsyncLifetime
         spec.RiskLevel.Should().Be(RiskLevel.High);
     }
 
+    [Fact]
+    public async Task CreateSpec_PersistsDocumentFields()
+    {
+        var req = new CreateSpecRequest(
+            "Documented task",
+            Problem: "Current timeout is shared across assignment types.",
+            Goal: "Introduce a test-generation-specific timeout.",
+            Context: "Test generation often runs longer than AC precheck.",
+            NonGoals: "Do not change implementation timeout in this task.",
+            ImplementationNotes: "Wire the field through RunnerConfig and assignment creation.",
+            TestPlan: "Add config default and override coverage.");
+
+        var response = await Client.PostAsJsonAsync(
+            $"/api/projects/{ProjectId}/specs", req, Json);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var spec = await response.Content.ReadFromJsonAsync<Spec>(Json);
+
+        spec!.Context.Should().Be(req.Context);
+        spec.NonGoals.Should().Be(req.NonGoals);
+        spec.ImplementationNotes.Should().Be(req.ImplementationNotes);
+        spec.TestPlan.Should().Be(req.TestPlan);
+    }
+
     // --- Get ---
 
     [Fact]
@@ -162,6 +186,28 @@ public sealed class SpecEndpointsTests : IAsyncLifetime
         var updated = await response.Content.ReadFromJsonAsync<Spec>(Json);
         updated!.Title.Should().Be("Updated");
         updated.Version.Should().Be(spec.Version); // version unchanged (SpecEditor does not bump)
+    }
+
+    [Fact]
+    public async Task UpdateSpec_ChangesExtendedDocumentFields()
+    {
+        var spec = await CreateSpecAsync("Original");
+        var updateReq = new UpdateSpecRequest(
+            Version: spec.Version,
+            Context: "Shared timeout causes unnecessary coupling.",
+            NonGoals: "No retry policy redesign.",
+            ImplementationNotes: "Use a dedicated property for test generation only.",
+            TestPlan: "Verify defaults and per-assignment application.");
+
+        var response = await Client.PatchAsJsonAsync(
+            $"/api/projects/{ProjectId}/specs/{spec.Id}", updateReq, Json);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await response.Content.ReadFromJsonAsync<Spec>(Json);
+        updated!.Context.Should().Be(updateReq.Context);
+        updated.NonGoals.Should().Be(updateReq.NonGoals);
+        updated.ImplementationNotes.Should().Be(updateReq.ImplementationNotes);
+        updated.TestPlan.Should().Be(updateReq.TestPlan);
     }
 
     [Fact]

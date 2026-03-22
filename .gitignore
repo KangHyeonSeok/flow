@@ -57,4 +57,7 @@ tools/e2e-test/adapters/flutter/.dart_tool/extension_discovery/vs_code.json
 /tools/flow-api.tests/obj
 /tools/flow-web/node_modules
 /tools/flow-web/dist
+/tools/flow-api/.tmp
+/tools/flow-api.tests/.tmp
+/tools/flow-core/.tmp
 /.claude

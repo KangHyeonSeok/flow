@@ -163,6 +163,13 @@ Slack 같은 외부 채널은 별도 상태 전이 규칙을 갖지 않는다. r
 - `tools/embed`: 임베딩 보조 도구
 - `tools/flow-console`: TUI 클라이언트
 
+## 주요 문서
+
+- `docs/flow-project-document.md`: Flow 전체의 상위 프로젝트 문서와 정보 구조
+- `docs/flow-epic-plan.md`: Flow를 epic 단위로 운영하기 위한 계획과 단계별 도입 방향
+- `docs/flow-schema.md`: spec, assignment, review request, test의 최소 저장 계약
+- `docs/flow-webservice-integrated-workspace.md`: web 통합 workspace 정보 구조
+
 ## 운영 원칙
 
 - 상태 전이는 rule evaluator와 spec manager를 통해서만 일어난다.

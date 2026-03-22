@@ -16,6 +16,10 @@ public sealed class Spec
     public SpecType Type { get; set; } = SpecType.Task;
     public string? Problem { get; set; }
     public string? Goal { get; set; }
+    public string? Context { get; set; }
+    public string? NonGoals { get; set; }
+    public string? ImplementationNotes { get; set; }
+    public string? TestPlan { get; set; }
     public IReadOnlyList<AcceptanceCriterion>? AcceptanceCriteria { get; set; }
     public required FlowState State { get; set; }
     public required ProcessingStatus ProcessingStatus { get; set; }

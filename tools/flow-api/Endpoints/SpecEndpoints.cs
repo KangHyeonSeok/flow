@@ -69,6 +69,10 @@ public static class SpecEndpoints
                 Type = specType,
                 Problem = req.Problem,
                 Goal = req.Goal,
+                Context = req.Context,
+                NonGoals = req.NonGoals,
+                ImplementationNotes = req.ImplementationNotes,
+                TestPlan = req.TestPlan,
                 RiskLevel = riskLevel,
                 State = FlowState.Draft,
                 ProcessingStatus = ProcessingStatus.Pending,
@@ -128,6 +132,10 @@ public static class SpecEndpoints
                 Title = req.Title,
                 Problem = req.Problem,
                 Goal = req.Goal,
+                Context = req.Context,
+                NonGoals = req.NonGoals,
+                ImplementationNotes = req.ImplementationNotes,
+                TestPlan = req.TestPlan,
                 AcceptanceCriteria = acList,
                 RiskLevel = riskLevel
             };

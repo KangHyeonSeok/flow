@@ -11,6 +11,10 @@ public sealed class SpecEditRequest
     public string? Title { get; init; }
     public string? Problem { get; init; }
     public string? Goal { get; init; }
+    public string? Context { get; init; }
+    public string? NonGoals { get; init; }
+    public string? ImplementationNotes { get; init; }
+    public string? TestPlan { get; init; }
     public List<AcceptanceCriterion>? AcceptanceCriteria { get; init; }
     public RiskLevel? RiskLevel { get; init; }
 }
@@ -74,6 +78,26 @@ public sealed class SpecEditor
         if (edit.Goal != null && edit.Goal != spec.Goal)
         {
             spec.Goal = edit.Goal;
+            changed = true;
+        }
+        if (edit.Context != null && edit.Context != spec.Context)
+        {
+            spec.Context = edit.Context;
+            changed = true;
+        }
+        if (edit.NonGoals != null && edit.NonGoals != spec.NonGoals)
+        {
+            spec.NonGoals = edit.NonGoals;
+            changed = true;
+        }
+        if (edit.ImplementationNotes != null && edit.ImplementationNotes != spec.ImplementationNotes)
+        {
+            spec.ImplementationNotes = edit.ImplementationNotes;
+            changed = true;
+        }
+        if (edit.TestPlan != null && edit.TestPlan != spec.TestPlan)
+        {
+            spec.TestPlan = edit.TestPlan;
             changed = true;
         }
         if (edit.AcceptanceCriteria != null)

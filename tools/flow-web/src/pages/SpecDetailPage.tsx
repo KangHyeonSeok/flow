@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   Clock, CheckCircle, ListChecks, GitBranch, MessageSquare, FileSearch,
@@ -99,6 +99,147 @@ function createEditableCriteria(items: AcceptanceCriterion[] = []): EditableAcce
   }))
 }
 
+function renderStructuredText(value: string) {
+  const lines = value.split(/\r?\n/)
+  const blocks: Array<
+    | { type: 'paragraph'; lines: string[] }
+    | { type: 'ul'; items: string[] }
+    | { type: 'ol'; items: string[] }
+  > = []
+
+  let index = 0
+  while (index < lines.length) {
+    const line = lines[index].trim()
+
+    if (!line) {
+      index++
+      continue
+    }
+
+    if (/^-\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length) {
+        const current = lines[index].trim()
+        if (!/^-\s+/.test(current)) break
+        items.push(current.replace(/^-\s+/, ''))
+        index++
+      }
+      blocks.push({ type: 'ul', items })
+      continue
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      const items: string[] = []
+      while (index < lines.length) {
+        const current = lines[index].trim()
+        if (!/^\d+\.\s+/.test(current)) break
+        items.push(current.replace(/^\d+\.\s+/, ''))
+        index++
+      }
+      blocks.push({ type: 'ol', items })
+      continue
+    }
+
+    const paragraphLines: string[] = []
+    while (index < lines.length) {
+      const current = lines[index].trim()
+      if (!current || /^-\s+/.test(current) || /^\d+\.\s+/.test(current)) break
+      paragraphLines.push(current)
+      index++
+    }
+    blocks.push({ type: 'paragraph', lines: paragraphLines })
+  }
+
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, blockIndex) => {
+        if (block.type === 'paragraph') {
+          return (
+            <p key={`paragraph-${blockIndex}`} className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text)]">
+              {block.lines.join(' ')}
+            </p>
+          )
+        }
+
+        if (block.type === 'ul') {
+          return (
+            <ul key={`ul-${blockIndex}`} className="space-y-2 rounded-xl border border-emerald-900/25 bg-emerald-950/12 px-4 py-3 text-sm text-[var(--color-text)]">
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex} className="flex gap-3 leading-6">
+                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-300/80" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+
+        return (
+          <ol key={`ol-${blockIndex}`} className="space-y-2 rounded-xl border border-sky-900/25 bg-sky-950/12 px-4 py-3 text-sm text-[var(--color-text)]">
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex} className="grid grid-cols-[auto_1fr] gap-3 leading-6">
+                <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-sky-800/40 bg-sky-900/35 px-1 text-[11px] font-semibold text-sky-200">
+                  {itemIndex + 1}
+                </span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ol>
+        )
+      })}
+    </div>
+  )
+}
+
+function DocumentSectionCell({
+  title,
+  value,
+  draft,
+  isEditMode,
+  icon,
+  accentColor,
+  sectionId,
+  defaultCollapsed = false,
+  rows = 6,
+  onChange,
+}: {
+  title: string
+  value: string
+  draft: string
+  isEditMode: boolean
+  icon: ReactNode
+  accentColor: string
+  sectionId: string
+  defaultCollapsed?: boolean
+  rows?: number
+  onChange: (value: string) => void
+}) {
+  if (!isEditMode && !value) return null
+
+  return (
+    <Cell
+      title={title}
+      icon={icon}
+      accentColor={accentColor}
+      sectionId={sectionId}
+      defaultCollapsed={defaultCollapsed}
+    >
+      {isEditMode ? (
+        <textarea
+          value={draft}
+          onChange={(event) => onChange(event.target.value)}
+          rows={rows}
+          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm leading-relaxed text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+        />
+      ) : (
+        <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-bg)]/45 px-4 py-3">
+          {renderStructuredText(value)}
+        </div>
+      )}
+    </Cell>
+  )
+}
+
 function buildSpecMarkdown(spec: {
   id: string
   title: string
@@ -110,6 +251,10 @@ function buildSpecMarkdown(spec: {
   updatedAt: string
   problem?: string
   goal?: string
+  context?: string
+  nonGoals?: string
+  implementationNotes?: string
+  testPlan?: string
   dependencies?: { dependsOn: string[]; blocks: string[] }
   acceptanceCriteria: AcceptanceCriterion[]
   tests?: TestDefinition[]
@@ -136,6 +281,30 @@ function buildSpecMarkdown(spec: {
     sections.push('')
     sections.push('## Goal')
     sections.push(spec.goal)
+  }
+
+  if (spec.context) {
+    sections.push('')
+    sections.push('## Context')
+    sections.push(spec.context)
+  }
+
+  if (spec.nonGoals) {
+    sections.push('')
+    sections.push('## Non-Goals')
+    sections.push(spec.nonGoals)
+  }
+
+  if (spec.implementationNotes) {
+    sections.push('')
+    sections.push('## Implementation Notes')
+    sections.push(spec.implementationNotes)
+  }
+
+  if (spec.testPlan) {
+    sections.push('')
+    sections.push('## Test Plan')
+    sections.push(spec.testPlan)
   }
 
   if (spec.dependencies && (spec.dependencies.dependsOn.length > 0 || spec.dependencies.blocks.length > 0)) {
@@ -318,6 +487,10 @@ export function SpecDetailPage() {
   const [titleDraft, setTitleDraft] = useState('')
   const [problemDraft, setProblemDraft] = useState('')
   const [goalDraft, setGoalDraft] = useState('')
+  const [contextDraft, setContextDraft] = useState('')
+  const [nonGoalsDraft, setNonGoalsDraft] = useState('')
+  const [implementationNotesDraft, setImplementationNotesDraft] = useState('')
+  const [testPlanDraft, setTestPlanDraft] = useState('')
   const [riskLevelDraft, setRiskLevelDraft] = useState<RiskLevel>('low')
   const [acceptanceCriteriaDraft, setAcceptanceCriteriaDraft] = useState<EditableAcceptanceCriterion[]>([])
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
@@ -332,6 +505,10 @@ export function SpecDetailPage() {
     setTitleDraft(spec.title)
     setProblemDraft(spec.problem ?? '')
     setGoalDraft(spec.goal ?? '')
+    setContextDraft(spec.context ?? '')
+    setNonGoalsDraft(spec.nonGoals ?? '')
+    setImplementationNotesDraft(spec.implementationNotes ?? '')
+    setTestPlanDraft(spec.testPlan ?? '')
     setRiskLevelDraft(spec.riskLevel)
     setAcceptanceCriteriaDraft(createEditableCriteria(spec.acceptanceCriteria))
   }, [spec, isEditMode])
@@ -362,6 +539,10 @@ export function SpecDetailPage() {
     setTitleDraft(spec.title)
     setProblemDraft(spec.problem ?? '')
     setGoalDraft(spec.goal ?? '')
+    setContextDraft(spec.context ?? '')
+    setNonGoalsDraft(spec.nonGoals ?? '')
+    setImplementationNotesDraft(spec.implementationNotes ?? '')
+    setTestPlanDraft(spec.testPlan ?? '')
     setRiskLevelDraft(spec.riskLevel)
     setAcceptanceCriteriaDraft(createEditableCriteria(spec.acceptanceCriteria))
   }
@@ -388,6 +569,10 @@ export function SpecDetailPage() {
       title: titleDraft.trim(),
       problem: problemDraft.trim() || undefined,
       goal: goalDraft.trim() || undefined,
+      context: contextDraft.trim() || undefined,
+      nonGoals: nonGoalsDraft.trim() || undefined,
+      implementationNotes: implementationNotesDraft.trim() || undefined,
+      testPlan: testPlanDraft.trim() || undefined,
       riskLevel: riskLevelDraft,
       acceptanceCriteria: acceptanceCriteriaDraft
         .filter((item) => item.text.trim().length > 0)
@@ -538,6 +723,16 @@ export function SpecDetailPage() {
   const completedAssignments = assignments?.filter(a => a.status === 'completed').length ?? 0
   const progress = totalAssignments > 0 ? Math.round((completedAssignments / totalAssignments) * 100) : 0
 
+  const hasDocumentSections = Boolean(
+    spec.problem
+    || spec.goal
+    || spec.context
+    || spec.nonGoals
+    || spec.implementationNotes
+    || spec.testPlan
+    || isEditMode,
+  )
+
   // Count tests linked to each AC
   const acTestCounts = new Map<string, { total: number; passed: number }>()
   for (const t of tests) {
@@ -566,6 +761,19 @@ export function SpecDetailPage() {
             <p className="text-sm text-[var(--color-text-muted)]">
               Last updated {formatTime(spec.updatedAt)}
             </p>
+
+            <PipelineView current={spec.state as FlowState} />
+
+            <div className="flex flex-wrap gap-2">
+              <MetaChip icon={<Tag className="w-3 h-3" />} label={spec.type} />
+              <MetaChip
+                icon={<AlertTriangle className="w-3 h-3" />}
+                label={spec.riskLevel}
+                className={spec.riskLevel === 'critical' ? 'text-red-400 border-red-900/50' : spec.riskLevel === 'high' ? 'text-orange-400 border-orange-900/50' : ''}
+              />
+              <MetaChip icon={<Hash className="w-3 h-3" />} label={`v${spec.version}`} />
+              <MetaChip icon={<Calendar className="w-3 h-3" />} label={formatTime(spec.createdAt)} />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
@@ -661,100 +869,113 @@ export function SpecDetailPage() {
             {saveError ?? validateError ?? saveMessage ?? validateMessage}
           </div>
         )}
+
+        {isEditMode && (
+          <div className="mt-4 grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-4 md:grid-cols-[1fr_auto] md:items-end">
+            <label className="grid gap-1.5 text-sm">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Title</span>
+              <input
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+              />
+            </label>
+
+            <label className="grid gap-1.5 text-sm md:min-w-48">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Risk Level</span>
+              <select
+                value={riskLevelDraft}
+                onChange={(event) => setRiskLevelDraft(event.target.value as RiskLevel)}
+                className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="critical">critical</option>
+              </select>
+            </label>
+          </div>
+        )}
       </section>
 
-      {/* ── Overview Cell ── */}
-      <Cell title={spec.title} icon={<Info className="w-4 h-4" />} accentColor="var(--cell-overview)" sectionId="section-overview">
-        <div className="space-y-4">
-          {/* Header row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-mono text-xs text-[var(--color-text-muted)]">{spec.id}</span>
-            <StateBadge state={spec.state as FlowState} />
-            <StatusBadge status={spec.processingStatus} />
-            <span className="text-xs text-[var(--color-text-muted)] ml-auto">
-              Updated {relativeTime(spec.updatedAt)}
-            </span>
-          </div>
-
-          {/* Pipeline */}
-          <PipelineView current={spec.state as FlowState} />
-
-          {/* Meta chips */}
-          <div className="flex flex-wrap gap-2">
-            <MetaChip icon={<Tag className="w-3 h-3" />} label={spec.type} />
-            <MetaChip
-              icon={<AlertTriangle className="w-3 h-3" />}
-              label={spec.riskLevel}
-              className={spec.riskLevel === 'critical' ? 'text-red-400 border-red-900/50' : spec.riskLevel === 'high' ? 'text-orange-400 border-orange-900/50' : ''}
-            />
-            <MetaChip icon={<Hash className="w-3 h-3" />} label={`v${spec.version}`} />
-            <MetaChip icon={<Calendar className="w-3 h-3" />} label={formatTime(spec.createdAt)} />
-          </div>
-
-          {isEditMode && (
-            <div className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/50 p-4">
-              <label className="grid gap-1.5 text-sm">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Title</span>
-                <input
-                  value={titleDraft}
-                  onChange={(event) => setTitleDraft(event.target.value)}
-                  className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-                />
-              </label>
-
-              <label className="grid gap-1.5 text-sm md:max-w-60">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-text-muted)]">Risk Level</span>
-                <select
-                  value={riskLevelDraft}
-                  onChange={(event) => setRiskLevelDraft(event.target.value as RiskLevel)}
-                  className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-                >
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
-                  <option value="critical">critical</option>
-                </select>
-              </label>
-            </div>
-          )}
-
-          {/* Problem & Goal */}
-          {(spec.problem || spec.goal || isEditMode) && (
-            <div className="grid md:grid-cols-2 gap-3">
-              {(spec.problem || isEditMode) && (
-                <div className="p-3 rounded-md bg-[var(--color-bg)]/60 border border-[var(--color-border-subtle)]">
-                  <h4 className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">Problem</h4>
-                  {isEditMode ? (
-                    <textarea
-                      value={problemDraft}
-                      onChange={(event) => setProblemDraft(event.target.value)}
-                      rows={6}
-                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm leading-relaxed text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-                    />
-                  ) : (
-                    <p className="text-sm leading-relaxed">{spec.problem}</p>
-                  )}
-                </div>
-              )}
-              {(spec.goal || isEditMode) && (
-                <div className="p-3 rounded-md bg-[var(--color-bg)]/60 border border-[var(--color-border-subtle)]">
-                  <h4 className="text-[10px] font-semibold text-[var(--color-text-muted)] uppercase mb-1">Goal</h4>
-                  {isEditMode ? (
-                    <textarea
-                      value={goalDraft}
-                      onChange={(event) => setGoalDraft(event.target.value)}
-                      rows={6}
-                      className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-input)] px-3 py-2 text-sm leading-relaxed text-[var(--color-text)] outline-none focus:border-[var(--color-primary)]"
-                    />
-                  ) : (
-                    <p className="text-sm leading-relaxed">{spec.goal}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+      <Cell title="Document Summary" icon={<Info className="w-4 h-4" />} accentColor="var(--cell-overview)" sectionId="section-document-summary">
+        <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[linear-gradient(135deg,rgba(18,34,58,0.92),rgba(11,18,30,0.96))] px-4 py-3">
+          <p className="max-w-3xl text-sm leading-7 text-[var(--color-text)]">
+            {spec.goal ?? spec.problem ?? 'No document summary available yet.'}
+          </p>
         </div>
       </Cell>
+
+      {hasDocumentSections && (
+        <div className="space-y-3">
+          <DocumentSectionCell
+            title="Problem"
+            value={spec.problem ?? ''}
+            draft={problemDraft}
+            isEditMode={isEditMode}
+            icon={<AlertTriangle className="w-4 h-4" />}
+            accentColor="var(--cell-overview)"
+            sectionId="section-problem"
+            onChange={setProblemDraft}
+          />
+          <DocumentSectionCell
+            title="Goal"
+            value={spec.goal ?? ''}
+            draft={goalDraft}
+            isEditMode={isEditMode}
+            icon={<CircleCheck className="w-4 h-4" />}
+            accentColor="var(--cell-overview)"
+            sectionId="section-goal"
+            onChange={setGoalDraft}
+          />
+          <DocumentSectionCell
+            title="Context"
+            value={spec.context ?? ''}
+            draft={contextDraft}
+            isEditMode={isEditMode}
+            icon={<Layers3 className="w-4 h-4" />}
+            accentColor="var(--cell-dependencies)"
+            sectionId="section-context"
+            defaultCollapsed
+            onChange={setContextDraft}
+          />
+          <DocumentSectionCell
+            title="Non-Goals"
+            value={spec.nonGoals ?? ''}
+            draft={nonGoalsDraft}
+            isEditMode={isEditMode}
+            icon={<Shield className="w-4 h-4" />}
+            accentColor="var(--cell-review)"
+            sectionId="section-non-goals"
+            defaultCollapsed
+            onChange={setNonGoalsDraft}
+          />
+          <DocumentSectionCell
+            title="Implementation Notes"
+            value={spec.implementationNotes ?? ''}
+            draft={implementationNotesDraft}
+            isEditMode={isEditMode}
+            icon={<FileCode className="w-4 h-4" />}
+            accentColor="var(--cell-implementation)"
+            sectionId="section-implementation-notes"
+            defaultCollapsed
+            rows={8}
+            onChange={setImplementationNotesDraft}
+          />
+          <DocumentSectionCell
+            title="Test Plan"
+            value={spec.testPlan ?? ''}
+            draft={testPlanDraft}
+            isEditMode={isEditMode}
+            icon={<FileSearch className="w-4 h-4" />}
+            accentColor="var(--cell-evidence)"
+            sectionId="section-test-plan"
+            defaultCollapsed
+            rows={8}
+            onChange={setTestPlanDraft}
+          />
+        </div>
+      )}
 
       {/* ── Dependencies Cell ── */}
       {hasDeps && (

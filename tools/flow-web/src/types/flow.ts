@@ -55,6 +55,10 @@ export interface Spec {
   type: SpecType
   problem?: string
   goal?: string
+  context?: string
+  nonGoals?: string
+  implementationNotes?: string
+  testPlan?: string
   state: FlowState
   processingStatus: ProcessingStatus
   riskLevel: RiskLevel
@@ -151,6 +155,10 @@ export interface CreateSpecRequest {
   type?: string
   problem?: string
   goal?: string
+  context?: string
+  nonGoals?: string
+  implementationNotes?: string
+  testPlan?: string
   acceptanceCriteria?: { text: string; testable?: boolean; notes?: string }[]
   riskLevel?: string
 }
@@ -160,6 +168,10 @@ export interface UpdateSpecRequest {
   title?: string
   problem?: string
   goal?: string
+  context?: string
+  nonGoals?: string
+  implementationNotes?: string
+  testPlan?: string
   acceptanceCriteria?: { text: string; testable?: boolean; notes?: string }[]
   riskLevel?: string
 }
