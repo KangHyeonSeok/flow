@@ -149,6 +149,144 @@ export interface EvidenceRef {
   summary?: string
 }
 
+// ── Project / Epic view models ──
+
+export interface ProjectMilestone {
+  id: string
+  title: string
+  status: string
+}
+
+export interface ProjectDocument {
+  projectId: string
+  version: number
+  title: string
+  summary?: string
+  problem?: string
+  goals: string[]
+  nonGoals: string[]
+  contextAndConstraints: string[]
+  architectureOverview: string[]
+  milestones: ProjectMilestone[]
+  relatedDocs: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectStats {
+  specCount: number
+  epicCount: number
+  activeEpicCount: number
+  openReviewCount: number
+  failedSpecCount: number
+  onHoldSpecCount: number
+}
+
+export interface ProjectDocumentSection {
+  problem?: string
+  goals: string[]
+  nonGoals: string[]
+  contextAndConstraints: string[]
+  architectureOverview: string[]
+}
+
+export interface EpicSpecCounts {
+  total: number
+  completed: number
+  active: number
+  blocked: number
+  review: number
+}
+
+export interface EpicSummary {
+  epicId: string
+  title: string
+  summary?: string
+  priority?: string
+  milestone?: string
+  owner?: string
+  specCounts: EpicSpecCounts
+}
+
+export interface ProjectView {
+  projectId: string
+  title: string
+  summary?: string
+  documentVersion: number
+  lastActivityAt?: string
+  stats: ProjectStats
+  document: ProjectDocumentSection
+  epics: EpicSummary[]
+}
+
+export interface EpicMilestone {
+  id: string
+  title: string
+  status: string
+}
+
+export interface EpicDocument {
+  projectId: string
+  epicId: string
+  version: number
+  title: string
+  summary?: string
+  problem?: string
+  goal?: string
+  scope: string[]
+  nonGoals: string[]
+  successCriteria: string[]
+  childSpecIds: string[]
+  dependencies: string[]
+  milestones: EpicMilestone[]
+  relatedDocs: string[]
+  owner?: string
+  priority?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface EpicProgress {
+  totalSpecs: number
+  completedSpecs: number
+  activeSpecs: number
+  blockedSpecs: number
+  completionRatio: number
+}
+
+export interface EpicNarrative {
+  problem?: string
+  goal?: string
+  scope: string[]
+  nonGoals: string[]
+  successCriteria: string[]
+}
+
+export interface EpicChildSpec {
+  specId: string
+  title: string
+  state: FlowState
+  processingStatus: ProcessingStatus
+  riskLevel: RiskLevel
+  lastActivityAt?: string
+}
+
+export interface EpicView {
+  projectId: string
+  epicId: string
+  title: string
+  summary?: string
+  documentVersion: number
+  priority?: string
+  owner?: string
+  milestone?: string
+  progress: EpicProgress
+  narrative: EpicNarrative
+  childSpecs: EpicChildSpec[]
+  epicDependsOn: string[]
+  relatedDocs: string[]
+}
+
 // Request types
 export interface CreateSpecRequest {
   title: string

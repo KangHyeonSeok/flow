@@ -6,6 +6,10 @@ import type {
   EvidenceManifest,
   CreateSpecRequest,
   UpdateSpecRequest,
+  ProjectView,
+  ProjectDocument,
+  EpicDocument,
+  EpicView,
 } from '@/types/flow'
 
 const BASE = '/api'
@@ -36,6 +40,25 @@ export class ApiError extends Error {
 
 // -- Projects --
 export const listProjects = () => request<string[]>('/projects')
+
+export const getProjectView = (projectId: string) =>
+  request<ProjectView>(`/projects/${projectId}/view`)
+
+export const getProjectDocument = (projectId: string) =>
+  request<ProjectDocument>(`/projects/${projectId}/document`)
+
+// -- Epics --
+export const listEpics = (projectId: string) =>
+  request<EpicDocument[]>(`/projects/${projectId}/epics`)
+
+export const getEpicView = (projectId: string, epicId: string) =>
+  request<EpicView>(`/projects/${projectId}/epics/${epicId}/view`)
+
+export const getEpicDocument = (projectId: string, epicId: string) =>
+  request<EpicDocument>(`/projects/${projectId}/epics/${epicId}/document`)
+
+export const listEpicSpecs = (projectId: string, epicId: string) =>
+  request<Spec[]>(`/projects/${projectId}/epics/${epicId}/specs`)
 
 // -- Specs --
 export const listSpecs = (projectId: string, params?: { state?: string; status?: string }) => {

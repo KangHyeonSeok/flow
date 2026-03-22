@@ -6,6 +6,23 @@ export function useProjects() {
   return useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
 }
 
+export function useProjectView(projectId: string) {
+  return useQuery({
+    queryKey: ['projectView', projectId],
+    queryFn: () => api.getProjectView(projectId),
+    enabled: !!projectId,
+    refetchInterval: 10000,
+  })
+}
+
+export function useEpics(projectId: string) {
+  return useQuery({
+    queryKey: ['epics', projectId],
+    queryFn: () => api.listEpics(projectId),
+    enabled: !!projectId,
+  })
+}
+
 export function useSpecs(projectId: string, filters?: { state?: string; status?: string }) {
   return useQuery({
     queryKey: ['specs', projectId, filters],

@@ -121,8 +121,9 @@ UI는 state를 직접 변경하면 안 된다.
 5. Assignments
 6. Review Requests
 7. Tests & Evidence
-8. Activity Timeline
-9. Actions
+8. Live Run / Playground
+9. Activity Timeline
+10. Actions
 
 이 순서는 아래 이유로 적절하다.
 
@@ -258,6 +259,34 @@ UI는 state를 직접 변경하면 안 된다.
 
 - AC별로 그룹화
 - 실패 테스트 우선 정렬
+
+## 5.8 Live Run / Playground
+
+모든 spec에 필요한 것은 아니지만, 가능한 spec은 문서 안에서 직접 입력을 넣고 결과를 확인할 수 있는 section을 둘 수 있다.
+
+예:
+
+- 더하기 기능 spec에서 숫자 두 개 입력 후 합계 결과 확인
+- 간단한 API spec에서 request preset 실행 후 response 확인
+- 작은 UI interaction spec에서 sample input과 visible output 확인
+
+필수 정보:
+
+- preset inputs
+- custom input form
+- expected output
+- actual result
+- AC 연결 정보
+- evidence 저장 버튼
+
+중요 규칙:
+
+- live run은 테스트를 대체하지 않는다.
+- deterministic하고 안전한 실행부터 우선 지원한다.
+- destructive action은 기본적으로 제외한다.
+- 실행 결과는 evidence 또는 quick verification note로 저장할 수 있어야 한다.
+
+이 section은 spec을 단순 문서가 아니라 `살아있는 spec`으로 보강하는 역할을 한다.
 
 이 섹션은 검증 가능성을 가장 직접적으로 보여준다.
 

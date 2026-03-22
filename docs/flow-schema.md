@@ -7,6 +7,7 @@
 - `spec.json`이 authoritative source다.
 - activity는 `activity/*.jsonl`에 append-only로 저장한다.
 - review request는 별도 객체로 관리한다.
+- decision record는 review request, change record와 구분되는 별도 객체로 관리한다.
 - assignment는 spec에 종속되지만 독립 식별자를 가진다.
 - 초기 구현은 최소 필드만 고정하고 확장 필드는 나중에 추가한다.
 
@@ -17,6 +18,7 @@
 - Spec Manager는 event와 현재 spec version을 기준으로 state transition을 적용한다.
 - assignment는 단순 lock 정보가 아니라 실행 단위 task다.
 - review request는 무기한 열려 있지 않도록 deadline을 가질 수 있어야 한다.
+- 사용자 결정이 필요한 미해결 선택 문제는 spec 본문 TODO가 아니라 별도 decision record로 남기는 편을 기본 방향으로 둔다.
 
 # 2. spec.json
 
@@ -88,6 +90,7 @@
 - `tests`: test 객체 배열. 각 test의 정의와 상태를 spec.json 안에 inline으로 저장한다.
 - `retryCounters`: 반복 제한 카운터. `userReviewLoopCount`(사용자검토 루프), `reworkLoopCount`(재작업 루프), `architectReviewLoopCount`(Architect 반려 루프). 모든 값이 0이면 저장 시 생략 가능.
 - `derivedFrom`: 이 spec이 실패한 다른 spec으로부터 Planner 재등록으로 생성된 경우, 원본 spec ID를 기록한다. 추적용.
+- `liveExecution`: 가능한 spec에 한해 interactive run/playground 구성을 담는 선택 필드다. 모든 spec에 필수는 아니다.
 - `createdAt`, `updatedAt`: 타임스탬프
 - `version`: optimistic concurrency 제어용 버전
 
@@ -119,6 +122,7 @@
 - `testIds`
 - `retryCounters` (모든 값이 0인 경우)
 - `derivedFrom`
+- `liveExecution`
 
 # 3. acceptance criterion
 
@@ -176,6 +180,53 @@ test 객체는 `spec.json`의 `tests` 배열에 inline으로 저장한다. `test
 
 - `type`: `unit | e2e | user`
 - `status`: `not-run | passed | failed | skipped`
+
+# 4.1 live execution
+
+가능한 spec은 문서 안에서 직접 동작을 확인할 수 있는 `liveExecution` 구성을 가질 수 있다. 이 필드는 선택 사항이며, deterministic하고 안전한 spec에 우선 적용하는 편이 적절하다.
+
+```json
+{
+  "enabled": true,
+  "kind": "function",
+  "title": "Add Number Playground",
+  "description": "숫자 두 개를 입력해 합계를 확인한다.",
+  "inputSchema": {
+    "fields": [
+      {
+        "id": "a",
+        "label": "First Number",
+        "type": "number",
+        "required": true
+      },
+      {
+        "id": "b",
+        "label": "Second Number",
+        "type": "number",
+        "required": true
+      }
+    ]
+  },
+  "presets": [
+    {
+      "id": "preset-1",
+      "label": "1 + 2",
+      "input": { "a": 1, "b": 2 },
+      "expectedOutput": { "sum": 3 }
+    }
+  ],
+  "relatedAcceptanceCriteria": ["ac-001"],
+  "saveAsEvidence": true
+}
+```
+
+권장 규칙:
+
+- 모든 spec에 필수로 두지 않는다.
+- live execution은 테스트를 대체하지 않는다.
+- destructive side effect가 큰 실행은 기본적으로 제외한다.
+- 가능한 경우 preset과 expected output을 함께 둔다.
+- acceptance criteria와 연결되는 경우에만 두는 편이 좋다.
 
 # 5. assignment
 
@@ -320,7 +371,46 @@ review request와 spec의 연결 규칙은 아래처럼 해석한다.
 - `comment`: `reject-with-comment`, `partial-edit-approve`에서 권장
 - `editedPayload`: `partial-edit-approve`일 때 필요
 
-# 8. activity event
+# 8. decision record
+
+Decision Record는 아직 확정되지 않은 선택 문제를 저장하는 별도 객체다. spec의 실행 계약과 구분되며, 사용자가 문제 중심으로 판단하고 그 결과를 나중에 spec/change에 반영할 수 있게 한다.
+
+이 문서의 초기 범위는 spec/review/assignment/test에 집중하지만, 장기적으로는 아래와 같은 최소 필드를 갖는 Decision Record 계약을 추가하는 방향을 권장한다.
+
+```json
+{
+  "decisionId": "dr-001",
+  "projectId": "proj-001",
+  "title": "로그인 버튼 비활성 UX 대안 선택",
+  "summary": "접근성 기준을 만족하는 시각 표현을 선택해야 한다.",
+  "requiredDecision": "안 A와 안 B 중 어떤 UX를 채택할 것인가?",
+  "status": "open",
+  "relatedSpecIds": ["spec-001"],
+  "recommendedOptionId": "opt-a",
+  "finalDecision": null,
+  "createdAt": "2026-03-14T10:20:00Z",
+  "resolvedAt": null,
+  "version": 1
+}
+```
+
+권장 상태:
+
+- `open`
+- `investigating`
+- `answered`
+- `applied`
+- `superseded`
+- `cancelled`
+
+핵심 규칙:
+
+- decision record는 change record와 다르다. change는 원인, decision은 선택 문제다.
+- decision record는 review request와 다르다. review는 결과 검토, decision은 방향 선택이다.
+- 사용자의 선택은 `answered`에서 끝나지 않고 관련 spec/change에 반영된 뒤 `applied`까지 가야 한다.
+- spec은 `pendingDecisionIds` 또는 동등한 메타데이터로 decision block을 표현하는 편이 적절하다.
+
+# 9. activity event
 
 activity는 `activity/<date>.jsonl` 같은 파일에 한 줄씩 저장한다.
 
@@ -364,7 +454,7 @@ activity는 `activity/<date>.jsonl` 같은 파일에 한 줄씩 저장한다.
 
 activity event는 replay, audit, debug 기준 데이터다. 따라서 상태 전이, assignment 변경, review request 생성, timeout recovery 같은 중요한 변화는 모두 이 스키마로 기록하는 편이 맞다.
 
-# 9. agent input payload
+# 10. agent input payload
 
 ```json
 {

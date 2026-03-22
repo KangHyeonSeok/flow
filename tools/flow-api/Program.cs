@@ -35,6 +35,7 @@ if (resolvedWebRoot != null)
 }
 
 app.MapProjectEndpoints();
+app.MapEpicEndpoints();
 app.MapSpecEndpoints();
 app.MapAssignmentEndpoints();
 app.MapReviewEndpoints();
