@@ -51,6 +51,7 @@ export interface Dependency {
 export interface Spec {
   id: string
   projectId: string
+  epicId?: string
   title: string
   type: SpecType
   problem?: string
@@ -208,6 +209,19 @@ export interface EpicSummary {
   specCounts: EpicSpecCounts
 }
 
+export interface HotspotEntry {
+  specId: string
+  title: string
+  epicId?: string
+  reason: string
+}
+
+export interface ProjectHotspots {
+  review: HotspotEntry[]
+  failure: HotspotEntry[]
+  onHold: HotspotEntry[]
+}
+
 export interface ProjectView {
   projectId: string
   title: string
@@ -217,6 +231,7 @@ export interface ProjectView {
   stats: ProjectStats
   document: ProjectDocumentSection
   epics: EpicSummary[]
+  hotspots: ProjectHotspots
 }
 
 export interface EpicMilestone {
@@ -291,6 +306,7 @@ export interface EpicView {
 export interface CreateSpecRequest {
   title: string
   type?: string
+  epicId?: string
   problem?: string
   goal?: string
   context?: string
@@ -303,6 +319,7 @@ export interface CreateSpecRequest {
 
 export interface UpdateSpecRequest {
   version: number
+  epicId?: string
   title?: string
   problem?: string
   goal?: string
@@ -312,4 +329,31 @@ export interface UpdateSpecRequest {
   testPlan?: string
   acceptanceCriteria?: { text: string; testable?: boolean; notes?: string }[]
   riskLevel?: string
+}
+
+export interface UpdateProjectDocumentRequest {
+  version: number
+  title?: string
+  summary?: string
+  problem?: string
+  goals?: string[]
+  nonGoals?: string[]
+  contextAndConstraints?: string[]
+  architectureOverview?: string[]
+}
+
+export interface UpdateEpicDocumentRequest {
+  version: number
+  title?: string
+  summary?: string
+  problem?: string
+  goal?: string
+  scope?: string[]
+  nonGoals?: string[]
+  successCriteria?: string[]
+  childSpecIds?: string[]
+  dependencies?: string[]
+  relatedDocs?: string[]
+  owner?: string
+  priority?: string
 }

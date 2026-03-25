@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '@/api/client'
-import type { CreateSpecRequest, UpdateSpecRequest } from '@/types/flow'
+import type { CreateSpecRequest, UpdateSpecRequest, UpdateProjectDocumentRequest, UpdateEpicDocumentRequest } from '@/types/flow'
 
 export function useProjects() {
   return useQuery({ queryKey: ['projects'], queryFn: api.listProjects })
@@ -20,6 +20,85 @@ export function useEpics(projectId: string) {
     queryKey: ['epics', projectId],
     queryFn: () => api.listEpics(projectId),
     enabled: !!projectId,
+  })
+}
+
+export function useEpicView(projectId: string, epicId: string) {
+  return useQuery({
+    queryKey: ['epicView', projectId, epicId],
+    queryFn: () => api.getEpicView(projectId, epicId),
+    enabled: !!projectId && !!epicId,
+    refetchInterval: 10000,
+  })
+}
+
+export function useEpicSpecs(projectId: string, epicId: string) {
+  return useQuery({
+    queryKey: ['epicSpecs', projectId, epicId],
+    queryFn: () => api.listEpicSpecs(projectId, epicId),
+    enabled: !!projectId && !!epicId,
+    refetchInterval: 5000,
+  })
+}
+
+export function useProjectDocument(projectId: string) {
+  return useQuery({
+    queryKey: ['projectDocument', projectId],
+    queryFn: () => api.getProjectDocument(projectId),
+    enabled: !!projectId,
+  })
+}
+
+export function useUpdateProjectDocument(projectId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: UpdateProjectDocumentRequest) => api.updateProjectDocument(projectId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['projectDocument', projectId] })
+      qc.invalidateQueries({ queryKey: ['projectView', projectId] })
+    },
+  })
+}
+
+export function useEpicDocument(projectId: string, epicId: string) {
+  return useQuery({
+    queryKey: ['epicDocument', projectId, epicId],
+    queryFn: () => api.getEpicDocument(projectId, epicId),
+    enabled: !!projectId && !!epicId,
+  })
+}
+
+export function useUpdateEpicDocument(projectId: string, epicId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: UpdateEpicDocumentRequest) => api.updateEpicDocument(projectId, epicId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['epicDocument', projectId, epicId] })
+      qc.invalidateQueries({ queryKey: ['epicView', projectId, epicId] })
+      qc.invalidateQueries({ queryKey: ['epics', projectId] })
+      qc.invalidateQueries({ queryKey: ['projectView', projectId] })
+    },
+  })
+}
+
+export function useSpecEpic(projectId: string, specId: string) {
+  const { data: spec } = useSpec(projectId, specId)
+  const { data: epics } = useEpics(projectId)
+
+  if (!spec?.epicId) return null
+
+  const epic = epics?.find(e => e.epicId === spec.epicId)
+  return epic ? { epicId: epic.epicId, title: epic.title } : { epicId: spec.epicId, title: spec.epicId }
+}
+
+export function useBackfillEpicIds(projectId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.backfillEpicIds(projectId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['specs', projectId] })
+      qc.invalidateQueries({ queryKey: ['projectView', projectId] })
+    },
   })
 }
 

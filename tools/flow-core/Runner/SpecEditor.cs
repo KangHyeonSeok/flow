@@ -8,6 +8,7 @@ namespace FlowCore.Runner;
 public sealed class SpecEditRequest
 {
     public required int ExpectedVersion { get; init; }
+    public string? EpicId { get; init; }
     public string? Title { get; init; }
     public string? Problem { get; init; }
     public string? Goal { get; init; }
@@ -65,6 +66,11 @@ public sealed class SpecEditor
 
         // Apply field changes
         var changed = false;
+        if (edit.EpicId != null && edit.EpicId != spec.EpicId)
+        {
+            spec.EpicId = edit.EpicId;
+            changed = true;
+        }
         if (edit.Title != null && edit.Title != spec.Title)
         {
             spec.Title = edit.Title;

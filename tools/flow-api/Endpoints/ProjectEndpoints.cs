@@ -1,3 +1,4 @@
+using FlowApi.Models;
 using FlowCore.Models;
 using FlowCore.Storage;
 
@@ -34,6 +35,8 @@ public static class ProjectEndpoints
                 .Select(s => (DateTimeOffset?)s.UpdatedAt)
                 .FirstOrDefault();
 
+            var hotspots = BuildHotspots(specs, epics);
+
             var view = new ProjectView
             {
                 ProjectId = projectId,
@@ -58,7 +61,8 @@ public static class ProjectEndpoints
                     ContextAndConstraints = doc?.ContextAndConstraints ?? [],
                     ArchitectureOverview = doc?.ArchitectureOverview ?? []
                 },
-                Epics = epicSummaries
+                Epics = epicSummaries,
+                Hotspots = hotspots
             };
 
             return Results.Ok(view);
@@ -75,6 +79,80 @@ public static class ProjectEndpoints
             var epics = EpicDocumentStore.LoadAll(factory.FlowHome, projectId);
             return Results.Ok(epics.OrderBy(e => e.EpicId).ToList());
         });
+
+        app.MapPut("/api/projects/{projectId}/document",
+            (string projectId, UpdateProjectDocumentRequest req, FlowStoreFactory factory) =>
+            {
+                var existing = ProjectDocumentStore.Load(factory.FlowHome, projectId);
+                if (existing == null)
+                    return Results.NotFound(new { error = "project document not found" });
+
+                // Apply partial updates
+                if (req.Title != null) existing.Title = req.Title;
+                if (req.Summary != null) existing.Summary = req.Summary;
+                if (req.Problem != null) existing.Problem = req.Problem;
+                if (req.Goals != null) existing.Goals = req.Goals;
+                if (req.NonGoals != null) existing.NonGoals = req.NonGoals;
+                if (req.ContextAndConstraints != null) existing.ContextAndConstraints = req.ContextAndConstraints;
+                if (req.ArchitectureOverview != null) existing.ArchitectureOverview = req.ArchitectureOverview;
+
+                var (ok, error) = ProjectDocumentStore.Save(factory.FlowHome, projectId, existing, req.Version);
+                if (!ok)
+                    return Results.Conflict(new { error });
+
+                return Results.Ok(existing);
+            });
+    }
+
+    private static ProjectHotspots BuildHotspots(IReadOnlyList<Spec> specs, IReadOnlyList<EpicDocument> epics, int topN = 5)
+    {
+        string? FindEpicId(string specId) =>
+            epics.FirstOrDefault(e => e.ChildSpecIds.Contains(specId))?.EpicId;
+
+        var review = specs
+            .Where(s => s.State == FlowState.Review
+                || s.ProcessingStatus == ProcessingStatus.InReview
+                || s.ProcessingStatus == ProcessingStatus.UserReview)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Take(topN)
+            .Select(s => new HotspotEntry
+            {
+                SpecId = s.Id,
+                Title = s.Title,
+                EpicId = s.EpicId ?? FindEpicId(s.Id),
+                Reason = s.ProcessingStatus == ProcessingStatus.UserReview ? "awaiting user review"
+                    : s.ProcessingStatus == ProcessingStatus.InReview ? "in review"
+                    : "review state"
+            })
+            .ToList();
+
+        var failure = specs
+            .Where(s => s.State == FlowState.Failed)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Take(topN)
+            .Select(s => new HotspotEntry
+            {
+                SpecId = s.Id,
+                Title = s.Title,
+                EpicId = s.EpicId ?? FindEpicId(s.Id),
+                Reason = "failed"
+            })
+            .ToList();
+
+        var onHold = specs
+            .Where(s => s.ProcessingStatus == ProcessingStatus.OnHold)
+            .OrderByDescending(s => s.UpdatedAt)
+            .Take(topN)
+            .Select(s => new HotspotEntry
+            {
+                SpecId = s.Id,
+                Title = s.Title,
+                EpicId = s.EpicId ?? FindEpicId(s.Id),
+                Reason = "on hold"
+            })
+            .ToList();
+
+        return new ProjectHotspots { Review = review, Failure = failure, OnHold = onHold };
     }
 
     private static EpicSummary BuildEpicSummary(EpicDocument epic, IReadOnlyList<Spec> allSpecs)

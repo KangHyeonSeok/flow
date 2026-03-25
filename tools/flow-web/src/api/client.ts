@@ -6,6 +6,8 @@ import type {
   EvidenceManifest,
   CreateSpecRequest,
   UpdateSpecRequest,
+  UpdateProjectDocumentRequest,
+  UpdateEpicDocumentRequest,
   ProjectView,
   ProjectDocument,
   EpicDocument,
@@ -47,6 +49,12 @@ export const getProjectView = (projectId: string) =>
 export const getProjectDocument = (projectId: string) =>
   request<ProjectDocument>(`/projects/${projectId}/document`)
 
+export const updateProjectDocument = (projectId: string, data: UpdateProjectDocumentRequest) =>
+  request<ProjectDocument>(`/projects/${projectId}/document`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+
 // -- Epics --
 export const listEpics = (projectId: string) =>
   request<EpicDocument[]>(`/projects/${projectId}/epics`)
@@ -57,8 +65,20 @@ export const getEpicView = (projectId: string, epicId: string) =>
 export const getEpicDocument = (projectId: string, epicId: string) =>
   request<EpicDocument>(`/projects/${projectId}/epics/${epicId}/document`)
 
+export const updateEpicDocument = (projectId: string, epicId: string, data: UpdateEpicDocumentRequest) =>
+  request<EpicDocument>(`/projects/${projectId}/epics/${epicId}/document`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+
 export const listEpicSpecs = (projectId: string, epicId: string) =>
   request<Spec[]>(`/projects/${projectId}/epics/${epicId}/specs`)
+
+export const backfillEpicIds = (projectId: string) =>
+  request<{ processed: number; updated: number; skipped: number; conflicts: number }>(
+    `/projects/${projectId}/backfill-epic-ids`,
+    { method: 'POST' },
+  )
 
 // -- Specs --
 export const listSpecs = (projectId: string, params?: { state?: string; status?: string }) => {

@@ -21,7 +21,7 @@ public sealed class SpecEndpointsTests : IAsyncLifetime
     private async Task<Spec> CreateSpecAsync(string title = "Test spec",
         string? type = null, List<AcRequest>? ac = null)
     {
-        var req = new CreateSpecRequest(title, type, "problem", "goal", ac);
+        var req = new CreateSpecRequest(title, Type: type, Problem: "problem", Goal: "goal", AcceptanceCriteria: ac);
         var response = await Client.PostAsJsonAsync(
             $"/api/projects/{ProjectId}/specs", req, Json);
         response.EnsureSuccessStatusCode();
@@ -256,5 +256,96 @@ public sealed class SpecEndpointsTests : IAsyncLifetime
             $"/api/projects/{ProjectId}/specs/F-999");
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    // --- Backfill Epic IDs ---
+
+    [Fact]
+    public async Task BackfillEpicIds_SetsEpicIdOnMatchingSpecs()
+    {
+        // Create two specs (they won't have epicId)
+        var spec1 = await CreateSpecAsync("Spec A");
+        var spec2 = await CreateSpecAsync("Spec B");
+
+        spec1.EpicId.Should().BeNull();
+        spec2.EpicId.Should().BeNull();
+
+        // Write epic JSON that references spec1 and spec2
+        var epicsDir = Path.Combine(_fixture.FlowHome, "projects", ProjectId, "epics");
+        Directory.CreateDirectory(epicsDir);
+        var epicJson = JsonSerializer.Serialize(new
+        {
+            projectId = ProjectId,
+            epicId = "EPIC-T",
+            version = 1,
+            title = "Test Epic",
+            childSpecIds = new[] { spec1.Id, spec2.Id }
+        }, Json);
+        await File.WriteAllTextAsync(Path.Combine(epicsDir, "EPIC-T.json"), epicJson);
+
+        // Call backfill
+        var response = await Client.PostAsync(
+            $"/api/projects/{ProjectId}/backfill-epic-ids", null);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        result.GetProperty("updated").GetInt32().Should().Be(2);
+        result.GetProperty("conflicts").GetInt32().Should().Be(0);
+
+        // Verify specs now have epicId
+        var getSpec1 = await Client.GetFromJsonAsync<Spec>(
+            $"/api/projects/{ProjectId}/specs/{spec1.Id}", Json);
+        getSpec1!.EpicId.Should().Be("EPIC-T");
+
+        var getSpec2 = await Client.GetFromJsonAsync<Spec>(
+            $"/api/projects/{ProjectId}/specs/{spec2.Id}", Json);
+        getSpec2!.EpicId.Should().Be("EPIC-T");
+    }
+
+    [Fact]
+    public async Task BackfillEpicIds_SkipsAlreadySetSpecs()
+    {
+        // Create a spec with epicId already set
+        var req = new CreateSpecRequest("With Epic", Problem: "p", Goal: "g", EpicId: "EPIC-X");
+        var response = await Client.PostAsJsonAsync(
+            $"/api/projects/{ProjectId}/specs", req, Json);
+        response.EnsureSuccessStatusCode();
+        var spec = (await response.Content.ReadFromJsonAsync<Spec>(Json))!;
+        spec.EpicId.Should().Be("EPIC-X");
+
+        // Epic doc references the same spec but with different epicId
+        var epicsDir = Path.Combine(_fixture.FlowHome, "projects", ProjectId, "epics");
+        Directory.CreateDirectory(epicsDir);
+        var epicJson = JsonSerializer.Serialize(new
+        {
+            projectId = ProjectId,
+            epicId = "EPIC-Y",
+            version = 1,
+            title = "Other Epic",
+            childSpecIds = new[] { spec.Id }
+        }, Json);
+        await File.WriteAllTextAsync(Path.Combine(epicsDir, "EPIC-Y.json"), epicJson);
+
+        // Call backfill — should update to EPIC-Y since childSpecIds says so
+        var backfillResponse = await Client.PostAsync(
+            $"/api/projects/{ProjectId}/backfill-epic-ids", null);
+        backfillResponse.EnsureSuccessStatusCode();
+
+        var result = await backfillResponse.Content.ReadFromJsonAsync<JsonElement>(Json);
+        result.GetProperty("updated").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task BackfillEpicIds_NoEpics_ReturnsZeros()
+    {
+        await CreateSpecAsync("Lonely spec");
+
+        var response = await Client.PostAsync(
+            $"/api/projects/{ProjectId}/backfill-epic-ids", null);
+        response.EnsureSuccessStatusCode();
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(Json);
+        result.GetProperty("processed").GetInt32().Should().Be(0);
+        result.GetProperty("updated").GetInt32().Should().Be(0);
     }
 }

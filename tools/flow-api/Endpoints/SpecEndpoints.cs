@@ -65,6 +65,7 @@ public static class SpecEndpoints
             {
                 Id = specId,
                 ProjectId = projectId,
+                EpicId = req.EpicId,
                 Title = req.Title,
                 Type = specType,
                 Problem = req.Problem,
@@ -129,6 +130,7 @@ public static class SpecEndpoints
             var editReq = new SpecEditRequest
             {
                 ExpectedVersion = req.Version,
+                EpicId = req.EpicId,
                 Title = req.Title,
                 Problem = req.Problem,
                 Goal = req.Goal,

@@ -12,6 +12,7 @@ public sealed class Spec
 {
     public required string Id { get; init; }
     public required string ProjectId { get; init; }
+    public string? EpicId { get; set; }
     public required string Title { get; set; }
     public SpecType Type { get; set; } = SpecType.Task;
     public string? Problem { get; set; }

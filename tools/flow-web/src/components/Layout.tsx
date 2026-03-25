@@ -1,9 +1,26 @@
 import { Outlet, Link, useParams, useLocation } from 'react-router-dom'
 import { Activity, ChevronRight } from 'lucide-react'
 import { Sidebar } from '@/components/Sidebar'
+import { useSpecEpic } from '@/hooks/useSpecs'
+
+function EpicBreadcrumb({ projectId, specId }: { projectId: string; specId: string }) {
+  const epic = useSpecEpic(projectId, specId)
+  if (!epic) return null
+  return (
+    <>
+      <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
+      <Link
+        to={`/projects/${projectId}/epics/${epic.epicId}`}
+        className="text-xs font-mono text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+      >
+        {epic.epicId}
+      </Link>
+    </>
+  )
+}
 
 export function Layout() {
-  const { projectId, specId } = useParams()
+  const { projectId, specId, epicId } = useParams()
   const location = useLocation()
 
   const isSpecsList = projectId && !specId && location.pathname.endsWith('/specs')
@@ -23,6 +40,17 @@ export function Layout() {
             </Link>
           </>
         )}
+        {epicId && (
+          <>
+            <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
+            <Link
+              to={`/projects/${projectId}/epics/${epicId}`}
+              className="text-xs font-mono text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              {epicId}
+            </Link>
+          </>
+        )}
         {isSpecsList && (
           <>
             <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
@@ -31,6 +59,7 @@ export function Layout() {
         )}
         {specId && (
           <>
+            {projectId && <EpicBreadcrumb projectId={projectId} specId={specId} />}
             <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)]" />
             <Link to={`/projects/${projectId}/specs`} className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]">
               Specs
@@ -41,7 +70,7 @@ export function Layout() {
         )}
       </header>
       <div className="flex flex-1 overflow-hidden">
-        {projectId && specId && <Sidebar />}
+        {projectId && <Sidebar />}
         <main data-spec-scroll-root className="flex-1 overflow-y-auto p-6 scroll-smooth">
           <Outlet />
         </main>

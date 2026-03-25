@@ -753,21 +753,84 @@ GET /api/projects/{projectId}/epics/{epicId}/specs
   - useProjectView, useEpics 훅 추가
   - Sidebar는 spec detail에서만 표시 (overview/specs list에서는 숨김)
 
+- [x] Phase 3: EpicOverviewPage 구현
+  - `tools/flow-web/src/pages/EpicOverviewPage.tsx` 신규 생성
+  - 라우트 `/projects/:projectId/epics/:epicId` 추가 (App.tsx)
+  - header (progress bar, priority, owner, milestone), narrative, child specs (state별 그룹), dependencies & related docs 섹션
+  - Layout.tsx breadcrumb에 epicId 표시 추가
+  - `useEpicView`, `useEpicSpecs` hook 추가
+
 ## Now
 
-- [ ] EpicOverviewPage 구현 (Phase 3)
-  대상: `tools/flow-web/src/pages/EpicOverviewPage.tsx`
-  라우트: `/projects/:projectId/epics/:epicId`
-  내용: epic header, narrative, child specs list, milestone/dependency, related docs
-  완료 기준: project → epic → spec 이동이 자연스러움
+- [x] 샘플 `project.json`, `epic` JSON 추가해 실제 데이터로 검증
+  - `~/.flow/projects/flow/project.json` 생성
+  - `~/.flow/projects/flow/epics/EPIC-A.json`, `EPIC-B.json`, `EPIC-C.json` 생성
+- [x] Spec view breadcrumb에 epic 정보 연결 (Phase 4 일부)
+  - `useSpecEpic` hook 추가: epics 목록에서 specId로 소속 epic을 찾는다
+  - Layout.tsx에 `EpicBreadcrumb` 컴포넌트 추가: spec 상세 breadcrumb에 epic 링크 표시
+  - epic view breadcrumb도 클릭 가능한 Link로 변경
+- [x] Sidebar에 epic context block 추가 (Phase 4 나머지)
+  - `EpicContextBlock` 컴포넌트: Sidebar 최상단에 현재 spec의 소속 epic 요약 카드 (epicId, title, progress bar, 클릭 시 epic view 이동)
+  - `SiblingSpecs` 컴포넌트: 같은 epic 소속 다른 spec 목록을 "Same Epic" 그룹으로 표시 (state indicator 포함)
+- [x] Same-epic sibling spec navigation (위 항목에 포함)
+
+## Done (Phase 4 continued)
+
+- [x] Sidebar route-aware 모드 전환: project view / epic view / spec view 별 sidebar 내용
+  - Layout.tsx: Sidebar를 `projectId`가 있으면 항상 표시 (기존엔 spec detail에서만)
+  - Sidebar.tsx: route 기반으로 `ProjectSidebar`, `EpicSidebar`, `SpecSidebar` 분기
+  - ProjectSidebar: page section anchors, epic list (progress %), All Specs 링크
+  - EpicSidebar: epic summary + progress bar, page section anchors, child spec list, related docs
+  - SpecSidebar: 기존 동작 유지 (epic context block, sibling specs, document sections)
+- [x] Spec에 epicId 필드 추가 및 연결
+  - flow-core `Spec.cs`: `EpicId` optional property
+  - flow-core `SpecEditor.cs`: `SpecEditRequest.EpicId` 추가, `UpdateAsync`에서 적용
+  - flow-api `Requests.cs`: `CreateSpecRequest`, `UpdateSpecRequest`에 `EpicId` 파라미터
+  - flow-api `SpecEndpoints.cs`: create/update에서 `EpicId` 설정
+  - flow-web `flow.ts`: `Spec`, `CreateSpecRequest`, `UpdateSpecRequest`에 `epicId?`
+  - flow-web `useSpecEpic`: spec.epicId 직접 참조 + epics 스캔 fallback
+
+## Done (Backfill)
+
+- [x] 기존 spec에 epicId backfill (epic.childSpecIds 기반)
+  - `POST /api/projects/{projectId}/backfill-epic-ids` 엔드포인트 추가 (EpicEndpoints.cs)
+  - 모든 epic의 childSpecIds를 스캔해 spec.epicId가 비어 있거나 다른 경우 업데이트
+  - CAS (version check) 기반 안전한 저장, 상태 무관 (Draft 외도 가능)
+  - 결과: `{ processed, updated, skipped, conflicts }` 반환
+  - flow-web: `backfillEpicIds` API 클라이언트 + `useBackfillEpicIds` hook 추가
+  - 테스트 3건 추가 (통과 45/45)
+
+## Done (Phase 5)
+
+- [x] 편집 및 저장 모델 (Phase 5)
+  - ProjectOverviewPage: DocumentSection에 Edit/Save/Cancel 인라인 편집 (problem textarea + ListEditor for goals/nonGoals/contextAndConstraints/architectureOverview)
+  - EpicOverviewPage: NarrativeSection에 Edit/Save/Cancel 인라인 편집 (problem/goal textarea + NarrativeListEditor for scope/nonGoals/successCriteria)
+  - useProjectDocument/useUpdateProjectDocument, useEpicDocument/useUpdateEpicDocument hook 활용
+  - version conflict 감지 및 에러 메시지 표시
+  - 빈 항목 자동 필터링 (filter(Boolean))
+
+## Done (Hotspots & Cleanup)
+
+- [x] Hotspots 섹션 (review/failure/onHold bottleneck)
+  - C# `ProjectHotspots`, `HotspotEntry` 모델 추가
+  - `ProjectEndpoints.BuildHotspots` — review/failure/onHold top 5
+  - TS `HotspotEntry`, `ProjectHotspots` 타입 + `ProjectView.hotspots`
+  - `ProjectOverviewPage` Hotspots Cell UI (Flame 아이콘, 카테고리별 spec 링크)
+- [x] useSpecEpic fallback 제거 — spec.epicId만 참조, childSpecIds 스캔 삭제
+
+## Done (Sidebar Hotspots & ListEditor Extraction)
+
+- [x] Sidebar Hotspots quick links (ProjectSidebar)
+  - `ProjectSidebar`에 Hotspots 섹션 추가 (review/yellow, failure/red, onHold/orange)
+  - Sections 앵커에 `hotspots` 항목 + count badge 추가
+  - 핫스팟 없으면 섹션 숨김
+- [x] ListEditor 공통 컴포넌트 추출
+  - `components/ListEditor.tsx` 신규 생성
+  - `ProjectOverviewPage.ListEditor` 삭제 → 공통 컴포넌트 import
+  - `EpicOverviewPage.NarrativeListEditor` 삭제 → 공통 컴포넌트 import
 
 ## Next
 
-- [ ] Spec view에 상위 문맥 연결 (Phase 4): breadcrumb에 epic 정보, sidebar에 epic context block
-- [ ] Sidebar route-aware 모드 전환: project view / epic view / spec view 별 sidebar 내용
-
-## Later
-
-- [ ] Spec에 epicId 필드 추가 및 연결
-- [ ] 편집 및 저장 모델 (Phase 5)
-- [ ] Hotspots 섹션 (review/failure/dependency bottleneck)
+- [ ] liveExecution 최소 저장 계약과 evidence 형식 구체화
+- [ ] Hotspots dependency bottleneck 구현 (spec.Dependencies 일관성 확보 후)
+- [ ] ProjectSidebar hotspot count badge 빨간 액센트 추가

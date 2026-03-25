@@ -29,6 +29,24 @@ public sealed class ProjectView
     public required ProjectStats Stats { get; init; }
     public required ProjectDocumentSection Document { get; init; }
     public IReadOnlyList<EpicSummary> Epics { get; init; } = [];
+    public required ProjectHotspots Hotspots { get; init; }
+}
+
+/// <summary>프로젝트 운영 핫스팟</summary>
+public sealed class ProjectHotspots
+{
+    public IReadOnlyList<HotspotEntry> Review { get; init; } = [];
+    public IReadOnlyList<HotspotEntry> Failure { get; init; } = [];
+    public IReadOnlyList<HotspotEntry> OnHold { get; init; } = [];
+}
+
+/// <summary>핫스팟 항목 — spec 단위 문제 지점</summary>
+public sealed class HotspotEntry
+{
+    public required string SpecId { get; init; }
+    public required string Title { get; init; }
+    public string? EpicId { get; init; }
+    public required string Reason { get; init; }
 }
 
 /// <summary>프로젝트 집계 통계</summary>
