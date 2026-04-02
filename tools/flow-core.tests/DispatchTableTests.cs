@@ -121,6 +121,7 @@ public class DispatchTableTests
     // ── ShouldExclude tests ──
 
     [Theory]
+    [InlineData(FlowState.Active, ProcessingStatus.Done)]
     [InlineData(FlowState.Failed, ProcessingStatus.Error)]
     [InlineData(FlowState.Completed, ProcessingStatus.Done)]
     public void ShouldExclude_TerminalStates(FlowState state, ProcessingStatus ps)

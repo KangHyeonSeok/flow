@@ -45,6 +45,21 @@ public static class StreamJsonParser
 
                 if (type == "result")
                 {
+                    // is_error: true → 인증 실패 등 비정상 종료
+                    if (root.TryGetProperty("is_error", out var isErrorProp)
+                        && isErrorProp.ValueKind == JsonValueKind.True)
+                    {
+                        var errorResult = root.TryGetProperty("result", out var errResultProp)
+                            ? errResultProp.GetString() : null;
+                        return new CliResponse
+                        {
+                            ResponseText = errorResult ?? string.Empty,
+                            Success = false,
+                            ErrorMessage = errorResult ?? "backend returned is_error=true",
+                            StopReason = CliStopReason.Error
+                        };
+                    }
+
                     if (root.TryGetProperty("result", out var resultProp))
                         resultText = resultProp.GetString();
                 }

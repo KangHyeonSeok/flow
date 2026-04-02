@@ -187,7 +187,7 @@ condition 실패는 기본적으로 `draft`로 되돌린다.
 
 - `at`: ISO 8601 시각. 필수.
 - `role`: `planner` | `developer` | `test-validator` | `tester` | `system` | `user`. 필수.
-- `actor`: 실행 주체 식별자. 예: `runner-31234`, `copilot-cli`, `user`. 권장.
+- `actor`: 실행 주체 식별자. 예: `runner-31234`, `reviewer-agent`, `user`. 권장.
 - `model`: 사용한 모델명. 예: `gpt-5.4`, `gpt-5-mini`. 권장.
 - `summary`: 한두 문장 요약. 필수.
 - `comment`: 상세 판단이나 메모. 선택.
@@ -286,7 +286,7 @@ condition 실패는 기본적으로 `draft`로 되돌린다.
     {
       "at": "2026-03-09T10:22:00Z",
       "role": "test-validator",
-      "actor": "copilot-cli",
+      "actor": "reviewer-agent",
       "model": "gpt-5-mini",
       "summary": "테스트가 핵심 실패 경로를 검증하지 못한다.",
       "comment": "성공 케이스 assertion만 있고 spec이 요구하는 예외 경로 검증이 빠져 있다.",
@@ -310,7 +310,7 @@ condition 실패는 기본적으로 `draft`로 되돌린다.
 {
   "at": "2026-03-09T11:05:00Z",
   "role": "tester",
-  "actor": "copilot-cli",
+  "actor": "reviewer-agent",
   "model": "gpt-5-mini",
   "summary": "자동 테스트는 통과했지만 실제 사용자 환경에서 수동 확인이 필요하다.",
   "comment": "OS 권한 팝업은 자동화로 검증할 수 없어 사용자 확인이 필요하다.",

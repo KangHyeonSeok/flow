@@ -688,7 +688,8 @@ public sealed class FlowRunner
 
         var output = await agent.ExecuteAsync(input, ct);
 
-        _observer.OnAgentCompleted(spec.Id, agentRole.ToString(), output.Result.ToString(), output.Summary);
+        _observer.OnAgentCompleted(spec.Id, agentRole.ToString(), output.Result.ToString(),
+            output.Summary ?? output.Message);
         await LogActivity(spec, ActivityAction.AgentCompleted, runId,
             $"{agentRole} completed: {output.Result}", ct, currentAssignment.Id);
 
@@ -1061,7 +1062,8 @@ public sealed class FlowRunner
         FlowState.Implementation => spec.RetryCounters.ImplementationRetryCount,
         FlowState.TestGeneration => spec.RetryCounters.TestGenerationRetryCount,
         FlowState.Review => spec.RetryCounters.ReworkLoopCount,
-        _ => spec.RetryCounters.ReworkLoopCount
+        // Draft/Queued 단계의 실패는 implementation 카운터를 재사용 (rework 예산을 소모하지 않는다)
+        _ => spec.RetryCounters.ImplementationRetryCount
     };
 
     private static void IncrementRetryCounter(Spec spec)
@@ -1077,8 +1079,12 @@ public sealed class FlowRunner
             case FlowState.TestGeneration:
                 spec.RetryCounters.TestGenerationRetryCount++;
                 break;
-            default:
+            case FlowState.Review:
                 spec.RetryCounters.ReworkLoopCount++;
+                break;
+            default:
+                // Draft/Queued 단계의 실패는 implementation 카운터를 재사용
+                spec.RetryCounters.ImplementationRetryCount++;
                 break;
         }
     }

@@ -49,6 +49,15 @@ internal static class SpecCommand
             _ => SpecType.Feature
         };
 
+        var riskStr = opts.Get("risk")?.ToLowerInvariant();
+        var riskLevel = riskStr switch
+        {
+            "medium" => RiskLevel.Medium,
+            "high" => RiskLevel.High,
+            "critical" => RiskLevel.Critical,
+            _ => RiskLevel.Low
+        };
+
         var now = DateTimeOffset.UtcNow;
         var spec = new Spec
         {
@@ -58,6 +67,7 @@ internal static class SpecCommand
             Type = specType,
             State = FlowState.Draft,
             ProcessingStatus = ProcessingStatus.Pending,
+            RiskLevel = riskLevel,
             Problem = opts.Get("problem"),
             Goal = opts.Get("goal"),
             CreatedAt = now,

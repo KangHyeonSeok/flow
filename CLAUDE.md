@@ -77,8 +77,8 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
 
 ## Current Iteration Snapshot
 
-- Last Updated: 2026-04-02 02:05
-- Focus: Partner native spec ops 기본 권한을 전체 허용으로 정렬하고 기존 런타임까지 동기화.
+- Last Updated: 2026-04-02 15:56
+- Focus: Slack clone 진행 상태 스팸 원인을 front task-progress 경로 기준으로 정리하고, delivery throttle + progress 요약을 live dev에 반영한다.
 - Done:
   - Phase 1-5 완료.
   - Hotspots 섹션 구현 + Sidebar quick links.
@@ -165,24 +165,82 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
     3. `partner-sync-all-runtimes` 출력과 문서를 전체 권한 기본값 기준으로 갱신.
     4. `stack-config.md`, `native-spec-ops/SKILL.md` 에 deny-only 운영 예시 추가.
     5. `pnpm compose -- up -d --force-recreate` 로 전체 partner + dashboard 컨테이너 재기동 후 live `policy:show` 검증 완료.
+  - **Copilot ACP 실패 구조화 (Round 30)**:
+    1. worker IPC / dependency graph / front trace / task routing metrics 에 `failureInfo` 구조(`provider`, `type`, `sessionCwd`, `promptPathHint` 등) 추가.
+    2. Copilot ACP / Claude CLI / dependency 실패를 공통 classifier 로 정규화하고 timeout slice 를 metrics/trace 에 남기도록 연결.
+    3. front trace completion 에 failure summary 집계 추가, tuning 문서에 metrics schema 확장 반영.
+  - **Copilot ACP cwd anchor 완화 (Round 32)**:
+    1. `resolveCopilotWorkingDirectory()` 가 deepest leaf 대신 root 아래 2단계 anchor cwd 를 선택하도록 조정.
+    2. exact 파일/하위 경로는 기존처럼 `promptPathHint` 로 유지하여 범용 작업과 타깃 파일 탐색을 함께 보존.
+    3. `/workspace/...` 일반 운영 문서/비프로젝트 경로도 broader workspace anchor 로 처리하는 회귀 테스트 추가.
+  - **Schedule front fast-path + shared skill command (Round 31)**:
+    1. `src/partner/schedule-ops.ts` 추가 — `data/schedules.json` CRUD/list/validation 공용 모듈 구현, front 와 skill CLI 가 동일 로직 재사용.
+    2. front analyzer 계약에 `type: "schedule"` 액션 추가, schedule 조회/추가/수정/삭제/비활성화 요청을 worker 분해 없이 front 에서 즉시 실행하도록 연결.
+    3. `skills/schedule/schedule.ts` 추가 + `skills/schedule/SKILL.md` 갱신 — 실행형 스킬 명령과 front fast-path 계약 문서화.
+    4. `src/schedule-ops.test.ts`, `src/front-analyzer.test.ts` 추가 — CRUD/cron validation 및 analyzer schedule 파싱 회귀 테스트 고정.
+    5. bulk 연산(`delete-all`, `disable-all`) 추가 — `전체 스케줄 삭제/중지` 요청도 개별 task 4개 분해 없이 front 에서 직접 처리하도록 확장.
+  - **Front single-task 우선 정책 전환 (Round 33)**:
+    1. `prompts/front-analyzer.template.md` 를 single-task 우선 정책으로 수정하고, 병렬 이득/명확한 단계 경계가 있을 때만 decomposition 하도록 규칙을 재정의.
+    2. `src/partner/front/model-routing.ts` 에서 `taskCount` 기반 complexity 상승을 제거해 decomposition 여부와 complexity 판정을 분리.
+    3. `src/partner/front/task-collapse.ts` 추가 — 동일 고성능 모델(`copilot-gpt-5.4`/`copilot-opus`/`claude-opus`)로 가는 선형 task chain 은 graph 생성 전 단일 task로 재통합.
+    4. `src/partner/front/task-collapse.test.ts`, `src/partner/front/model-routing.test.ts` 로 회귀 테스트 추가.
+  - **Copilot ACP 프로젝트/공유 경로 힌트 보강 (Round 34)**:
+    1. `src/company/project-context-builder.ts` 에 `toContainerWorkspacePathHint()` 추가 — 저장된 상대 `workspacePath` 를 `/workspace/...` 또는 `/shared/...` 컨테이너 절대 경로 힌트로 변환.
+    2. 채널 프로젝트 컨텍스트와 Slack 컨텍스트에 `Container path hint` 를 함께 주입해 Copilot 이 `/app` 대신 실제 작업 루트를 찾기 쉽게 보강.
+    3. `src/partner/worker/worker-process.ts` 가 decomposition 된 worker task 에도 channel project context 를 주입하도록 수정.
+    4. `src/project-metadata.test.ts` 기대값 확장 후 `tsc` + 관련 `vitest` 19개 통과로 회귀 검증.
+  - **Front-safe Slack skill fast-path 추가 (Round 35)**:
+    1. front analyzer 계약에 `type: "skill"` 추가 — `slack-history`, `slack-canvas`, `slack-file-download` 만 whitelist 기반으로 front 에서 직접 실행하도록 확장.
+    2. `src/partner/front/front-skill-ops.ts` 추가 — 고정된 `pnpm exec tsx skills/...` 커맨드만 실행하고, 첨부 Slack 파일 여러 개도 front 가 일괄 다운로드 후 단일 후속 task 로 worker 에 넘기도록 구현.
+    3. `prompts/front-analyzer.template.md` 에 Slack skill direct/delegate 규칙 추가 — retrieval 전용 요청은 direct, 분석/요약 후속 작업은 `delegatePrompt` 기반 단일 task 로 위임.
+    4. `src/front-analyzer.test.ts`, `src/front-skill-ops.test.ts` 로 skill parsing / 다중 첨부파일 batch planning 회귀 테스트 추가.
+  - **copilot-cli 스킬 제거 및 참조 정리 (Round 36)**:
+    1. 공용 `skills/copilot-cli` 와 runtime 설치본(`subak`, `serv`)을 삭제.
+    2. `skill-registry`, 기본/system prompt, Claude skill sync 스크립트에서 `copilot-cli` 참조 제거.
+    3. active runtime prompt/knowledge/schedule 에 남은 `copilot-cli` 의존 문구를 일반 지침으로 치환.
+    4. archived flow 문서의 `copilot-cli` actor 예시를 generic actor 로 정리.
+  - **Copilot ACP idle timeout 15분 상향 (Round 37)**:
+    1. `src/core/config.ts` 기본 `COPILOT_AGENT_IDLE_TIMEOUT_MS` 를 180000 -> 900000 으로 상향.
+    2. `scripts/lib/partner-stack-admin.mjs` runtime `.env` 템플릿 기본값을 15분으로 상향.
+    3. `docs/stack-config.md` 에 현재 기본값 15분을 명시.
+    4. `dev/.runtime/.env` live 값을 15분으로 갱신하고 재기동 대상으로 표시.
+  - **Slack progress delivery hardening (Round 38)**:
+    1. clone 요청 trace(`front-1-1775112474253`) 기준으로 spam 경로를 front single-task `task-progress` + raw git clone status 로 특정.
+    2. `src/partner/slack/app.ts` 에 message key 기준 공통 Slack update throttle/dedupe 추가 — front/direct progress 모두 `config.slack.progressUpdateMinIntervalMs` 를 공유.
+    3. `src/partner/slack/progress.ts` 가 `git clone` 전송 로그와 multiline shell output 을 짧은 상태문으로 요약하도록 보강.
+    4. `src/partner/slack/progress.test.ts` 에 clone/multiline progress 회귀 테스트 추가.
+  - **pm -> dev channel smoke test 문서화 (Round 39)**:
+    1. `C0ARA2ZF3BJ` 채널에서 `pm` 이 `dev` 를 mention 하는 `app_mention` 경로로 단일 파일 생성 요청 검증.
+    2. thread reply, `partner-dev` 로그, `/workspace/slack-smoke/pm-channel-test.txt` 생성까지 성공 확인.
+    3. `docs/slack-channel-smoke-test.md` 에 재현 절차, 성공 기준, 확인 명령, DM 스코프 제약 문서화.
+  - **Completion 본문 transcript 정제 (Round 40)**:
+    1. `src/partner/front/reviewer.ts` 에 single-task 완료 응답 후처리 추가 — `Cloning repository`, `STATUS:`, `<exited with exit code ...>` 같은 transcript marker 가 섞인 경우 마지막 사용자용 요약 anchor 부터만 전달.
+    2. `src/partner/front/reviewer.test.ts` 추가 — clone completion transcript trimming 회귀 테스트 고정.
 - Now:
-  - tuned prompt 자동 diff/승인 플로우 정의.
-  - labeling sample -> gold label 변환 반자동화.
-  - ACP 실제 timeout trace 수집 후 idle timeout 기준 재조정 여부 판단.
+  - clone completion 본문이 실제 Slack thread 에서 정제된 형태로 보이는지 재확인.
+  - DM/direct 요청이 프로젝트 힌트 없이 `/workspace` fallback 으로 내려가는 경로를 보강할 지점 정리.
+  - 간단한 계산기 요청이 MyKnitLog 작업으로 오인된 front context/Slack 문맥 사례를 분리 분석.
 - Next:
-  - tuned prompt 자동 diff/승인 플로우 정의.
+  - front-safe skill 범위를 upload 포함으로 넓힐지 검토.
+  - 필요 시 anchor depth (1단계 vs 2단계) 조정 실험.
   - labeling sample -> gold label 변환 반자동화.
-  - ACP 실제 timeout trace 수집 후 idle timeout 기준 재조정 여부 판단.
 - Risks:
   - 회사 삭제 시 dashboardDataDir이 파일시스템에 남음 — 운영자 수동 정리 필요.
   - 파트너 삭제 시 워크스페이스/런타임 파일 잔존 — 수동 정리 필요.
   - 프롬프트 토큰 증가 (~2배) → 백엔드 비용/속도에 영향 가능. 모니터링 필요.
   - Copilot ACP 는 initialize 성공 후에도 잘못된 session cwd 또는 긴 무응답으로 180초 idle timeout 이 발생할 수 있다.
+  - ACP timeout 은 현재 대부분 `copilot-gpt-5.4` 대형 탐색 작업에서 보이지만, structured metric 누적 전까지 cwd 문제와 idle budget 문제의 비중은 확정할 수 없다.
+  - anchor cwd 를 너무 얕게 잡으면 검색 범위가 다시 넓어져 timeout 이 늘 수 있다. 현재는 root 아래 2단계 anchor 로만 완화.
   - native spec ops 전체 권한 기본화 이후에는 개별 제한이 필요하면 runtime agent.json 의 `deny` 로 명시해야 한다.
   - 관리자 메트릭은 현재 전체 누적 기준이다. 기간 필터는 아직 없다.
   - Langfuse remote ingestion 은 아직 미연결이다. 현재는 로컬 JSONL trace 를 기준 데이터로 사용한다.
   - `PARTNER_DSPY_TUNER_COMMAND` 가 미설정이면 관리자 버튼은 비활성화된다. 실제 DSPy optimizer 는 아직 외부 구현이 필요하다.
   - current tuning result comparison 은 핵심 수치만 표시한다. confusion matrix 등 richer eval artifact 는 아직 없다.
+  - single-task 우선 전환 후에도 병렬성이 실제로 필요한 작업 slice 는 별도 샘플링이 필요하다.
+  - 모든 skills/ 를 front 로 직접 실행하면 권한/부작용 범위가 커진다. 현재는 read-mostly Slack skill 3종만 whitelist 했다.
+  - skill direct/delegate 결과가 길어지면 후속 단일 task 프롬프트 길이가 커질 수 있다. trace 와 응답 시간 모니터링이 필요하다.
+  - idle timeout 을 15분으로 올려도 DM/direct 요청이 프로젝트 힌트 없이 `/workspace` 로 시작되면 대형 저장소 루트 탐색 비용 문제는 남을 수 있다.
+  - progress 텍스트를 과도하게 요약하면 장기 작업의 세부 단계가 덜 보일 수 있다. 실제 운영에서 정보 손실 여부 확인이 필요하다.
 - Learnings:
   - stack.json 기반 CRUD에서 uniqueness 검증 시 자기 자신을 ignoredOwners에 포함해야 편집이 가능.
   - run-command 엔드포인트는 반드시 화이트리스트 방식으로 허용 명령만 실행. 프리폼 shell 실행은 보안 위험.
@@ -193,10 +251,13 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - run-command 화이트리스트 매칭 시 trailing args 허용 여부를 명시적으로 제어 (`allowTrailingArgs` 플래그).
   - DOM querySelector 후 addEventListener 호출 전에 반드시 null 체크 필요. 방어적 가드 일관 적용.
   - Slack `task-progress`는 worker progress 스로틀과 별개 경로다. task별 별도 스로틀/중복 텍스트 방지가 없으면 `chat.update` 레이트리밋이 급증한다.
+  - front single-task 경로에서도 shell raw output 이 progress status 로 들어오면 upstream throttle 만으로는 Slack flood 를 막기 부족하다. Slack 전달 직전 공통 throttle 과 상태 요약이 함께 필요하다.
   - `auto` 모델 선택은 설정값으로만 남기면 안 된다. queue payload 에 task별 resolved model 을 실어야 실행/로그/디버깅이 일치한다.
   - 경량 모델 overflow concurrency 는 “총 동시성 증가”가 아니라 “mini 전용 추가 슬롯”으로 구현해야 무거운 작업이 extra slot을 잠식하지 않는다.
   - Copilot ACP 는 `--add-dir` 만 추가해도 충분하지 않다. process cwd 와 `session/new` cwd 가 partner workspace 와 맞지 않으면 `/workspace` 탐색 실패가 180초 idle timeout 으로 표면화될 수 있다.
   - Copilot ACP timeout detail 에 stderr tail 과 cwd 계열 진단값이 없으면 initialize 성공/세션 실패/도구 무응답을 로그만으로 구분하기 어렵다.
+  - ACP 실패는 문자열 한 줄만 남기면 routing/tuning 개선에 쓸 수 없다. worker IPC 단계에서 provider/type/sessionCwd/promptPathHint 를 구조화해 trace/metrics 로 흘려야 slice 분석이 가능하다.
+  - Partner 작업은 프로젝트 구현 외에도 운영 문서, shared 자산, 루트 스크립트 수정이 섞인다. session cwd 를 특정 프로젝트 루트로 고정하면 범용 작업 실패가 늘 수 있어 anchor + prompt hint 조합이 더 안전하다.
   - complexity 튜닝은 production runtime 에 DSPy 를 직접 넣기보다, Langfuse trace 기반 eval set + DSPy 오프라인 optimizer 로 프롬프트를 갱신하는 흐름이 안전하다.
   - trace 는 analyzer 결과만 남기면 부족하다. routing plan 과 최종 task outcome 을 같은 `traceId` 로 연결해야 labeling/eval set 에 바로 쓸 수 있다.
   - 기존 파트너 마이그레이션은 코드만 추가하면 적용되지 않는다. stack.json 과 각 workspace `.runtime/.env` 를 함께 동기화해야 실제 런타임 동작이 바뀐다.
@@ -210,10 +271,24 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - host compose wrapper 와 container entrypoint 의 build hash 알고리즘이 다르면 `.partner-runtime/dist` 와 state 를 미리 동기화해도 각 컨테이너가 모두 재빌드한다. relative path + file hash 계약을 양쪽에서 동일하게 유지해야 한다.
   - 프로젝트별 작업 폴더는 `shared/projects/...`, `workspace/...`, 그 외 커스텀 루트가 혼재할 수 있으므로 enum/path prefix 제한보다 freeform string + prompt 주입이 운영상 안전하다.
   - native spec ops 권한을 기본 전체 허용으로 바꾸려면 default config 만 바꾸면 부족하다. runtime 생성 템플릿, fallback 정책, 기존 `.runtime/agent/agent.json` sync 를 함께 맞춰야 한다.
+  - 스케줄 편집은 worker로 넘기면 model routing + queue 대기 비용만 추가되고 실질 작업은 로컬 JSON CRUD다. front가 구조화 액션으로 바로 처리하는 편이 더 맞다.
+  - 실행형 스킬이 필요해도 비즈니스 로직은 skill 파일에만 두지 말고 `src` 공용 모듈로 빼서 front fast-path 와 CLI가 같은 검증/쓰기 규약을 공유해야 drift가 줄어든다.
+  - schedule fast-path 가 들어가도 지원 연산 집합에 없는 요청은 모델이 기존처럼 decomposition 으로 우회한다. `전체 삭제/전체 중지` 같은 bulk 의도도 별도 operation 으로 계약에 넣어야 실제 현장 요청이 direct path 로 고정된다.
+  - decomposition 여부와 complexity를 같은 신호로 취급하면 분해된 요청이 자동으로 더 비싼 모델로 몰리는 자기증폭이 생긴다. complexity는 작업 본질과 실패 비용만 반영해야 한다.
+  - 프로젝트 메타데이터의 `workspacePath` 는 운영 편의상 상대 경로로 저장해도 되지만, Copilot prompt 에는 `/workspace/...` 또는 `/shared/...` 절대 컨테이너 힌트를 같이 넣어야 cwd resolver 가 실제 경로 후보로 인식한다.
+  - direct worker 경로만 프로젝트 컨텍스트를 받으면 부족하다. decomposition 된 child task 에도 같은 channel project context 를 넣어야 `/app` 기준 오판이 줄어든다.
+  - 스킬 fast-path 는 "모든 skill front 실행"이 아니라 deterministic + whitelist 기반으로 좁혀야 안전하다.
+  - Slack 첨부 파일이 여러 개여도 front 가 먼저 일괄 다운로드하고, 후속 해석만 단일 worker task 로 넘기면 file-count 기반 decomposition 압력을 줄일 수 있다.
+  - 스킬 제거는 폴더 삭제만으로 끝나지 않는다. runtime prompt, knowledge, installed skill copy, sync 스크립트까지 같이 정리해야 재등장과 stale 참조를 막을 수 있다.
+  - Slack 문맥에 직전 MyKnitLog 스레드 이력이 길게 섞인 상태에서 direct DM 요청이 들어오면, 명시적 프로젝트 힌트가 없을 때 front/worker 가 이전 프로젝트 맥락으로 오인할 수 있다. timeout 상향만으로는 해결되지 않는다.
 - Verification:
   - `node --check` — server.mjs, admin.js, partner-stack-admin.mjs, extract-complexity-labeling-samples.mjs 모두 0 errors.
   - `pnpm exec tsc --noEmit` — 0 errors.
+  - `pnpm exec vitest run src/partner/front/model-routing.test.ts src/partner/front/task-collapse.test.ts src/front-analyzer.test.ts src/partner/front/front-trace.test.ts` — 8 passed, 0 failed.
   - `pnpm exec vitest run src/dependency-graph.test.ts src/worker-queue.test.ts src/partner/front/model-routing.test.ts src/partner/front/front-trace.test.ts src/config.test.ts` — 26 passed, 0 failed.
+  - `pnpm exec tsc --noEmit && pnpm exec vitest run src/schedule-ops.test.ts src/front-analyzer.test.ts && pnpm exec tsx skills/schedule/schedule.ts list` — 5 passed, CLI 출력 `현재 등록된 스케줄이 없습니다.` 확인.
+  - `pnpm compose -- up -d --force-recreate subak` — 대상 partner container 재생성 완료.
+  - `docker exec partner-subak grep -n "delete-all\|disable-all\|전체 스케줄 삭제" /app/prompts/front-analyzer.template.md` — 런타임 컨테이너에 bulk schedule prompt 규칙 반영 확인.
   - `node scripts/extract-complexity-labeling-samples.mjs --limit 5` — 실행 성공, 현재 trace 부재로 0 candidates 출력.
   - `node scripts/partner-sync-all-runtimes.mjs --dry-run` — 10개 파트너 변경 예정 확인.
   - `node scripts/partner-sync-all-runtimes.mjs` — 10개 파트너 동기화 완료.
@@ -235,8 +310,35 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - `pnpm compose -- up -d --force-recreate` — partner 10개 + company-dashboard 컨테이너 재생성 완료.
   - `pnpm dashboard:status:build` — 5개 회사 dashboard status 재생성 완료.
   - `docker exec partner-subak pnpm exec tsx skills/native-spec-ops/native-spec-ops.ts policy:show` — live container 에서 `enabled=true`, `allow=["*:*"]`, `deny=[]` 확인.
+  - `pnpm exec tsc --noEmit` — Copilot ACP failureInfo 구조화 변경 후 0 errors.
+  - `pnpm exec vitest run src/partner/worker/task-failure.test.ts src/worker-queue.test.ts src/dependency-graph.test.ts src/partner/front/front-trace.test.ts` — 24 passed, 0 failed.
+  - `pnpm exec tsc --noEmit` — anchor cwd 변경 후 0 errors.
+  - `pnpm exec vitest run src/copilot-acp-runtime.test.ts src/partner/worker/task-failure.test.ts src/worker-queue.test.ts src/dependency-graph.test.ts src/partner/front/front-trace.test.ts` — 28 passed, 0 failed.
+  - `pnpm exec tsc --noEmit && pnpm exec vitest run src/project-metadata.test.ts src/partner/front/front-trace.test.ts src/partner/worker/task-failure.test.ts src/worker-queue.test.ts src/copilot-acp-runtime.test.ts` — 19 passed, 0 failed.
+  - `pnpm compose -- up -d --force-recreate` — partner 10개 + company-dashboard 컨테이너 재생성 완료, host `pnpm build` 포함 반영.
+  - `docker exec partner-dev sh -lc "grep -n 'Container path hint' /app/dist/company/project-context-builder.js /app/dist/partner/slack/app.js"` — live container dist 에 project/slack path hint 반영 확인.
+  - `docker exec partner-dev sh -lc "grep -n 'Project context injection failed\|Channel project context' /app/dist/partner/worker/worker-process.js"` — live container dist 에 decomposed worker project context 주입 반영 확인.
+  - `pnpm exec tsc --noEmit && pnpm exec vitest run src/schedule-ops.test.ts src/front-analyzer.test.ts && pnpm exec tsx skills/schedule/schedule.ts list` — 3 passed, CLI 출력 `현재 등록된 스케줄이 없습니다.` 확인.
+  - `pnpm exec tsc --noEmit` — front skill fast-path 변경 후 0 errors.
+  - `pnpm exec vitest run src/front-analyzer.test.ts src/front-skill-ops.test.ts src/partner/front/front-trace.test.ts` — 7 passed, 0 failed.
+  - `grep -RInE --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist 'copilot-cli|skills/copilot-cli|copilot\\.sh delegate|copilot\\.sh ask' ...` — active code/runtime 문서 참조 위치 확인, history/backups 잔존 확인.
+  - `node scripts/sync-claude-skills.mjs` — `~/.claude/skills` 재동기화 완료, installed skill 목록에서 `copilot-cli` 제거 확인.
+  - `pnpm exec tsc --noEmit` — Slack progress delivery hardening 변경 후 0 errors.
+  - `pnpm exec vitest run src/partner/slack/progress.test.ts` — 6 passed, 0 failed.
+  - `pnpm compose -- up -d --force-recreate dev` — dev 컨테이너 재기동 완료.
+  - `docker exec partner-dev sh -lc "grep -n 'git clone 진행 중\|progressUpdateMinIntervalMs\|updateSlackMessage' /app/dist/partner/slack/progress.js /app/dist/partner/slack/app.js"` — live dist 에 progress 요약/공통 throttle 반영 확인.
+  - `docker exec partner-subak ... chat.postMessage(channel=C0ARA2ZF3BJ, text='<@U0ALGECA883> /workspace/slack-smoke/pm-channel-test.txt ...')` — `pm` 봇 채널 테스트 메시지 전송 성공 (`ts=1775117192.306329`).
+  - `docker exec partner-subak ... conversations.replies(channel=C0ARA2ZF3BJ, ts=1775117192.306329)` — `dev` 스레드 응답 1건 확인.
+  - `docker exec partner-dev node -e "... /workspace/slack-smoke/pm-channel-test.txt ..."` — smoke test 파일 생성 및 내용 확인.
+  - `docker logs --since 5m partner-dev | grep -iE 'Mentioned by|front-|task-|slack-app-mention|Queued user request'` — `Mentioned by 수박 ...`, queue/task completion 로그 확인.
+  - `docker exec partner-subak ... chat.postMessage(channel=C0ARA2ZF3BJ, text='<@U0ALGECA883> https://github.com/paperclipai/paperclip ...')` — 장기 clone regression 요청 전송 성공 (`ts=1775117367.310959`).
+  - `docker exec partner-subak ... conversations.replies(channel=C0ARA2ZF3BJ, ts=1775117367.310959)` — progress flood 없이 최종 응답 1건 확인.
+  - `docker exec partner-dev node -e "... /workspace/slack-smoke/paperclip-regression ..."` — clone 결과 디렉터리 생성 확인.
+  - `docker logs --since 12m partner-dev | grep -iE 'front-2-1775117370122|task-front-2-1775117370122-1|Completed task'` — task 시작/완료 시각 확인 (`08:09:40` -> `08:10:41`).
+  - `pnpm exec tsc --noEmit && pnpm exec vitest run src/partner/front/reviewer.test.ts src/partner/slack/progress.test.ts` — 8 passed, 0 failed.
   - Pending: `sh deploy/container-entrypoint.sh` build lock recovery 동작 확인.
   - Pending: 전체 partner 대상 startup 검증.
+  - `grep -RIn "COPILOT_AGENT_IDLE_TIMEOUT_MS" ...` — source 기본값/템플릿/live dev `.env` 모두 기존 180000 확인.
 
 ## 2026-04-01 (Copilot ACP NDJSON 프로토콜 수정 Round 15)
 

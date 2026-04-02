@@ -98,4 +98,31 @@ public class StreamJsonParserTests
         response.StopReason.Should().Be(CliStopReason.Error);
         response.ErrorMessage.Should().Contain("no result");
     }
+
+    [Fact]
+    public void Parse_ResultIsError_ReturnsError()
+    {
+        var raw = """
+            {"type":"result","subtype":"success","is_error":true,"result":"Not logged in · Please run /login"}
+            """;
+
+        var response = StreamJsonParser.Parse(raw);
+
+        response.Success.Should().BeFalse();
+        response.StopReason.Should().Be(CliStopReason.Error);
+        response.ErrorMessage.Should().Contain("Not logged in");
+    }
+
+    [Fact]
+    public void Parse_ResultIsErrorFalse_ReturnsSuccess()
+    {
+        var raw = """
+            {"type":"result","is_error":false,"result":"정상 결과"}
+            """;
+
+        var response = StreamJsonParser.Parse(raw);
+
+        response.Success.Should().BeTrue();
+        response.ResponseText.Should().Be("정상 결과");
+    }
 }
