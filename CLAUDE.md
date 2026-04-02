@@ -77,8 +77,8 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
 
 ## Current Iteration Snapshot
 
-- Last Updated: 2026-04-02 03:05
-- Focus: Partner 공유 런타임 build lock 대기 문제 복구 및 중복 startup build 제거.
+- Last Updated: 2026-04-02 02:05
+- Focus: Partner native spec ops 기본 권한을 전체 허용으로 정렬하고 기존 런타임까지 동기화.
 - Done:
   - Phase 1-5 완료.
   - Hotspots 섹션 구현 + Sidebar quick links.
@@ -148,18 +148,37 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
     3. `scripts/watch-restart.mjs` 가 초기 기동 시 기존 shared dist 산출물을 재사용하고 불필요한 startup `pnpm build` 를 건너뛰도록 수정.
     4. `deploy/container-entrypoint.sh` 의 build/deps hash 계산을 `scripts/partner-compose.mjs` 와 같은 relative-path 기반 규약으로 맞춰 host build 결과를 컨테이너가 재사용하도록 수정.
     5. `docs/server-restart-guide.md` 에 공유 build lock / stale lock recovery / startup build 생략 동작 문서화.
+  - **프로젝트 작업 폴더 경로 입력 + 프롬프트 주입 (Round 27)**:
+    1. 프로젝트 메타데이터에 `workspacePath` 추가 — stack CRUD, REST API, CLI, dashboard project modal 모두 자유 입력 필드로 연결.
+    2. company dashboard 프로젝트 카드/상세에 작업 폴더 경로 표시 추가.
+    3. Slack 채널 대화의 `Slack conversation context` 와 worker의 `Channel project context` 모두에 작업 폴더 경로가 주입되도록 연결.
+    4. `project-context-builder` 캐시를 프로젝트 CRUD 후 즉시 무효화하도록 API route 보강.
+    5. 검증: `pnpm exec tsc --noEmit`, `vitest` 7 passed, `node --check` 0 errors.
+  - **Copilot ACP cwd/진단 보강 (Round 28)**:
+    1. `src/utils/copilot-acp-runtime.ts` 추가 — 프롬프트 내 `/workspace|/shared|/app` 경로를 실제 runtime root 로 매핑하고 session cwd 후보를 결정하는 헬퍼 구현.
+    2. `src/utils/copilot-acp.ts` 가 process cwd 를 `/app` 대신 partner workspace root 로 사용하고, `session/new` 에도 resolved cwd 를 전달하도록 수정.
+    3. Copilot ACP 실패 detail 에 `processCwd`, `sessionCwd`, `workspaceDir`, `sharedDir`, `promptPathHint`, `stderrTail` 을 포함하도록 진단 포맷 보강.
+    4. `src/copilot-acp-runtime.test.ts` 추가 — cwd resolution / diagnostic formatting 회귀 테스트 고정.
+  - **Native spec ops 전체 권한 기본화 (Round 29)**:
+    1. `agents/default.json`, runtime `agent.json` 생성 템플릿, native-spec-ops fallback 을 `enabled: true`, `allow: ["*:*"]`, `deny: []` 로 정렬.
+    2. runtime sync 가 기존 `.runtime/agent/agent.json` 도 함께 보정하도록 확장하고, partner별 `companyId` scope 를 권한 블록에 주입.
+    3. `partner-sync-all-runtimes` 출력과 문서를 전체 권한 기본값 기준으로 갱신.
+    4. `stack-config.md`, `native-spec-ops/SKILL.md` 에 deny-only 운영 예시 추가.
+    5. `pnpm compose -- up -d --force-recreate` 로 전체 partner + dashboard 컨테이너 재기동 후 live `policy:show` 검증 완료.
 - Now:
-  - gold-label 편집/업로드 UI 또는 관리 스크립트 추가.
-  - Langfuse remote ingestion 연결 방식 결정.
-  - build lock recovery 실제 컨테이너 startup 검증.
+  - tuned prompt 자동 diff/승인 플로우 정의.
+  - labeling sample -> gold label 변환 반자동화.
+  - ACP 실제 timeout trace 수집 후 idle timeout 기준 재조정 여부 판단.
 - Next:
   - tuned prompt 자동 diff/승인 플로우 정의.
-  - 튜닝 실행 이력/기간 필터를 관리자 화면에 추가.
   - labeling sample -> gold label 변환 반자동화.
+  - ACP 실제 timeout trace 수집 후 idle timeout 기준 재조정 여부 판단.
 - Risks:
   - 회사 삭제 시 dashboardDataDir이 파일시스템에 남음 — 운영자 수동 정리 필요.
   - 파트너 삭제 시 워크스페이스/런타임 파일 잔존 — 수동 정리 필요.
   - 프롬프트 토큰 증가 (~2배) → 백엔드 비용/속도에 영향 가능. 모니터링 필요.
+  - Copilot ACP 는 initialize 성공 후에도 잘못된 session cwd 또는 긴 무응답으로 180초 idle timeout 이 발생할 수 있다.
+  - native spec ops 전체 권한 기본화 이후에는 개별 제한이 필요하면 runtime agent.json 의 `deny` 로 명시해야 한다.
   - 관리자 메트릭은 현재 전체 누적 기준이다. 기간 필터는 아직 없다.
   - Langfuse remote ingestion 은 아직 미연결이다. 현재는 로컬 JSONL trace 를 기준 데이터로 사용한다.
   - `PARTNER_DSPY_TUNER_COMMAND` 가 미설정이면 관리자 버튼은 비활성화된다. 실제 DSPy optimizer 는 아직 외부 구현이 필요하다.
@@ -176,6 +195,8 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - Slack `task-progress`는 worker progress 스로틀과 별개 경로다. task별 별도 스로틀/중복 텍스트 방지가 없으면 `chat.update` 레이트리밋이 급증한다.
   - `auto` 모델 선택은 설정값으로만 남기면 안 된다. queue payload 에 task별 resolved model 을 실어야 실행/로그/디버깅이 일치한다.
   - 경량 모델 overflow concurrency 는 “총 동시성 증가”가 아니라 “mini 전용 추가 슬롯”으로 구현해야 무거운 작업이 extra slot을 잠식하지 않는다.
+  - Copilot ACP 는 `--add-dir` 만 추가해도 충분하지 않다. process cwd 와 `session/new` cwd 가 partner workspace 와 맞지 않으면 `/workspace` 탐색 실패가 180초 idle timeout 으로 표면화될 수 있다.
+  - Copilot ACP timeout detail 에 stderr tail 과 cwd 계열 진단값이 없으면 initialize 성공/세션 실패/도구 무응답을 로그만으로 구분하기 어렵다.
   - complexity 튜닝은 production runtime 에 DSPy 를 직접 넣기보다, Langfuse trace 기반 eval set + DSPy 오프라인 optimizer 로 프롬프트를 갱신하는 흐름이 안전하다.
   - trace 는 analyzer 결과만 남기면 부족하다. routing plan 과 최종 task outcome 을 같은 `traceId` 로 연결해야 labeling/eval set 에 바로 쓸 수 있다.
   - 기존 파트너 마이그레이션은 코드만 추가하면 적용되지 않는다. stack.json 과 각 workspace `.runtime/.env` 를 함께 동기화해야 실제 런타임 동작이 바뀐다.
@@ -187,6 +208,8 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - 공유 build lock 을 디렉터리 존재 여부만으로 관리하면 강제 재시작 뒤 orphan lock 이 남아 전체 파트너 startup 을 막을 수 있다. heartbeat 기반 stale 판단이 필요하다.
   - entrypoint 에서 이미 빌드한 뒤 watch 모드가 startup 직후 다시 `pnpm build` 를 수행하면 공용 dist 볼륨에서 중복 빌드 비용이 커진다. 초기 startup 은 기존 산출물 재사용이 낫다.
   - host compose wrapper 와 container entrypoint 의 build hash 알고리즘이 다르면 `.partner-runtime/dist` 와 state 를 미리 동기화해도 각 컨테이너가 모두 재빌드한다. relative path + file hash 계약을 양쪽에서 동일하게 유지해야 한다.
+  - 프로젝트별 작업 폴더는 `shared/projects/...`, `workspace/...`, 그 외 커스텀 루트가 혼재할 수 있으므로 enum/path prefix 제한보다 freeform string + prompt 주입이 운영상 안전하다.
+  - native spec ops 권한을 기본 전체 허용으로 바꾸려면 default config 만 바꾸면 부족하다. runtime 생성 템플릿, fallback 정책, 기존 `.runtime/agent/agent.json` sync 를 함께 맞춰야 한다.
 - Verification:
   - `node --check` — server.mjs, admin.js, partner-stack-admin.mjs, extract-complexity-labeling-samples.mjs 모두 0 errors.
   - `pnpm exec tsc --noEmit` — 0 errors.
@@ -199,8 +222,21 @@ Iteration Notes는 장기 로그가 아니라 다음 반복이 5분 안에 맥�
   - `pnpm dashboard:status:build` — 5개 회사 dashboard status 재생성 완료.
   - `node --check apps/company-dashboard/server.mjs && node --check scripts/lib/front-analyzer-dspy.mjs && node --check scripts/front-analyzer-dspy-tune.mjs` — 0 errors.
   - `pnpm exec tsc --noEmit && pnpm exec vitest run src/front-analyzer-dspy.test.ts src/partner/front/front-trace.test.ts src/partner/front/model-routing.test.ts` — 7 passed, 0 failed.
+  - `pnpm exec tsc --noEmit && pnpm exec vitest run src/project-metadata.test.ts src/partner/slack/progress.test.ts src/partner/front/front-trace.test.ts` — 7 passed, 0 failed.
+  - `pnpm exec tsc --noEmit` — Copilot ACP cwd/diagnostic 변경 후 0 errors.
+  - `pnpm exec vitest run src/copilot-acp-runtime.test.ts` — 3 passed, 0 failed.
+  - `pnpm compose -- up -d --force-recreate subak dev` — 대상 partner container 재기동 완료.
+  - `docker exec partner-dev ... runCopilotSimplePrompt("Read /workspace/MyKnitLog/flutter_app/pubspec.yaml...")` — 성공, runtime log 에 `Delegating ... cwd=/workspace/MyKnitLog/flutter_app` / `Starting Copilot ACP session ... cwd=/workspace/MyKnitLog/flutter_app` 확인.
+  - `docker exec partner-dev grep session/new /tmp/copilot-acp-debug.log` — `session/new` payload 의 `cwd` 가 `/workspace/MyKnitLog/flutter_app` 로 기록됨 확인.
+  - `node --check apps/company-dashboard/public/app.js && node --check apps/company-dashboard/server.mjs` — 0 errors.
+  - `pnpm partner:runtimes:sync-all --dry-run` — 10개 파트너의 native spec ops 권한 변경 예정 확인.
+  - `pnpm partner:runtimes:sync-all` — 10개 파트너 runtime agent.json 동기화 완료.
+  - `AGENT_CONFIG_PATH=/Users/KangHyeonSeok/Documents/Partners/subak/.runtime/agent/agent.json pnpm exec tsx skills/native-spec-ops/native-spec-ops.ts policy:show` — `enabled=true`, `companyId=Playfull`, `allow=["*:*"]`, `deny=[]` 확인.
+  - `pnpm compose -- up -d --force-recreate` — partner 10개 + company-dashboard 컨테이너 재생성 완료.
+  - `pnpm dashboard:status:build` — 5개 회사 dashboard status 재생성 완료.
+  - `docker exec partner-subak pnpm exec tsx skills/native-spec-ops/native-spec-ops.ts policy:show` — live container 에서 `enabled=true`, `allow=["*:*"]`, `deny=[]` 확인.
   - Pending: `sh deploy/container-entrypoint.sh` build lock recovery 동작 확인.
-  - Pending: `pnpm compose -- up -d --force-recreate` 후 파트너 컨테이너 startup 검증.
+  - Pending: 전체 partner 대상 startup 검증.
 
 ## 2026-04-01 (Copilot ACP NDJSON 프로토콜 수정 Round 15)
 
